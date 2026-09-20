@@ -383,6 +383,18 @@ function farming.autosprinkler()
 		return
 	end
 
+	-- Не ставим, пока летим или конвертируем
+	if mod.data.actives["move"] == true or mod.data.actives["__converting"] == true then
+		return
+	end
+
+	-- Проверяем, не в улье ли мы
+	local hivePos = farming.get_hive_position()
+	local root = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
+	if hivePos and root and (root.Position - hivePos).Magnitude < 30 then
+		return -- мы в улье, спринклер ставить не надо
+	end
+
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	local events = ReplicatedStorage:FindFirstChild("Events")
 	if not events then return end
@@ -1182,14 +1194,16 @@ function farming.farm(...)
 
 				if mod.data.actives["move"] == false then
 					farming.inv(true)
-					--print(3)
+
+					-- Ставим спринклер, только если его ещё нет и мы реально на поле
+					if mod.data.actives["auto_sprinkler"] == true then
+						farming.autosprinkler()
+					end
 
 					if mod.data.actives["style_auto_farm"] == "Walk" then
-						--print("walk")
 						farming.cornl(true)
 						m1(b, mod.data.actives["move_speed"])
 					elseif mod.data.actives["style_auto_farm"] == "Tween" then
-						--print("tween")
 						farming.cornl(true)
 						m(b, mod.data.actives["move_speed"])
 					end
