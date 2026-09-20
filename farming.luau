@@ -9,7 +9,7 @@ else
 	data = require(script.Parent:WaitForChild("data"))
 end
 
-print("test new sys143231231212423412")
+print("dsad234234")
 
 local farming = {}
 
@@ -27,8 +27,6 @@ local find= {
 	contextactionservice = game:GetService("ContextActionService"),
 	random = Random.new(),
 }
-
---print(find.player)
 
 local queue = {
 	auto_farm = {},
@@ -291,8 +289,6 @@ function farming.move(...)
 					end
 
 					farming.inv(true)
-					farming.autosprinkler()
-					task.wait(1)
 
 					if currentFarmId ~= farmId or mod.data.actives["auto_farm"] == false then
 						return
@@ -596,6 +592,7 @@ end
 function farming.go_to_hive_and_convert()
 	print("[AutoConvert] Начинаем...")
 
+	-- ===== 1. ЖЁСТКАЯ БЛОКИРОВКА ИГРОКА =====
 	mod.data.actives["move"] = true
 	mod.data.actives["point"] = false
 
@@ -611,14 +608,25 @@ function farming.go_to_hive_and_convert()
 		atween = nil
 	end
 
+	if track and track.IsPlaying then
+		track:Stop(0)
+	end
+
 	local character = find.player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root then
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+	if not root or not humanoid then
 		mod.data.actives["move"] = false
 		return
 	end
-	root.Anchored = true
 
+	root.Anchored = true
+	humanoid.WalkSpeed = 0
+	humanoid:Move(Vector3.zero)
+	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+
+	-- ===== 2. ПОИСК УЛЬЯ =====
 	local hivePos = farming.get_hive_position()
 
 	if not hivePos then
@@ -628,6 +636,8 @@ function farming.go_to_hive_and_convert()
 		if not freeHive then
 			warn("[AutoConvert] Свободных ульев нет")
 			root.Anchored = false
+			humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+			humanoid:ChangeState(Enum.HumanoidStateType.Running)
 			mod.data.actives["move"] = false
 			return
 		end
@@ -645,6 +655,13 @@ function farming.go_to_hive_and_convert()
 		)
 		tw:Play()
 		tw.Completed:Wait()
+
+		-- стопорим после полёта
+		humanoid.WalkSpeed = 0
+		humanoid:Move(Vector3.zero)
+		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		if track and track.IsPlaying then track:Stop(0) end
+
 		task.wait(1.5)
 
 		local occupied, newHivePos = farming.press_e_until_hive(5)
@@ -652,6 +669,8 @@ function farming.go_to_hive_and_convert()
 		if not occupied or not newHivePos then
 			warn("[AutoConvert] Не удалось занять улей")
 			root.Anchored = false
+			humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+			humanoid:ChangeState(Enum.HumanoidStateType.Running)
 			mod.data.actives["move"] = false
 			return
 		end
@@ -660,7 +679,7 @@ function farming.go_to_hive_and_convert()
 		print("[AutoConvert] Улей занят:", tostring(hivePos))
 	end
 
-	-- запоминаем позицию поля для возврата
+	-- ===== 3. ЗАПОМИНАЕМ ПОЗИЦИЮ ПОЛЯ =====
 	local returnPos = root.Position
 	local selectedField = mod.data.actives["selected_field"]
 	local fields = workspace:FindFirstChild("FlowerZones")
@@ -669,7 +688,7 @@ function farming.go_to_hive_and_convert()
 		returnPos = field.Position
 	end
 
-	-- летим в улей если ещё не там
+	-- ===== 4. ЛЕТИМ В УЛЕЙ (если ещё не там) =====
 	if (root.Position - hivePos).Magnitude > 15 then
 		local dist = (root.Position - hivePos).Magnitude
 		local speed = mod.data.actives["move_speed"] or 100
@@ -682,14 +701,20 @@ function farming.go_to_hive_and_convert()
 		)
 		tw:Play()
 		tw.Completed:Wait()
+
+		humanoid.WalkSpeed = 0
+		humanoid:Move(Vector3.zero)
+		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		if track and track.IsPlaying then track:Stop(0) end
+
 		task.wait(1.5)
 	end
 
-	-- E для разгрузки
+	-- ===== 5. E ДЛЯ РАЗГРУЗКИ =====
 	print("[AutoConvert] Пробуем E для разгрузки")
 	farming.press_e_until_convert(hivePos, 2)
 
-	-- ждём завершения конвертации (один блок!)
+	-- ===== 6. ЖДЁМ ЗАВЕРШЕНИЯ =====
 	print("[AutoConvert] Ждём завершения конвертации...")
 
 	local timeout = 300
@@ -728,13 +753,13 @@ function farming.go_to_hive_and_convert()
 		task.wait(1)
 	end
 
-	-- баллун
+	-- ===== 7. БАЛЛУН =====
 	if mod.data.actives["balloon"] == true then
 		print("[AutoConvert] Ждём хайв-баллун...")
 		farming.wait_for_balloon(hivePos, 300)
 	end
 
-	-- возврат на поле
+	-- ===== 8. ВОЗВРАТ НА ПОЛЕ =====
 	print("[AutoConvert] Возвращаемся на поле")
 
 	local distBack = (root.Position - returnPos).Magnitude
@@ -749,9 +774,19 @@ function farming.go_to_hive_and_convert()
 		)
 		twBack:Play()
 		twBack.Completed:Wait()
+
+		humanoid.WalkSpeed = 0
+		humanoid:Move(Vector3.zero)
+		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		if track and track.IsPlaying then track:Stop(0) end
+
+		task.wait(0.5)
 	end
 
+	-- ===== 9. ВОЗВРАЩАЕМ УПРАВЛЕНИЕ =====
 	root.Anchored = false
+	humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+	humanoid:ChangeState(Enum.HumanoidStateType.Running)
 	mod.data.actives["move"] = false
 	mod.data.actives["__last_convert_time"] = tick()
 
@@ -921,7 +956,7 @@ function farming.farm(...)
 
 	if not enabled then return end
 
-	-- ===== ПРОВЕРКА УЛЬЯ ПЕРЕД СТАРТОМ ФАРМА =====
+	-- ===== ПРОВЕРКА УЛЬЯ =====
 	local hivePos = farming.get_hive_position()
 
 	if not hivePos then
@@ -1101,11 +1136,19 @@ function farming.farm(...)
 		local function m(...)
 			local a = {...}
 
+			-- НЕ двигаем, если идёт конвертация или игрок анкорен
+			if mod.data.actives["__converting"] then
+				return
+			end
+
 			if mod.data.actives["auto_farm"] == false then
 				return
 			end
 
 			if not find.player.Character:FindFirstChild("HumanoidRootPart") then return end
+
+			local checkRoot = find.player.Character:FindFirstChild("HumanoidRootPart")
+			if checkRoot.Anchored then return end
 
 			if typeof(a[1]) == "CFrame" then
 				p = a[1].Position
@@ -1140,6 +1183,7 @@ function farming.farm(...)
 			tween.Completed:Wait()
 
 			if mod.data.actives["__converting"] then
+				if track and track.IsPlaying then track:Stop(0) end
 				return
 			end
 
@@ -1303,9 +1347,18 @@ function farming.farm(...)
 
 			local function m(...)
 				local a = {...}
+
+				-- НЕ двигаем, если идёт конвертация
+				if mod.data.actives["__converting"] then
+					return
+				end
+
 				if not find.player.Character:FindFirstChildOfClass("Humanoid") or not find.player.Character:FindFirstChild("HumanoidRootPart") or not a[1] or not a[2] then
 					return
 				end
+
+				local checkRoot = find.player.Character:FindFirstChild("HumanoidRootPart")
+				if checkRoot.Anchored then return end
 
 				if typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
 					p1 = Vector3.new(a[1].Position.X, find.player.Character:FindFirstChild("HumanoidRootPart").Position.Y, a[1].Position.Z)
@@ -1444,8 +1497,15 @@ function farming.farm(...)
 							end
 							mod.data.actives["__converting"] = false
 							mod.data.actives["move"] = false
-							local root = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
-							if root then root.Anchored = false end
+
+							local char = find.player.Character
+							local rt = char and char:FindFirstChild("HumanoidRootPart")
+							local hm = char and char:FindFirstChildOfClass("Humanoid")
+							if rt then rt.Anchored = false end
+							if hm then
+								hm.WalkSpeed = mod.data.actives["walkspeed"] or 16
+								hm:ChangeState(Enum.HumanoidStateType.Running)
+							end
 						end)
 
 						return
