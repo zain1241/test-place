@@ -2,6 +2,7 @@ local env = (getgenv and getgenv()) or _G
 local loaded = rawget(env, "__NECTAR_MODULES")
 
 local data
+print("12312")
 
 if loaded and loaded.data then
 	data = loaded.data
