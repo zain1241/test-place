@@ -487,36 +487,39 @@ end
 function farming.get_hive_position()
 	local honeycombs = workspace:FindFirstChild("Honeycombs")
 	if not honeycombs then
-		warn("[AutoConvert] Honeycombs не найдено")
 		return nil
 	end
 
-	local myName = find.player.Name
+	local myName = string.lower(find.player.Name)
 
 	for _, hive in ipairs(honeycombs:GetChildren()) do
-		-- Путь: HiveN.Display.Gui.Frame.OwnerName
 		local display = hive:FindFirstChild("Display")
 		local gui = display and display:FindFirstChild("Gui")
 		local frame = gui and gui:FindFirstChild("Frame")
 		local ownerName = frame and frame:FindFirstChild("OwnerName")
 
-		if ownerName and ownerName:IsA("TextLabel") and ownerName.Text == myName then
-			local spawnPos = hive:FindFirstChild("SpawnPos")
-			if spawnPos then
-				if spawnPos:IsA("BasePart") then
-					return spawnPos.Position
-				elseif spawnPos:IsA("CFrameValue") then
-					return spawnPos.Value.Position
-				elseif spawnPos:IsA("Attachment") then
-					return spawnPos.WorldPosition
-				elseif spawnPos:IsA("Vector3Value") then
-					return spawnPos.Value
+		if ownerName and ownerName:IsA("TextLabel") then
+			local text = ownerName.Text or ""
+			-- Обрезаем пробелы
+			local trimmed = string.match(text, "^%s*(.-)%s*$") or ""
+
+			if string.lower(trimmed) == myName then
+				local spawnPos = hive:FindFirstChild("SpawnPos")
+				if spawnPos then
+					if spawnPos:IsA("BasePart") then
+						return spawnPos.Position
+					elseif spawnPos:IsA("CFrameValue") then
+						return spawnPos.Value.Position
+					elseif spawnPos:IsA("Attachment") then
+						return spawnPos.WorldPosition
+					elseif spawnPos:IsA("Vector3Value") then
+						return spawnPos.Value
+					end
 				end
 			end
 		end
 	end
 
-	warn("hive not find")
 	return nil
 end
 
@@ -553,10 +556,11 @@ function farming.wait_for_balloon(hivePos, timeout)
 end
 
 function farming.go_to_hive_and_convert()
-	-- 1. Проверяем, есть ли у игрока свой улей
+	print("[AutoConvert] Начинаем...")
+
+	-- 1. Проверяем свой улей
 	local hivePos = farming.get_hive_position()
 
-	-- Если своего улья нет — летим к свободному и занимаем
 	if not hivePos then
 		print("[AutoConvert] Своего улья нет — ищем свободный")
 
@@ -567,42 +571,44 @@ function farming.go_to_hive_and_convert()
 		end
 
 		print("[AutoConvert] Найден свободный улей:", freeHive.hive.Name,
-			"(OwnerName.Text = '" .. tostring(freeHive.ownerText) .. "')")
+			"| OwnerName.Text = '" .. tostring(freeHive.ownerText) .. "'")
+		print("[AutoConvert] Позиция SpawnPos:", tostring(freeHive.pos))
 
-		hivePos = freeHive.pos
-
-		-- Летим к свободному улью
+		-- Летим к свободному
 		local character = find.player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if not root then return end
+		if not root then
+			warn("[AutoConvert] Нет HumanoidRootPart")
+			return
+		end
 
-		local dist = (root.Position - hivePos).Magnitude
+		mod.data.actives["move"] = true
+
+		local dist = (root.Position - freeHive.pos).Magnitude
 		local speed = mod.data.actives["move_speed"] or 100
 		local tweenTime = dist / math.max(speed, 1)
 
-		mod.data.actives["move"] = true
 		root.Anchored = true
-
 		local tw = find.tweenservice:Create(
 			root,
 			TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
-			{CFrame = CFrame.new(hivePos)}
+			{CFrame = CFrame.new(freeHive.pos)}
 		)
 		tw:Play()
 		tw.Completed:Wait()
 		task.wait(1.5)
 
-		-- Эмулируем E для занятия улья
+		-- Эмулируем E для занятия
 		print("[AutoConvert] Занимаем улей через E")
 		farming.emulate_e(5)
 		task.wait(2)
 
-		-- Проверяем, закрепился ли улей за нами (несколько попыток)
+		-- Проверяем, занялся ли
 		local newHivePos = nil
 		for attempt = 1, 5 do
 			newHivePos = farming.get_hive_position()
 			if newHivePos then break end
-			print("[AutoConvert] Попытка " .. attempt .. "/5 — улей ещё не наш, ждём")
+			print("[AutoConvert] Попытка " .. attempt .. "/5 — улей ещё не наш")
 			farming.emulate_e(2)
 			task.wait(1)
 		end
@@ -615,34 +621,23 @@ function farming.go_to_hive_and_convert()
 		end
 
 		hivePos = newHivePos
-		print("[AutoConvert] Улей успешно занят:", tostring(hivePos))
-
-		-- Ставим спринклер после занятия улья
-		if mod.data.actives["auto_sprinkler"] == true then
-			task.wait(0.5)
-			farming.autosprinkler()
-		end
+		print("[AutoConvert] Улей занят:", tostring(hivePos))
 	end
 
+	-- 2. Запоминаем позицию поля, откуда прилетели
 	local character = find.player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	-- Запоминаем, откуда прилетели (для возврата)
-	-- Если мы только что заняли улей — возвращаемся на поле фарма
-	local returnPos
-	if mod.data.actives["selected_field"] then
-		local field = workspace:FindFirstChild("FlowerZones")
-		local f = field and field:FindFirstChild(mod.data.actives["selected_field"])
-		if f and f:IsA("BasePart") then
-			returnPos = f.Position
-		end
-	end
-	if not returnPos then
-		returnPos = root.Position
+	local returnPos = root.Position
+	local selectedField = mod.data.actives["selected_field"]
+	local fields = workspace:FindFirstChild("FlowerZones")
+	local field = fields and selectedField and fields:FindFirstChild(selectedField)
+	if field and field:IsA("BasePart") then
+		returnPos = field.Position
 	end
 
-	-- 2. ЛЕТИМ В УЛЕЙ (если ещё не там)
+	-- 3. Летим в свой улей (если ещё не там)
 	if (root.Position - hivePos).Magnitude > 15 then
 		mod.data.actives["move"] = true
 
@@ -661,12 +656,12 @@ function farming.go_to_hive_and_convert()
 		task.wait(1.5)
 	end
 
-	-- 3. ЭМУЛИРУЕМ E ДЛЯ РАЗГРУЗКИ
+	-- 4. Эмулируем E для разгрузки
 	print("[AutoConvert] Эмулируем E для разгрузки")
 	farming.emulate_e(3)
 	task.wait(1)
 
-	-- 4. ЖДЁМ КОНВЕРТАЦИЮ
+	-- 5. Ждём конвертацию
 	print("[AutoConvert] Ждём конвертацию...")
 
 	local timeout = 300
@@ -695,13 +690,13 @@ function farming.go_to_hive_and_convert()
 		task.wait(1)
 	end
 
-	-- 5. ЖДЁМ БАЛЛУН
+	-- 6. Ждём баллун
 	if mod.data.actives["balloon"] == true then
 		print("[AutoConvert] Ждём хайв-баллун...")
 		farming.wait_for_balloon(hivePos, 300)
 	end
 
-	-- 6. ВОЗВРАЩАЕМСЯ НА ПОЛЕ
+	-- 7. Возвращаемся на поле
 	print("[AutoConvert] Возвращаемся на поле")
 
 	local distBack = (root.Position - returnPos).Magnitude
@@ -733,17 +728,17 @@ function farming.find_free_hive()
 
 	local Players = game:GetService("Players")
 
-	-- Собираем всех игроков на сервере
+	-- Собираем имена всех игроков на сервере (lowercase)
 	local activeNames = {}
 	for _, p in ipairs(Players:GetPlayers()) do
 		activeNames[string.lower(p.Name)] = true
 	end
 
-	local bestHive = nil
-	local bestDist = math.huge
-
 	local root = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
 	local myPos = root and root.Position
+
+	local bestHive = nil
+	local bestDist = math.huge
 
 	for _, hive in ipairs(honeycombs:GetChildren()) do
 		local display = hive:FindFirstChild("Display")
@@ -753,17 +748,15 @@ function farming.find_free_hive()
 
 		if ownerName and ownerName:IsA("TextLabel") then
 			local text = ownerName.Text or ""
-			-- Убираем пробелы
 			local trimmed = string.match(text, "^%s*(.-)%s*$") or ""
 
 			local isFree = false
 
-			-- Пустой, None, Empty, N/A
-			if trimmed == "" or trimmed == "None" or trimmed == "Empty"
-				or trimmed == "N/A" or trimmed == "n/a" then
+			-- Пустая строка = свободен
+			if trimmed == "" then
 				isFree = true
 			else
-				-- Если имя не совпадает ни с одним игроком на сервере — улей свободен
+				-- Если имя не принадлежит ни одному игроку на сервере
 				local lower = string.lower(trimmed)
 				if not activeNames[lower] then
 					isFree = true
@@ -785,11 +778,14 @@ function farming.find_free_hive()
 					end
 
 					if pos then
-						-- Выбираем ближайший свободный улей
 						local dist = myPos and (myPos - pos).Magnitude or 0
 						if dist < bestDist then
 							bestDist = dist
-							bestHive = { hive = hive, pos = pos, ownerText = trimmed }
+							bestHive = {
+								hive = hive,
+								pos = pos,
+								ownerText = trimmed,
+							}
 						end
 					end
 				end
