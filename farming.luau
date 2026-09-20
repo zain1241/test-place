@@ -9,7 +9,7 @@ else
 	data = require(script.Parent:WaitForChild("data"))
 end
 
-print("test new sys123412")
+print("test new sys1432423412")
 
 local farming = {}
 
@@ -731,14 +731,29 @@ function farming.go_to_hive_and_convert()
 	print("[AutoConvert] Пробуем E для разгрузки")
 	farming.press_e_until_convert(hivePos, 2)
 
-	-- 4. ЖДЁМ ЗАВЕРШЕНИЯ (даже если E не сработал — сервер сам конвертит)
+	-- ===== 4. ЖДЁМ ЗАВЕРШЕНИЯ КОНВЕРТАЦИИ =====
 	print("[AutoConvert] Ждём завершения конвертации...")
+
+	-- Запоминаем состояние В МОМЕНТ ПРИЛЁТА
+	local arrivalInfo = farming.get_pollen_info()
+	local arrivalPollen = arrivalInfo and arrivalInfo.pollen or 0
+	local arrivalPercent = arrivalInfo and arrivalInfo.percent or 0
+
+	print(string.format(
+		"[AutoConvert] Прилетели: pollen=%d (%.2f%%)",
+		arrivalPollen, arrivalPercent))
+
+	-- Если при прилёте Pollen УЖЕ низкий — это подозрительно, ждём 10 сек
+	if arrivalPercent < 5 then
+		print("[AutoConvert] Pollen уже низкий — ждём 10 сек для уверенности")
+		task.wait(10)
+	end
 
 	local timeout = 300
 	local startTime = tick()
-	local lastPollen = nil
-	local stableLowCount = 0
-	local requiredStable = 5
+	local lowCount = 0
+	local requiredLow = 8
+	local sawDrop = false
 
 	while tick() - startTime < timeout do
 		local info = farming.get_pollen_info()
@@ -747,24 +762,38 @@ function farming.go_to_hive_and_convert()
 			continue
 		end
 
-		if info.percent < 5 then
-			if lastPollen and info.pollen <= lastPollen + 1000 then
-				stableLowCount = stableLowCount + 1
+		-- Отслеживаем, что Pollen РЕАЛЬНО падал (был высокий → стал низкий)
+		if not sawDrop and arrivalPercent >= 5 then
+			if info.pollen < arrivalPollen * 0.5 then
+				sawDrop = true
 				print(string.format(
-					"[AutoConvert] Pollen стабильно низкий %d/%d (%.2f%%) — %d/%d",
-					info.pollen, info.max, info.percent, stableLowCount, requiredStable))
-				if stableLowCount >= requiredStable then
+					"[AutoConvert] Pollen упал вдвое: %d → %d",
+					arrivalPollen, info.pollen))
+			end
+		end
+
+		-- Считаем «низкий» только если Pollen < 5%
+		if info.percent < 5 then
+			lowCount = lowCount + 1
+			print(string.format(
+				"[AutoConvert] Низкий %d/%d (%.2f%%)",
+				lowCount, requiredLow, info.percent))
+
+			if lowCount >= requiredLow then
+				-- Проверка: если мы прилетели с полным рюкзаком,
+				-- но так и НЕ увидели падения — что-то не так
+				if arrivalPercent >= 5 and not sawDrop then
+					warn("[AutoConvert] Pollen низкий, но падения не было — пропускаем")
+					lowCount = 0
+				else
 					print("[AutoConvert] Разгрузка завершена")
 					break
 				end
-			else
-				stableLowCount = 0
 			end
 		else
-			stableLowCount = 0
+			lowCount = 0
 		end
 
-		lastPollen = info.pollen
 		task.wait(1)
 	end
 
