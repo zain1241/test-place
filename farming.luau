@@ -454,8 +454,8 @@ function farming.get_pollen_info()
 		return nil
 	end
 
-	current = tonumber(string.gsub(current, ",", "")) or 0
-	max = tonumber(string.gsub(max, ",", "")) or 0
+	current = tonumber((string.gsub(current, ",", ""))) or 0
+	max = tonumber((string.gsub(max, ",", ""))) or 0
 
 	if max <= 0 then
 		return nil
