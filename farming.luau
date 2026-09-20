@@ -2,13 +2,14 @@ local env = (getgenv and getgenv()) or _G
 local loaded = rawget(env, "__NECTAR_MODULES")
 
 local data
-print("12312")
 
 if loaded and loaded.data then
 	data = loaded.data
 else
 	data = require(script.Parent:WaitForChild("data"))
 end
+
+print("test new syys1")
 
 local farming = {}
 
@@ -572,6 +573,83 @@ function farming.wait_for_balloon(hivePos, timeout)
 	return false
 end
 
+-- Жмёт E и проверяет, уменьшился ли Pollen за 10 секунд.
+-- Если уменьшился — возвращает true. Если нет — жмёт ещё раз.
+function farming.press_e_until_convert(hivePos, maxAttempts)
+	maxAttempts = maxAttempts or 5
+
+	local VirtualInputManager = game:GetService("VirtualInputManager")
+
+	for attempt = 1, maxAttempts do
+		print("[AutoConvert] Попытка " .. attempt .. ": жмём E")
+
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+		task.wait(0.05)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+
+		-- Запоминаем Pollen до
+		local before = farming.get_pollen_info()
+		local beforePollen = before and before.pollen or 0
+
+		-- Ждём до 10 секунд, следим за уменьшением
+		local startTime = tick()
+		local decreased = false
+
+		while tick() - startTime < 10 do
+			task.wait(1)
+
+			local now = farming.get_pollen_info()
+			if now and now.pollen < beforePollen then
+				decreased = true
+				print("[AutoConvert] Pollen уменьшился — E сработал")
+				break
+			end
+		end
+
+		if decreased then
+			return true
+		end
+
+		print("[AutoConvert] Pollen не изменился за 10 сек — жмём E ещё раз")
+	end
+
+	warn("[AutoConvert] Не удалось запустить конвертацию через E")
+	return false
+end
+
+-- Жмёт E и проверяет, стал ли улей нашим за 10 секунд.
+-- Если стал — возвращает true. Если нет — жмёт ещё раз.
+function farming.press_e_until_hive(maxAttempts)
+	maxAttempts = maxAttempts or 5
+
+	local VirtualInputManager = game:GetService("VirtualInputManager")
+
+	for attempt = 1, maxAttempts do
+		print("[Farm] Попытка занять улей " .. attempt .. ": жмём E")
+
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+		task.wait(0.05)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+
+		-- Ждём до 10 секунд, проверяем каждую секунду
+		local startTime = tick()
+		while tick() - startTime < 10 do
+			task.wait(1)
+
+			local hivePos = farming.get_hive_position()
+			if hivePos then
+				print("[Farm] Улей занят!")
+				return true, hivePos
+			end
+		end
+
+		print("[Farm] Улей не занялся за 10 сек — жмём E ещё раз")
+	end
+
+	warn("[Farm] Не удалось занять улей")
+	return false, nil
+end
+
 function farming.go_to_hive_and_convert()
 	print("[AutoConvert] Начинаем...")
 
@@ -904,14 +982,6 @@ function farming.farm(...)
 	resetFarmMovement(enabled)
 
 	if not enabled then return end
-	
-	farmId += 1
-	local id = farmId
-	local enabled = mod.data.actives["auto_farm"] == true
-
-	resetFarmMovement(enabled)
-
-	if not enabled then return end
 
 	-- ===== ПРОВЕРКА УЛЬЯ ПЕРЕД СТАРТОМ ФАРМА =====
 	local hivePos = farming.get_hive_position()
@@ -953,22 +1023,10 @@ function farming.farm(...)
 		tw.Completed:Wait()
 		task.wait(1.5)
 
-		-- Эмулируем E для занятия
-		print("[Farm] Занимаем улей через E")
-		farming.emulate_e(5)
-		task.wait(2)
+		-- Умная эмуляция E для занятия улья
+		local occupied, newHivePos = farming.press_e_until_hive(5)
 
-		-- Проверяем 5 раз, занялся ли
-		local newHivePos = nil
-		for attempt = 1, 5 do
-			newHivePos = farming.get_hive_position()
-			if newHivePos then break end
-			print("[Farm] Попытка " .. attempt .. "/5 — улей ещё не наш")
-			farming.emulate_e(2)
-			task.wait(1)
-		end
-
-		if not newHivePos then
+		if not occupied or not newHivePos then
 			warn("[Farm] Не удалось занять улей — стоп автофарм")
 			root.Anchored = false
 			mod.data.actives["move"] = false
