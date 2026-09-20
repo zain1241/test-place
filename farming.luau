@@ -383,12 +383,11 @@ function farming.autosprinkler()
 		return
 	end
 
-	-- Не ставим, пока летим или конвертируем
 	if mod.data.actives["move"] == true or mod.data.actives["__converting"] == true then
 		return
 	end
 
-	-- Кулдаун 10 секунд (достаточно, чтобы не спамить)
+	-- Кулдаун 10 секунд
 	if mod.data.actives["__last_sprinkler_time"] then
 		local elapsed = tick() - mod.data.actives["__last_sprinkler_time"]
 		if elapsed < 10 then
@@ -396,10 +395,27 @@ function farming.autosprinkler()
 		end
 	end
 
+	-- Проверяем, что игрок РЕАЛЬНО на земле
+	local character = find.player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+	if not root or not humanoid then return end
+
+	-- FloorMaterial == Air значит игрок ещё в воздухе
+	if humanoid.FloorMaterial == Enum.Material.Air then
+		return
+	end
+
+	-- Проверяем скорость — если движется, не ставим
+	local vel = root.AssemblyLinearVelocity
+	if vel.Magnitude > 5 then
+		return
+	end
+
 	-- Проверяем, не в улье ли мы
 	local hivePos = farming.get_hive_position()
-	local root = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
-	if hivePos and root and (root.Position - hivePos).Magnitude < 30 then
+	if hivePos and (root.Position - hivePos).Magnitude < 30 then
 		return
 	end
 
@@ -418,7 +434,7 @@ function farming.autosprinkler()
 
 	if ok then
 		mod.data.actives["__last_sprinkler_time"] = tick()
-		print("[AutoSprinkler] placed")
+		print("[AutoSprinkler] placed (on ground)")
 	end
 end
 
@@ -887,6 +903,85 @@ function farming.farm(...)
 	resetFarmMovement(enabled)
 
 	if not enabled then return end
+	
+	farmId += 1
+	local id = farmId
+	local enabled = mod.data.actives["auto_farm"] == true
+
+	resetFarmMovement(enabled)
+
+	if not enabled then return end
+
+	-- ===== ПРОВЕРКА УЛЬЯ ПЕРЕД СТАРТОМ ФАРМА =====
+	local hivePos = farming.get_hive_position()
+
+	if not hivePos then
+		print("[Farm] Своего улья нет — ищем свободный")
+
+		local freeHive = farming.find_free_hive()
+		if not freeHive then
+			warn("[Farm] Свободных ульев нет — стоп автофарм")
+			mod.data.actives["auto_farm"] = false
+			resetFarmMovement(false)
+			return
+		end
+
+		print("[Farm] Найден свободный улей:", freeHive.hive.Name)
+
+		local character = find.player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if not root then
+			mod.data.actives["auto_farm"] = false
+			resetFarmMovement(false)
+			return
+		end
+
+		-- Летим к свободному улью
+		mod.data.actives["move"] = true
+		local dist = (root.Position - freeHive.pos).Magnitude
+		local speed = mod.data.actives["move_speed"] or 100
+		local tweenTime = dist / math.max(speed, 1)
+
+		root.Anchored = true
+		local tw = find.tweenservice:Create(
+			root,
+			TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
+			{CFrame = CFrame.new(freeHive.pos)}
+		)
+		tw:Play()
+		tw.Completed:Wait()
+		task.wait(1.5)
+
+		-- Эмулируем E для занятия
+		print("[Farm] Занимаем улей через E")
+		farming.emulate_e(5)
+		task.wait(2)
+
+		-- Проверяем 5 раз, занялся ли
+		local newHivePos = nil
+		for attempt = 1, 5 do
+			newHivePos = farming.get_hive_position()
+			if newHivePos then break end
+			print("[Farm] Попытка " .. attempt .. "/5 — улей ещё не наш")
+			farming.emulate_e(2)
+			task.wait(1)
+		end
+
+		if not newHivePos then
+			warn("[Farm] Не удалось занять улей — стоп автофарм")
+			root.Anchored = false
+			mod.data.actives["move"] = false
+			mod.data.actives["auto_farm"] = false
+			resetFarmMovement(false)
+			return
+		end
+
+		hivePos = newHivePos
+		print("[Farm] Улей занят, начинаем фарм")
+		root.Anchored = false
+		mod.data.actives["move"] = false
+		task.wait(0.5)
+	end
 
 	local selected = mod.data.actives["selected_field"]
 	local fields = workspace:FindFirstChild("FlowerZones")
@@ -1374,9 +1469,9 @@ function farming.farm(...)
 					farming.inv(true)
 
 					-- Ставим спринклер, только если его ещё нет и мы реально на поле
-					--if mod.data.actives["auto_sprinkler"] == true then
-					--	farming.autosprinkler()
-					--end
+					if mod.data.actives["auto_sprinkler"] == true then
+						farming.autosprinkler()
+					end
 
 					if mod.data.actives["style_auto_farm"] == "Walk" then
 						farming.cornl(true)
