@@ -396,25 +396,63 @@ function farming.honey_mask()
 	return mask == "Honey Mask"
 end
 
--- Возвращает текущий Pollen, максимум и процент (0-100)
 function farming.get_pollen_info()
 	local stats = getStats()
 	if not stats then return nil end
 
-	local space = stats.ModifierCaches
-		and stats.ModifierCaches.Value
-		and stats.ModifierCaches.Value.ContainerSpace
-		and stats.ModifierCaches.Value.ContainerSpace[_]
+	local pollen = stats.Pollen or 0
+	local space = nil
 
-	-- Фолбэк: если структура другая — берём из ModifierCache
-	if not space then
-		local cache = stats.ModifierCache
-		space = cache and cache.ContainerSpace and cache.ContainerSpace[_]
+	-- Путь 1: ModifierCaches.Value.ContainerSpace
+	local mc = stats.ModifierCaches
+	if mc then
+		-- Пробуем Value.ContainerSpace
+		local v = mc.Value
+		if v and v.ContainerSpace then
+			local cs = v.ContainerSpace
+			-- Перебираем все ключи, ищем первое число
+			for k, val in pairs(cs) do
+				if type(val) == "number" and val > 0 then
+					space = val
+					print("[get_pollen_info] найден ContainerSpace через ModifierCaches.Value.ContainerSpace[" .. tostring(k) .. "] =", val)
+					break
+				end
+			end
+		end
+
+		-- Если не нашли — пробуем напрямую mc.ContainerSpace
+		if not space and mc.ContainerSpace then
+			local cs = mc.ContainerSpace
+			for k, val in pairs(cs) do
+				if type(val) == "number" and val > 0 then
+					space = val
+					print("[get_pollen_info] найден ContainerSpace через ModifierCaches.ContainerSpace[" .. tostring(k) .. "] =", val)
+					break
+				end
+			end
+		end
 	end
 
-	if not space or space <= 0 then return nil end
+	-- Путь 2: ModifierCache (без s) — на случай, если структура другая
+	if not space then
+		local cache = stats.ModifierCache
+		if cache and cache.ContainerSpace then
+			for k, val in pairs(cache.ContainerSpace) do
+				if type(val) == "number" and val > 0 then
+					space = val
+					print("[get_pollen_info] найден ContainerSpace через ModifierCache.ContainerSpace[" .. tostring(k) .. "] =", val)
+					break
+				end
+			end
+		end
+	end
 
-	local pollen = stats.Pollen or 0
+	-- Путь 3: фолбэк — 2 462 500 (значение из твоего дампа)
+	if not space or space <= 0 then
+		space = 2462500
+		warn("[get_pollen_info] ContainerSpace не найден, используем фолбэк:", space)
+	end
+
 	local percent = (pollen / space) * 100
 
 	return {
@@ -528,30 +566,18 @@ function farming.go_to_hive_and_convert()
 	-- ===== 2. ЖДЁМ ОПУСТОШЕНИЯ РЮКЗАКА =====
 	print("[AutoConvert] Ждём конвертацию рюкзака...")
 
-	local stats = getStats()
-	local maxSpace = stats
-		and stats.ModifierCaches
-		and stats.ModifierCaches.Value
-		and stats.ModifierCaches.Value.ContainerSpace
-		and stats.ModifierCaches.Value.ContainerSpace[_]
-
-	if not maxSpace then maxSpace = 1 end
-
 	local timeout = 300
 	local startTime = tick()
 	local emptyCount = 0
 
 	while tick() - startTime < timeout do
-		local s = getStats()
-		if not s then
+		local info = farming.get_pollen_info()
+		if not info then
 			task.wait(1)
 			continue
 		end
 
-		local pollen = s.Pollen or 0
-		local percent = (pollen / maxSpace) * 100
-
-		if percent < 0.5 then
+		if info.percent < 0.5 then
 			emptyCount = emptyCount + 1
 			if emptyCount >= 2 then
 				print("[AutoConvert] Рюкзак пуст")
@@ -689,6 +715,8 @@ function farming.farm(...)
 		mod.data.actives["move_speed"],
 		selected
 	)
+	
+	mod.data.actives["__last_convert_time"] = tick()
 
 	if mod.data.actives["selected_field"] == "" then
 		mod.data.actives["auto_farm"] = false
@@ -1101,16 +1129,61 @@ function farming.farm(...)
 					return
 				end
 
+				-- Пока идёт конвертация — ничего не делаем
+				if mod.data.actives["__converting"] then
+					return
+				end
+
+				-- ===== AUTO CONVERT CHECK =====
+				if mod.data.actives["auto_farm"] == true then
+					local shouldConvert = false
+					local reason = ""
+
+					-- 1) Проверка по проценту рюкзака
+					local info = farming.get_pollen_info()
+					local threshold = mod.data.actives["backpack"] or 80
+
+					if info and info.percent >= threshold then
+						shouldConvert = true
+						reason = "backpack " .. math.floor(info.percent) .. "% >= " .. threshold .. "%"
+					end
+
+					-- 2) Проверка по таймеру auto_convert (минуты)
+					if not shouldConvert then
+						local autoMin = mod.data.actives["auto_convert"] or 20
+						local lastTime = mod.data.actives["__last_convert_time"] or tick()
+						local elapsed = (tick() - lastTime) / 60
+
+						if elapsed >= autoMin then
+							shouldConvert = true
+							reason = "timer " .. math.floor(elapsed) .. "m >= " .. autoMin .. "m"
+						end
+					end
+
+					if shouldConvert then
+						print("[AutoConvert] Запуск:", reason)
+						mod.data.actives["__converting"] = true
+
+						task.spawn(function()
+							farming.go_to_hive_and_convert()
+							mod.data.actives["__converting"] = false
+						end)
+
+						return
+					end
+				end
+				-- =============================
+
 				if mod.data.actives["move"] == false then
 					farming.inv(true)
 					--print(3)
 
 					if mod.data.actives["style_auto_farm"] == "Walk" then
-						print("walk")
+						--print("walk")
 						farming.cornl(true)
 						m1(b, mod.data.actives["move_speed"])
 					elseif mod.data.actives["style_auto_farm"] == "Tween" then
-						print("tween")
+						--print("tween")
 						farming.cornl(true)
 						m(b, mod.data.actives["move_speed"])
 					end
