@@ -341,32 +341,69 @@ function farming.move(...)
 	end
 end
 
-function farming.autosprinkler()
-	local e = game:GetService("ReplicatedStorage"); local statsData
-	local events = e:FindFirstChild("Events")
+function farming.get_pollen_from_gui()
+	local player = find.player
+	local pg = player:FindFirstChild("PlayerGui")
+	if not pg then return nil end
 
-	if not events then
+	-- Путь: PlayerGui.ScreenGui.MeterHUD.PollenMeter.Bar.TextLabel
+	local screenGui = pg:FindFirstChild("ScreenGui")
+	local meterHud = screenGui and screenGui:FindFirstChild("MeterHUD")
+	local pollenMeter = meterHud and meterHud:FindFirstChild("PollenMeter")
+	local bar = pollenMeter and pollenMeter:FindFirstChild("Bar")
+	local label = bar and bar:FindFirstChild("TextLabel")
+
+	if not label or not label:IsA("TextLabel") then
+		return nil
+	end
+
+	local text = label.Text
+	-- Формат: "35,427/192,265,724"
+	local current, max = string.match(text, "([%d,]+)/([%d,]+)")
+	if not current or not max then
+		return nil
+	end
+
+	current = tonumber(string.gsub(current, ",", "")) or 0
+	max = tonumber(string.gsub(max, ",", "")) or 0
+
+	if max <= 0 then
+		return nil
+	end
+
+	return {
+		pollen = current,
+		max = max,
+		percent = (current / max) * 100,
+	}
+end
+
+function farming.autosprinkler()
+	if mod.data.actives["auto_sprinkler"] ~= true then
 		return
 	end
 
-	if mod.data.actives["auto_sprinkler"] == true then
-		if e:FindFirstChild("Events"):FindFirstChild("PlayerActivesCommand") then
-			local success, result = pcall(function()
-				return e:FindFirstChild("Events"):WaitForChild("RetrievePlayerStats"):InvokeServer()
-			end)
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local events = ReplicatedStorage:FindFirstChild("Events")
+	if not events then return end
 
-			if success and type(result) == "table" then
-				statsData = result
-				print(statsData.EquippedSprinkler)
-
-				if statsData.EquippedSprinkler ~= "None" then
-					require(game.ReplicatedStorage.Events).ClientCall("PlayerActivesCommand",{Name = statsData.EquippedSprinkler})
-				else
-					print("None sprinkler")
-				end
-			end
-		end
+	local pac = events:FindFirstChild("PlayerActivesCommand")
+	if not pac or not pac:IsA("RemoteEvent") then
+		warn("PlayerActivesCommand not find or not RemoteEvent")
+		return
 	end
+
+	-- Ставим спринклер
+	local ok, err = pcall(function()
+		pac:FireServer({Name = "Sprinkler Builder"})
+	end)
+
+	if not ok then
+		warn("err:", err)
+		return
+	end
+
+	print("sprinkler placed")
 end
 
 -- Возвращает актуальную стату игрока или nil
@@ -397,68 +434,37 @@ function farming.honey_mask()
 end
 
 function farming.get_pollen_info()
-	local stats = getStats()
-	if not stats then return nil end
+	local player = find.player
+	local pg = player:FindFirstChild("PlayerGui")
+	if not pg then return nil end
 
-	local pollen = stats.Pollen or 0
-	local space = nil
+	local screenGui = pg:FindFirstChild("ScreenGui")
+	local meterHud = screenGui and screenGui:FindFirstChild("MeterHUD")
+	local pollenMeter = meterHud and meterHud:FindFirstChild("PollenMeter")
+	local bar = pollenMeter and pollenMeter:FindFirstChild("Bar")
+	local label = bar and bar:FindFirstChild("TextLabel")
 
-	-- Путь 1: ModifierCaches.Value.ContainerSpace
-	local mc = stats.ModifierCaches
-	if mc then
-		-- Пробуем Value.ContainerSpace
-		local v = mc.Value
-		if v and v.ContainerSpace then
-			local cs = v.ContainerSpace
-			-- Перебираем все ключи, ищем первое число
-			for k, val in pairs(cs) do
-				if type(val) == "number" and val > 0 then
-					space = val
-					print("[get_pollen_info] найден ContainerSpace через ModifierCaches.Value.ContainerSpace[" .. tostring(k) .. "] =", val)
-					break
-				end
-			end
-		end
-
-		-- Если не нашли — пробуем напрямую mc.ContainerSpace
-		if not space and mc.ContainerSpace then
-			local cs = mc.ContainerSpace
-			for k, val in pairs(cs) do
-				if type(val) == "number" and val > 0 then
-					space = val
-					print("[get_pollen_info] найден ContainerSpace через ModifierCaches.ContainerSpace[" .. tostring(k) .. "] =", val)
-					break
-				end
-			end
-		end
+	if not label or not label:IsA("TextLabel") then
+		return nil
 	end
 
-	-- Путь 2: ModifierCache (без s) — на случай, если структура другая
-	if not space then
-		local cache = stats.ModifierCache
-		if cache and cache.ContainerSpace then
-			for k, val in pairs(cache.ContainerSpace) do
-				if type(val) == "number" and val > 0 then
-					space = val
-					print("[get_pollen_info] найден ContainerSpace через ModifierCache.ContainerSpace[" .. tostring(k) .. "] =", val)
-					break
-				end
-			end
-		end
+	local text = label.Text
+	local current, max = string.match(text, "([%d,]+)/([%d,]+)")
+	if not current or not max then
+		return nil
 	end
 
-	-- Путь 3: фолбэк — 2 462 500 (значение из твоего дампа)
-	if not space or space <= 0 then
-		space = 2462500
-		warn("[get_pollen_info] ContainerSpace не найден, используем фолбэк:", space)
-	end
+	current = tonumber(string.gsub(current, ",", "")) or 0
+	max = tonumber(string.gsub(max, ",", "")) or 0
 
-	local percent = (pollen / space) * 100
+	if max <= 0 then
+		return nil
+	end
 
 	return {
-		pollen = pollen,
-		max = space,
-		percent = percent,
+		pollen = current,
+		max = max,
+		percent = (current / max) * 100,
 	}
 end
 
