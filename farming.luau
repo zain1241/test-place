@@ -9,7 +9,7 @@ else
 	data = require(script.Parent:WaitForChild("data"))
 end
 
-print("test new syys54312124")
+print("test new sys123412")
 
 local farming = {}
 
@@ -389,7 +389,7 @@ function farming.autosprinkler()
 		return
 	end
 
-	-- Кулдаун 10 секунд
+	-- Кулдаун 10 сек
 	if mod.data.actives["__last_sprinkler_time"] then
 		local elapsed = tick() - mod.data.actives["__last_sprinkler_time"]
 		if elapsed < 10 then
@@ -403,34 +403,28 @@ function farming.autosprinkler()
 
 	if not root or not humanoid then return end
 
-	-- Проверяем, что игрок РЕАЛЬНО на земле в течение 1 секунды
-	-- (5 замеров подряд с интервалом 0.2 сек)
+	-- Проверяем 3 замера по 0.15 сек = 0.45 сек — на земле ли игрок
 	local groundCount = 0
-	local requiredGround = 5
-
-	for i = 1, requiredGround do
+	for i = 1, 3 do
 		if humanoid.FloorMaterial ~= Enum.Material.Air then
-			local vel = root.AssemblyLinearVelocity
-			if vel.Magnitude < 5 then
+			if root.AssemblyLinearVelocity.Magnitude < 8 then
 				groundCount = groundCount + 1
 			end
 		end
-		task.wait(0.2)
+		task.wait(0.15)
 	end
 
-	if groundCount < requiredGround then
-		-- Игрок ещё в воздухе или движется
+	if groundCount < 3 then
 		return
 	end
 
-	-- Проверяем, что мы не в улье
+	-- Не в улье
 	local hivePos = farming.get_hive_position()
 	if hivePos and (root.Position - hivePos).Magnitude < 30 then
 		return
 	end
 
-	local ReplicatedStorage = game:GetService("ReplicatedStorage")
-	local events = ReplicatedStorage:FindFirstChild("Events")
+	local events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
 	if not events then return end
 
 	local pac = events:FindFirstChild("PlayerActivesCommand")
@@ -438,7 +432,7 @@ function farming.autosprinkler()
 		return
 	end
 
-	local ok, err = pcall(function()
+	local ok = pcall(function()
 		pac:FireServer({Name = "Sprinkler Builder"})
 	end)
 
@@ -584,53 +578,37 @@ end
 -- Жмёт E и проверяет, уменьшился ли Pollen за 10 секунд.
 -- Если уменьшился — возвращает true. Если нет — жмёт ещё раз.
 function farming.press_e_until_convert(hivePos, maxAttempts)
-	maxAttempts = maxAttempts or 3
+	maxAttempts = maxAttempts or 2
 
 	local VirtualInputManager = game:GetService("VirtualInputManager")
 
-	-- Запоминаем Pollen ДО
+	-- Запоминаем Pollen ДО всего
 	local initialInfo = farming.get_pollen_info()
 	local initialPollen = initialInfo and initialInfo.pollen or 0
 
 	for attempt = 1, maxAttempts do
-		print("[AutoConvert] Попытка " .. attempt .. ": жмём E (1 раз)")
+		print("[AutoConvert] Попытка " .. attempt .. ": жмём E")
 
-		-- ОДНО нажатие с удержанием 0.1 сек
 		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-		--task.wait(0.1)
-		--VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+		task.wait(0.1)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 
-		-- Ждём 15 секунд и следим за Pollen
-		local startTime = tick()
-		local decreased = false
-
-		while tick() - startTime < 15 do
-			task.wait(1)
-
+		-- Ждём 5 секунд — быстро проверяем, сработало ли
+		local quickCheck = tick()
+		while tick() - quickCheck < 5 do
+			task.wait(0.5)
 			local now = farming.get_pollen_info()
-			if now then
-				-- Успех: Pollen упал или почти 0
-				if now.pollen < initialPollen * 0.9 or now.percent < 2 then
-					decreased = true
-					print(string.format(
-						"[AutoConvert] Pollen упал: %d → %d — конвертация идёт",
-						initialPollen, now.pollen))
-					break
-				end
+			if now and (now.pollen < initialPollen * 0.9 or now.percent < 2) then
+				print("[AutoConvert] Конвертация запущена")
+				return true
 			end
 		end
 
-		if decreased then
-			-- ВАЖНО: больше не жмём E, конвертация уже идёт
-			print("[AutoConvert] Конвертация запущена — больше E не жмём")
-			return true
-		end
-
-		print("[AutoConvert] Pollen не упал за 15 сек — жмём E ещё раз")
-		initialPollen = farming.get_pollen_info() and farming.get_pollen_info().pollen or initialPollen
+		print("[AutoConvert] E не сработал за 5 сек — жмём ещё раз")
 	end
 
-	warn("[AutoConvert] Не удалось запустить конвертацию после " .. maxAttempts .. " попыток")
+	-- Не сработало — не выходим, просто возвращаем false
+	print("[AutoConvert] E не сработал — ждём автоматическую конвертацию сервера")
 	return false
 end
 
@@ -749,34 +727,45 @@ function farming.go_to_hive_and_convert()
 		returnPos = field.Position
 	end
 
-	-- 3. Летим в свой улей (если ещё не там)
-	if (root.Position - hivePos).Magnitude > 15 then
-		mod.data.actives["move"] = true
+	-- 3. ПРОБУЕМ E ДЛЯ РАЗГРУЗКИ
+	print("[AutoConvert] Пробуем E для разгрузки")
+	farming.press_e_until_convert(hivePos, 2)
 
-		local dist = (root.Position - hivePos).Magnitude
-		local speed = mod.data.actives["move_speed"] or 100
-		local tweenTime = dist / math.max(speed, 1)
+	-- 4. ЖДЁМ ЗАВЕРШЕНИЯ (даже если E не сработал — сервер сам конвертит)
+	print("[AutoConvert] Ждём завершения конвертации...")
 
-		root.Anchored = true
-		local tw = find.tweenservice:Create(
-			root,
-			TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
-			{CFrame = CFrame.new(hivePos)}
-		)
-		tw:Play()
-		tw.Completed:Wait()
-		task.wait(1.5)
-	end
+	local timeout = 300
+	local startTime = tick()
+	local lastPollen = nil
+	local stableLowCount = 0
+	local requiredStable = 5
 
-	-- 4. ЭМУЛИРУЕМ E
-	print("[AutoConvert] Эмулируем E для разгрузки")
-	local converted = farming.press_e_until_convert(hivePos, 5)
+	while tick() - startTime < timeout do
+		local info = farming.get_pollen_info()
+		if not info then
+			task.wait(1)
+			continue
+		end
 
-	if not converted then
-		warn("[AutoConvert] Конвертация не запустилась — выходим")
-		root.Anchored = false
-		mod.data.actives["move"] = false
-		return
+		if info.percent < 5 then
+			if lastPollen and info.pollen <= lastPollen + 1000 then
+				stableLowCount = stableLowCount + 1
+				print(string.format(
+					"[AutoConvert] Pollen стабильно низкий %d/%d (%.2f%%) — %d/%d",
+					info.pollen, info.max, info.percent, stableLowCount, requiredStable))
+				if stableLowCount >= requiredStable then
+					print("[AutoConvert] Разгрузка завершена")
+					break
+				end
+			else
+				stableLowCount = 0
+			end
+		else
+			stableLowCount = 0
+		end
+
+		lastPollen = info.pollen
+		task.wait(1)
 	end
 
 	-- 5. ЖДЁМ ЗАВЕРШЕНИЯ
@@ -846,7 +835,7 @@ function farming.go_to_hive_and_convert()
 	root.Anchored = false
 	mod.data.actives["move"] = false
 	mod.data.actives["__last_convert_time"] = tick()
-	mod.data.actives["__last_sprinkler_time"] = nil
+	--mod.data.actives["__last_sprinkler_time"] = nil
 
 	print("[AutoConvert] Готово")
 end
