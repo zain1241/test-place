@@ -388,10 +388,10 @@ function farming.autosprinkler()
 		return
 	end
 
-	-- Кулдаун 5 секунд
+	-- Кулдаун 10 секунд (достаточно, чтобы не спамить)
 	if mod.data.actives["__last_sprinkler_time"] then
 		local elapsed = tick() - mod.data.actives["__last_sprinkler_time"]
-		if elapsed < 5 then
+		if elapsed < 10 then
 			return
 		end
 	end
@@ -409,22 +409,17 @@ function farming.autosprinkler()
 
 	local pac = events:FindFirstChild("PlayerActivesCommand")
 	if not pac or not pac:IsA("RemoteEvent") then
-		warn("PlayerActivesCommand not find or not RemoteEvent")
 		return
 	end
 
-	-- Ставим спринклер
 	local ok, err = pcall(function()
 		pac:FireServer({Name = "Sprinkler Builder"})
 	end)
 
-	if not ok then
-		warn("err:", err)
-		return
+	if ok then
+		mod.data.actives["__last_sprinkler_time"] = tick()
+		print("[AutoSprinkler] placed")
 	end
-
-	mod.data.actives["__last_sprinkler_time"] = tick()
-	print("sprinkler placed")
 end
 
 -- Возвращает актуальную стату игрока или nil
@@ -558,20 +553,66 @@ function farming.wait_for_balloon(hivePos, timeout)
 end
 
 function farming.go_to_hive_and_convert()
+	-- 1. Проверяем, есть ли у игрока свой улей
 	local hivePos = farming.get_hive_position()
+
+	-- Если своего улья нет — летим к свободному и занимаем
 	if not hivePos then
-		warn("[AutoConvert] Улей не найден")
-		return
+		print("[AutoConvert] Своего улья нет — ищем свободный")
+
+		local freeHive = farming.find_free_hive()
+		if not freeHive then
+			warn("[AutoConvert] Свободных ульев нет")
+			return
+		end
+
+		hivePos = freeHive.pos
+		print("[AutoConvert] Найден свободный улей:", freeHive.hive.Name)
+
+		-- Летим к свободному улью
+		local character = find.player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+
+		local dist = (root.Position - hivePos).Magnitude
+		local speed = mod.data.actives["move_speed"] or 100
+		local tweenTime = dist / math.max(speed, 1)
+
+		root.Anchored = true
+		local tw = find.tweenservice:Create(
+			root,
+			TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
+			{CFrame = CFrame.new(hivePos)}
+		)
+		tw:Play()
+		tw.Completed:Wait()
+		task.wait(1.5)
+
+		-- Эмулируем E для занятия улья
+		print("[AutoConvert] Занимаем улей через E")
+		farming.emulate_e(5)
+		task.wait(2)
+
+		-- Проверяем, закрепился ли улей за нами
+		local newHivePos = farming.get_hive_position()
+		if not newHivePos then
+			warn("[AutoConvert] Не удалось занять улей")
+			root.Anchored = false
+			mod.data.actives["move"] = false
+			return
+		end
+
+		hivePos = newHivePos
+		print("[AutoConvert] Улей успешно занят")
 	end
 
 	local character = find.player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	-- Запоминаем, откуда прилетели
 	local returnPos = root.Position
 
-	-- ===== 1. ЛЕТИМ В УЛЕЙ =====
+	-- 2. ЛЕТИМ В УЛЕЙ (если ещё не там)
 	if (root.Position - hivePos).Magnitude > 15 then
 		mod.data.actives["move"] = true
 
@@ -590,12 +631,18 @@ function farming.go_to_hive_and_convert()
 		task.wait(1.5)
 	end
 
-	-- ===== 2. ЖДЁМ ОПУСТОШЕНИЯ РЮКЗАКА =====
-	print("[AutoConvert] Ждём конвертацию рюкзака...")
+	-- 3. ЭМУЛИРУЕМ E ДЛЯ РАЗГРУЗКИ
+	print("[AutoConvert] Эмулируем E для разгрузки")
+	farming.emulate_e(3)
+	task.wait(1)
+
+	-- 4. ЖДЁМ КОНВЕРТАЦИЮ
+	print("[AutoConvert] Ждём конвертацию...")
 
 	local timeout = 300
 	local startTime = tick()
 	local emptyCount = 0
+	local requiredEmpty = 8
 
 	while tick() - startTime < timeout do
 		local info = farming.get_pollen_info()
@@ -606,8 +653,9 @@ function farming.go_to_hive_and_convert()
 
 		if info.percent < 0.5 then
 			emptyCount = emptyCount + 1
-			if emptyCount >= 2 then
-				print("[AutoConvert] Рюкзак пуст")
+			print(string.format("[AutoConvert] Pollen пуст %d/%d", emptyCount, requiredEmpty))
+			if emptyCount >= requiredEmpty then
+				print("[AutoConvert] Разгрузка завершена")
 				break
 			end
 		else
@@ -617,15 +665,13 @@ function farming.go_to_hive_and_convert()
 		task.wait(1)
 	end
 
-	-- ===== 3. ЖДЁМ БАЛЛУН (ЕСЛИ ВКЛЮЧЕН) =====
+	-- 5. ЖДЁМ БАЛЛУН
 	if mod.data.actives["balloon"] == true then
 		print("[AutoConvert] Ждём хайв-баллун...")
 		farming.wait_for_balloon(hivePos, 300)
-	else
-		print("[AutoConvert] Balloon выключен, пропускаем ожидание")
 	end
 
-	-- ===== 4. ВОЗВРАЩАЕМСЯ НА ПОЛЕ =====
+	-- 6. ВОЗВРАЩАЕМСЯ НА ПОЛЕ
 	print("[AutoConvert] Возвращаемся на поле")
 
 	local distBack = (root.Position - returnPos).Magnitude
@@ -643,15 +689,68 @@ function farming.go_to_hive_and_convert()
 		twBack.Completed:Wait()
 	end
 
-	-- ===== 5. ВОЗВРАЩАЕМ УПРАВЛЕНИЕ =====
 	root.Anchored = false
 	mod.data.actives["move"] = false
 	mod.data.actives["__last_convert_time"] = tick()
-
-	-- Сбрасываем кэш спринклера, чтобы после возврата поставить новый
 	mod.data.actives["__last_sprinkler_time"] = nil
 
 	print("[AutoConvert] Готово")
+end
+
+function farming.find_free_hive()
+	local honeycombs = workspace:FindFirstChild("Honeycombs")
+	if not honeycombs then return nil end
+
+	for _, hive in ipairs(honeycombs:GetChildren()) do
+		local display = hive:FindFirstChild("Display")
+		local gui = display and display:FindFirstChild("Gui")
+		local frame = gui and gui:FindFirstChild("Frame")
+		local ownerName = frame and frame:FindFirstChild("OwnerName")
+
+		-- Свободный улей = OwnerName пустой или "None"
+		if ownerName and ownerName:IsA("TextLabel") then
+			local text = ownerName.Text or ""
+			if text == "" or text == "None" or text == "Empty" then
+				local spawnPos = hive:FindFirstChild("SpawnPos")
+				if spawnPos then
+					local pos = nil
+					if spawnPos:IsA("BasePart") then
+						pos = spawnPos.Position
+					elseif spawnPos:IsA("CFrameValue") then
+						pos = spawnPos.Value.Position
+					elseif spawnPos:IsA("Attachment") then
+						pos = spawnPos.WorldPosition
+					elseif spawnPos:IsA("Vector3Value") then
+						pos = spawnPos.Value
+					end
+					if pos then
+						return { hive = hive, pos = pos }
+					end
+				end
+			end
+		end
+	end
+	return nil
+end
+
+function farming.emulate_e(times)
+	times = times or 3
+
+	local VirtualInputManager = game:GetService("VirtualInputManager")
+	if not VirtualInputManager then
+		warn("[emulate_e] VirtualInputManager недоступен")
+		return false
+	end
+
+	for i = 1, times do
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+		task.wait(0.05)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+		task.wait(0.2)
+	end
+
+	print("[emulate_e] Нажал E x" .. times)
+	return true
 end
 
 local function resetFarmMovement(enabled)
@@ -1212,9 +1311,9 @@ function farming.farm(...)
 					farming.inv(true)
 
 					-- Ставим спринклер, только если его ещё нет и мы реально на поле
-					if mod.data.actives["auto_sprinkler"] == true then
-						farming.autosprinkler()
-					end
+					--if mod.data.actives["auto_sprinkler"] == true then
+					--	farming.autosprinkler()
+					--end
 
 					if mod.data.actives["style_auto_farm"] == "Walk" then
 						farming.cornl(true)
