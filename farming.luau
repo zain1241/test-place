@@ -9,7 +9,7 @@ else
 	data = require(script.Parent:WaitForChild("data"))
 end
 
-print("test new syys2341")
+print("test new syys54312124")
 
 local farming = {}
 
@@ -584,56 +584,53 @@ end
 -- Жмёт E и проверяет, уменьшился ли Pollen за 10 секунд.
 -- Если уменьшился — возвращает true. Если нет — жмёт ещё раз.
 function farming.press_e_until_convert(hivePos, maxAttempts)
-	maxAttempts = maxAttempts or 5
+	maxAttempts = maxAttempts or 3
 
 	local VirtualInputManager = game:GetService("VirtualInputManager")
 
-	-- Запоминаем Pollen ДО первого нажатия
+	-- Запоминаем Pollen ДО
 	local initialInfo = farming.get_pollen_info()
 	local initialPollen = initialInfo and initialInfo.pollen or 0
 
 	for attempt = 1, maxAttempts do
-		print("[AutoConvert] Попытка " .. attempt .. ": жмём E")
+		print("[AutoConvert] Попытка " .. attempt .. ": жмём E (1 раз)")
 
+		-- ОДНО нажатие с удержанием 0.1 сек
 		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-		task.wait(0.05)
-		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+		--task.wait(0.1)
+		--VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 
-		-- Ждём до 10 секунд, следим за Pollen
+		-- Ждём 15 секунд и следим за Pollen
 		local startTime = tick()
 		local decreased = false
 
-		while tick() - startTime < 10 do
-			task.wait(0.5)
+		while tick() - startTime < 15 do
+			task.wait(1)
 
 			local now = farming.get_pollen_info()
 			if now then
-				-- Считаем успехом, если Pollen упал хотя бы на 10% от исходного
-				if now.pollen < initialPollen * 0.9 then
+				-- Успех: Pollen упал или почти 0
+				if now.pollen < initialPollen * 0.9 or now.percent < 2 then
 					decreased = true
 					print(string.format(
-						"[AutoConvert] Pollen упал: %d → %d — E сработал",
+						"[AutoConvert] Pollen упал: %d → %d — конвертация идёт",
 						initialPollen, now.pollen))
-					break
-				end
-				-- Или если Pollen стал почти нулевым
-				if now.percent < 1 then
-					decreased = true
-					print("[AutoConvert] Pollen почти 0 — E сработал")
 					break
 				end
 			end
 		end
 
 		if decreased then
+			-- ВАЖНО: больше не жмём E, конвертация уже идёт
+			print("[AutoConvert] Конвертация запущена — больше E не жмём")
 			return true
 		end
 
-		print("[AutoConvert] Pollen не изменился за 10 сек — жмём E ещё раз")
+		print("[AutoConvert] Pollen не упал за 15 сек — жмём E ещё раз")
 		initialPollen = farming.get_pollen_info() and farming.get_pollen_info().pollen or initialPollen
 	end
 
-	warn("[AutoConvert] Не удалось запустить конвертацию")
+	warn("[AutoConvert] Не удалось запустить конвертацию после " .. maxAttempts .. " попыток")
 	return false
 end
 
