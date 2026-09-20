@@ -388,11 +388,19 @@ function farming.autosprinkler()
 		return
 	end
 
+	-- Кулдаун 5 секунд
+	if mod.data.actives["__last_sprinkler_time"] then
+		local elapsed = tick() - mod.data.actives["__last_sprinkler_time"]
+		if elapsed < 5 then
+			return
+		end
+	end
+
 	-- Проверяем, не в улье ли мы
 	local hivePos = farming.get_hive_position()
 	local root = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
 	if hivePos and root and (root.Position - hivePos).Magnitude < 30 then
-		return -- мы в улье, спринклер ставить не надо
+		return
 	end
 
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -415,6 +423,7 @@ function farming.autosprinkler()
 		return
 	end
 
+	mod.data.actives["__last_sprinkler_time"] = tick()
 	print("sprinkler placed")
 end
 
@@ -608,7 +617,7 @@ function farming.go_to_hive_and_convert()
 		task.wait(1)
 	end
 
-	-- ===== 3. ЖДЁМ БАЛЛУН (ЕСЛИ ВКЛЮЧЁН) =====
+	-- ===== 3. ЖДЁМ БАЛЛУН (ЕСЛИ ВКЛЮЧЕН) =====
 	if mod.data.actives["balloon"] == true then
 		print("[AutoConvert] Ждём хайв-баллун...")
 		farming.wait_for_balloon(hivePos, 300)
@@ -624,6 +633,7 @@ function farming.go_to_hive_and_convert()
 		local speed = mod.data.actives["move_speed"] or 100
 		local tweenTime = distBack / math.max(speed, 1)
 
+		root.Anchored = true
 		local twBack = find.tweenservice:Create(
 			root,
 			TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
@@ -637,6 +647,10 @@ function farming.go_to_hive_and_convert()
 	root.Anchored = false
 	mod.data.actives["move"] = false
 	mod.data.actives["__last_convert_time"] = tick()
+
+	-- Сбрасываем кэш спринклера, чтобы после возврата поставить новый
+	mod.data.actives["__last_sprinkler_time"] = nil
+
 	print("[AutoConvert] Готово")
 end
 
@@ -1153,7 +1167,9 @@ function farming.farm(...)
 				end
 
 				-- ===== AUTO CONVERT CHECK =====
-				if mod.data.actives["auto_farm"] == true then
+				if mod.data.actives["auto_farm"] == true
+					and mod.data.actives["move"] == false
+				then
 					local shouldConvert = false
 					local reason = ""
 
