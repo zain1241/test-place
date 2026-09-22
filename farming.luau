@@ -9,7 +9,7 @@ else
 	data = require(script.Parent:WaitForChild("data"))
 end
 
-print("dsad234234")
+print("423414143242342342342323412")
 
 local farming = {}
 
@@ -499,26 +499,51 @@ end
 function farming.wait_for_balloon(hivePos, timeout)
 	timeout = timeout or 300
 
-	local startTime = tick()
+	if not hivePos then
+		return true
+	end
 
-	while tick() - startTime < timeout do
-		local found = false
-
+	local function findHiveBalloon()
 		for _, obj in ipairs(workspace:GetDescendants()) do
 			if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
-				local dist = (obj.Position - hivePos).Magnitude
-				if dist <= 25 then
-					found = true
-					break
+				if (obj.Position - hivePos).Magnitude <= 25 then
+					return obj
 				end
 			end
 		end
 
-		if not found then
-			print("[AutoConvert] Хайв-баллун исчез, ждём 3 секунды")
-			task.wait(3)
+		return nil
+	end
+
+	-- Если баллуна вообще нет, не зависаем на несколько минут
+	local balloon = findHiveBalloon()
+
+	if not balloon then
+		task.wait(1)
+		return true
+	end
+
+	print("[AutoConvert] Хайв-баллун найден — ждём его исчезновения")
+
+	local startTime = tick()
+
+	while tick() - startTime < timeout do
+		if not balloon.Parent then
+			print("[AutoConvert] Хайв-баллун исчез")
+			task.wait(1)
 			return true
 		end
+
+		-- Дополнительная проверка: вдруг старый объект удалили и появился новый
+		local currentBalloon = findHiveBalloon()
+
+		if not currentBalloon then
+			print("[AutoConvert] Хайв-баллун исчез")
+			task.wait(1)
+			return true
+		end
+
+		balloon = currentBalloon
 
 		task.wait(1)
 	end
@@ -527,10 +552,16 @@ function farming.wait_for_balloon(hivePos, timeout)
 	return false
 end
 
+
 function farming.press_e_until_convert(hivePos, maxAttempts)
-	maxAttempts = maxAttempts or 2
+	maxAttempts = maxAttempts or 3
 
 	local VirtualInputManager = game:GetService("VirtualInputManager")
+
+	if not VirtualInputManager then
+		warn("[AutoConvert] VirtualInputManager недоступен")
+		return false
+	end
 
 	local initialInfo = farming.get_pollen_info()
 	local initialPollen = initialInfo and initialInfo.pollen or 0
@@ -539,23 +570,40 @@ function farming.press_e_until_convert(hivePos, maxAttempts)
 		print("[AutoConvert] Попытка " .. attempt .. ": жмём E")
 
 		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-		task.wait(0.1)
+		task.wait(0.08)
 		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 
-		local quickCheck = tick()
-		while tick() - quickCheck < 5 do
+		local checkStart = tick()
+
+		while tick() - checkStart < 6 do
 			task.wait(0.5)
+
 			local now = farming.get_pollen_info()
-			if now and (now.pollen < initialPollen * 0.9 or now.percent < 2) then
-				print("[AutoConvert] Конвертация запущена")
-				return true
+
+			if now then
+				local dropped = false
+
+				if initialPollen > 0 and now.pollen < initialPollen * 0.9 then
+					dropped = true
+				end
+
+				if now.percent <= 3 then
+					dropped = true
+				end
+
+				if dropped then
+					print("[AutoConvert] Конвертация началась")
+					return true
+				end
 			end
 		end
 
-		print("[AutoConvert] E не сработал за 5 сек — жмём ещё раз")
+		print("[AutoConvert] E не запустил конвертацию")
 	end
 
-	print("[AutoConvert] E не сработал — ждём автоматическую конвертацию сервера")
+	-- Даже если E не дал мгновенного результата,
+	-- игрок уже стоит на улье и сервер может начать разгрузку сам.
+	print("[AutoConvert] E не дал ответа — ждём автоматическую разгрузку")
 	return false
 end
 
@@ -592,7 +640,6 @@ end
 function farming.go_to_hive_and_convert()
 	print("[AutoConvert] Начинаем...")
 
-	-- ===== 1. ЖЁСТКАЯ БЛОКИРОВКА ИГРОКА =====
 	mod.data.actives["move"] = true
 	mod.data.actives["point"] = false
 
@@ -603,6 +650,7 @@ function farming.go_to_hive_and_convert()
 		tween:Cancel()
 		tween = nil
 	end
+
 	if atween then
 		atween:Cancel()
 		atween = nil
@@ -618,179 +666,377 @@ function farming.go_to_hive_and_convert()
 
 	if not root or not humanoid then
 		mod.data.actives["move"] = false
-		return
+		return false
 	end
 
-	root.Anchored = true
-	humanoid.WalkSpeed = 0
-	humanoid:Move(Vector3.zero)
-	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+	local savedWalkSpeed = mod.data.actives["walkspeed"] or 16
+	local savedAutoRotate = humanoid.AutoRotate
 
-	-- ===== 2. ПОИСК УЛЬЯ =====
+	-- =========================================================
+	-- ПОЛЁТ ЧЕРЕЗ ФИЗИКУ, А НЕ ЧЕРЕЗ ANCHORED + CFRAME TWEEN
+	-- =========================================================
+
+	local function physicalMoveTo(targetPosition, speed, timeout)
+		speed = speed or mod.data.actives["move_speed"] or 100
+		timeout = timeout or 30
+
+		if not root or not root.Parent then
+			return false
+		end
+
+		root.Anchored = false
+
+		humanoid.WalkSpeed = 0
+		humanoid.AutoRotate = false
+		humanoid:Move(Vector3.zero)
+		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+
+		-- Убираем старые силы, если вдруг остались
+		for _, object in ipairs(root:GetChildren()) do
+			if object.Name == "__AutoConvertVelocity"
+				or object.Name == "__AutoConvertAttachment"
+			then
+				object:Destroy()
+			end
+		end
+
+		local attachment = Instance.new("Attachment")
+		attachment.Name = "__AutoConvertAttachment"
+		attachment.Parent = root
+
+		local linearVelocity = Instance.new("LinearVelocity")
+		linearVelocity.Name = "__AutoConvertVelocity"
+		linearVelocity.Attachment0 = attachment
+		linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+		linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+		linearVelocity.ForceLimitsEnabled = false
+		linearVelocity.VectorVelocity = Vector3.zero
+		linearVelocity.Parent = root
+
+		local startTime = tick()
+
+		while root.Parent and tick() - startTime < timeout do
+			local offset = targetPosition - root.Position
+			local distance = offset.Magnitude
+
+			-- Уже практически приехали
+			if distance <= 2.5 then
+				break
+			end
+
+			local direction = offset.Unit
+
+			-- Реальное физическое движение
+			linearVelocity.VectorVelocity = direction * speed
+
+			game:GetService("RunService").Heartbeat:Wait()
+		end
+
+		-- Полностью останавливаем физику
+		linearVelocity.VectorVelocity = Vector3.zero
+
+		task.wait(0.08)
+
+		linearVelocity:Destroy()
+		attachment:Destroy()
+
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+
+		return root.Parent ~= nil
+	end
+
+	-- =========================================================
+	-- ПОЛНОСТЬЮ ОТПУСТИТЬ ИГРОКА
+	-- =========================================================
+
+	local function releasePlayer()
+		if not root or not root.Parent then
+			return
+		end
+
+		-- Во время фарма inv(true) выключает CanTouch.
+		-- Для улья возвращаем нормальные touch/query.
+		farming.inv(false)
+
+		root.Anchored = false
+
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+
+		humanoid.WalkSpeed = 0
+		humanoid.AutoRotate = false
+		humanoid:Move(Vector3.zero)
+
+		-- Главное: НЕ оставляем Physics + Anchored.
+		-- Персонаж реально должен упасть.
+		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+
+		local groundedStart = tick()
+		local grounded = false
+
+		while tick() - groundedStart < 5 do
+			if not root.Parent or not humanoid.Parent then
+				break
+			end
+
+			if humanoid.FloorMaterial ~= Enum.Material.Air then
+				grounded = true
+				break
+			end
+
+			task.wait(0.1)
+		end
+
+		if grounded then
+			print("[AutoConvert] Игрок реально приземлился")
+		else
+			warn("[AutoConvert] Не дождались приземления")
+		end
+
+		task.wait(0.4)
+	end
+
+	-- =========================================================
+	-- 1. ИЩЕМ СВОЙ УЛЕЙ
+	-- =========================================================
+
 	local hivePos = farming.get_hive_position()
 
 	if not hivePos then
 		print("[AutoConvert] Своего улья нет — ищем свободный")
 
 		local freeHive = farming.find_free_hive()
+
 		if not freeHive then
 			warn("[AutoConvert] Свободных ульев нет")
+
 			root.Anchored = false
-			humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+			humanoid.WalkSpeed = savedWalkSpeed
+			humanoid.AutoRotate = savedAutoRotate
 			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+
 			mod.data.actives["move"] = false
-			return
+
+			return false
 		end
 
 		print("[AutoConvert] Найден свободный улей:", freeHive.hive.Name)
 
-		local dist = (root.Position - freeHive.pos).Magnitude
+		-- Летим НАД ульем.
+		local targetPos = freeHive.pos + Vector3.new(0, 3.5, 0)
+
+		local distance = (root.Position - targetPos).Magnitude
 		local speed = mod.data.actives["move_speed"] or 100
-		local tweenTime = dist / math.max(speed, 1)
+		local timeout = math.max((distance / math.max(speed, 1)) * 3, 10)
 
-		local tw = find.tweenservice:Create(
-			root,
-			TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
-			{CFrame = CFrame.new(freeHive.pos)}
-		)
-		tw:Play()
-		tw.Completed:Wait()
+		local ok = physicalMoveTo(targetPos, speed, timeout)
 
-		-- стопорим после полёта
-		humanoid.WalkSpeed = 0
-		humanoid:Move(Vector3.zero)
-		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-		if track and track.IsPlaying then track:Stop(0) end
+		if not ok then
+			warn("[AutoConvert] Не удалось долететь до свободного улья")
 
-		task.wait(1.5)
+			root.Anchored = false
+			humanoid.WalkSpeed = savedWalkSpeed
+			humanoid.AutoRotate = savedAutoRotate
+			mod.data.actives["move"] = false
+
+			return false
+		end
+
+		print("[AutoConvert] Долетели до свободного улья")
+
+		-- Вот здесь теперь действительно отпускаем игрока.
+		releasePlayer()
 
 		local occupied, newHivePos = farming.press_e_until_hive(5)
 
 		if not occupied or not newHivePos then
 			warn("[AutoConvert] Не удалось занять улей")
+
 			root.Anchored = false
-			humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+			humanoid.WalkSpeed = savedWalkSpeed
+			humanoid.AutoRotate = savedAutoRotate
 			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+
 			mod.data.actives["move"] = false
-			return
+
+			return false
 		end
 
 		hivePos = newHivePos
+
 		print("[AutoConvert] Улей занят:", tostring(hivePos))
+
+	else
+		print("[AutoConvert] Свой улей найден")
 	end
 
-	-- ===== 3. ЗАПОМИНАЕМ ПОЗИЦИЮ ПОЛЯ =====
-	local returnPos = root.Position
+	-- =========================================================
+	-- 2. ЗАПОМИНАЕМ КУДА ВОЗВРАЩАТЬСЯ
+	-- =========================================================
+
 	local selectedField = mod.data.actives["selected_field"]
 	local fields = workspace:FindFirstChild("FlowerZones")
 	local field = fields and selectedField and fields:FindFirstChild(selectedField)
+
+	local returnPos = root.Position
+
 	if field and field:IsA("BasePart") then
-		returnPos = field.Position
+		-- Немного выше поля, чтобы потом просто упасть.
+		returnPos = field.Position + Vector3.new(0, 3, 0)
 	end
 
-	-- ===== 4. ЛЕТИМ В УЛЕЙ (если ещё не там) =====
-	if (root.Position - hivePos).Magnitude > 15 then
-		local dist = (root.Position - hivePos).Magnitude
+	-- =========================================================
+	-- 3. ЕСЛИ СВОЙ УЛЕЙ ЕЩЁ ДАЛЕКО — ЛЕТИМ К НЕМУ
+	-- =========================================================
+
+	if (root.Position - hivePos).Magnitude > 4 then
+		local targetPos = hivePos + Vector3.new(0, 3.5, 0)
+
+		local distance = (root.Position - targetPos).Magnitude
 		local speed = mod.data.actives["move_speed"] or 100
-		local tweenTime = dist / math.max(speed, 1)
+		local timeout = math.max((distance / math.max(speed, 1)) * 3, 10)
 
-		local tw = find.tweenservice:Create(
-			root,
-			TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
-			{CFrame = CFrame.new(hivePos)}
-		)
-		tw:Play()
-		tw.Completed:Wait()
+		local ok = physicalMoveTo(targetPos, speed, timeout)
 
-		humanoid.WalkSpeed = 0
-		humanoid:Move(Vector3.zero)
-		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-		if track and track.IsPlaying then track:Stop(0) end
+		if not ok then
+			warn("[AutoConvert] Не удалось долететь до своего улья")
 
-		task.wait(1.5)
+			root.Anchored = false
+			humanoid.WalkSpeed = savedWalkSpeed
+			humanoid.AutoRotate = savedAutoRotate
+			mod.data.actives["move"] = false
+
+			return false
+		end
 	end
 
-	-- ===== 5. E ДЛЯ РАЗГРУЗКИ =====
-	print("[AutoConvert] Пробуем E для разгрузки")
-	farming.press_e_until_convert(hivePos, 2)
+	print("[AutoConvert] Долетели до улья")
 
-	-- ===== 6. ЖДЁМ ЗАВЕРШЕНИЯ =====
+	-- =========================================================
+	-- 4. САМОЕ ВАЖНОЕ:
+	--    ПЕРЕСТАЁМ ЛЕТЕТЬ И ДАЁМ ПЕРСОНАЖУ УПАСТЬ
+	-- =========================================================
+
+	releasePlayer()
+
+	print("[AutoConvert] Игрок отпущен, пытаемся разгружаться")
+
+	-- =========================================================
+	-- 5. E
+	-- =========================================================
+
+	farming.press_e_until_convert(hivePos, 3)
+
+	-- =========================================================
+	-- 6. ЖДЁМ, ПОКА ПОЛЛЕН РЕАЛЬНО УЙДЁТ
+	-- =========================================================
+
 	print("[AutoConvert] Ждём завершения конвертации...")
 
-	local timeout = 300
 	local startTime = tick()
-	local lastPollen = nil
-	local stableLowCount = 0
-	local requiredStable = 8
+	local timeout = 300
+
+	local lowCount = 0
+	local requiredLowCount = 4
 
 	while tick() - startTime < timeout do
-		local info = farming.get_pollen_info()
-		if not info then
-			task.wait(1)
-			continue
+		if not root.Parent or not humanoid.Parent then
+			break
 		end
 
-		if info.percent < 5 then
-			if lastPollen and info.pollen <= lastPollen + 1000 then
-				stableLowCount = stableLowCount + 1
-				print(string.format(
-					"[AutoConvert] Pollen стабильно низкий %d/%d (%.2f%%) — %d/%d",
-					info.pollen, info.max, info.percent, stableLowCount, requiredStable
-					))
+		-- Никакого Anchored.
+		-- Никакого Tween.
+		-- Никакого продолжающегося полёта.
 
-				if stableLowCount >= requiredStable then
+		root.Anchored = false
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+
+		local info = farming.get_pollen_info()
+
+		if info then
+			print(string.format(
+				"[AutoConvert] Pollen: %d/%d (%.1f%%)",
+				info.pollen,
+				info.max,
+				info.percent
+			))
+
+			if info.percent <= 5 then
+				lowCount += 1
+
+				if lowCount >= requiredLowCount then
 					print("[AutoConvert] Разгрузка завершена")
 					break
 				end
 			else
-				stableLowCount = 0
+				lowCount = 0
 			end
-		else
-			stableLowCount = 0
 		end
 
-		lastPollen = info.pollen
-		task.wait(1)
+		task.wait(0.75)
 	end
 
-	-- ===== 7. БАЛЛУН =====
+	-- =========================================================
+	-- 7. БАЛЛУН
+	-- =========================================================
+
 	if mod.data.actives["balloon"] == true then
 		print("[AutoConvert] Ждём хайв-баллун...")
 		farming.wait_for_balloon(hivePos, 300)
 	end
 
-	-- ===== 8. ВОЗВРАТ НА ПОЛЕ =====
+	-- =========================================================
+	-- 8. ВОЗВРАЩАЕМСЯ НА ПОЛЕ
+	-- =========================================================
+
 	print("[AutoConvert] Возвращаемся на поле")
 
-	local distBack = (root.Position - returnPos).Magnitude
-	if distBack > 5 then
-		local speed = mod.data.actives["move_speed"] or 100
-		local tweenTime = distBack / math.max(speed, 1)
+	-- Перед полётом снова включаем режим, при котором
+	-- персонаж не мешает сбору токенов.
+	farming.inv(true)
 
-		local twBack = find.tweenservice:Create(
-			root,
-			TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
-			{CFrame = CFrame.new(returnPos)}
-		)
-		twBack:Play()
-		twBack.Completed:Wait()
+	local distanceBack = (root.Position - returnPos).Magnitude
+	local speedBack = mod.data.actives["move_speed"] or 100
+	local timeoutBack = math.max(
+		(distanceBack / math.max(speedBack, 1)) * 3,
+		10
+	)
 
-		humanoid.WalkSpeed = 0
-		humanoid:Move(Vector3.zero)
-		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-		if track and track.IsPlaying then track:Stop(0) end
+	-- Опять физический сетевой полёт.
+	physicalMoveTo(
+		returnPos,
+		speedBack,
+		timeoutBack
+	)
 
-		task.wait(0.5)
-	end
+	print("[AutoConvert] Долетели обратно на поле")
 
-	-- ===== 9. ВОЗВРАЩАЕМ УПРАВЛЕНИЕ =====
+	-- =========================================================
+	-- 9. НА ПОЛЕ ТОЖЕ НЕ ОСТАВЛЯЕМ В ВОЗДУХЕ
+	-- =========================================================
+
 	root.Anchored = false
-	humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+
+	humanoid.AutoRotate = savedAutoRotate
+	humanoid.WalkSpeed = savedWalkSpeed
+	humanoid:Move(Vector3.zero)
+	humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+
+	task.wait(0.3)
+
+	humanoid.WalkSpeed = savedWalkSpeed
 	humanoid:ChangeState(Enum.HumanoidStateType.Running)
+
 	mod.data.actives["move"] = false
 	mod.data.actives["__last_convert_time"] = tick()
 
 	print("[AutoConvert] Готово")
+
+	return true
 end
 
 function farming.find_free_hive()
