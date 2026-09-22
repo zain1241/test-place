@@ -9,7 +9,7 @@ else
 	data = require(script.Parent:WaitForChild("data"))
 end
 
-print("423414143242342342342323412")
+print("1312")
 
 local farming = {}
 
@@ -98,34 +98,80 @@ function farming.cornl(...)
 	end
 end
 
+--function farming.inv(...)
+--	local a = {...}
+--	local b = workspace:FindFirstChild(find.player.Name)
+
+--	if a[1] == true then
+--		if invc then
+--			return
+--		end
+
+--		invc = farming.conAF(
+--			find.prerender, 4,
+--			function(delta)
+--				for _, v in ipairs(b:GetChildren()) do
+--					if v:IsA("MeshPart") then
+--						if v.Name ~= "HumanoidRootPart"then
+--							v.Transparency = 0.6
+--						end
+--						v.CanCollide = false
+--						v.CanTouch = false
+--						v.CanQuery = false
+--					end
+--				end
+--			end
+--		)
+--	else
+--		if invc then
+--			invc:Disconnect()
+--			invc = nil
+--		end
+
+--		for _, v in ipairs(b:GetChildren()) do
+--			if v:IsA("MeshPart") then
+--				if v.Name ~= "HumanoidRootPart" then
+--					v.Transparency = 0
+--				end
+--				v.CanCollide = false
+--				v.CanTouch = true
+--				v.CanQuery = true
+--			end
+--		end
+--	end
+--end
+
 function farming.inv(...)
 	local a = {...}
-	local b = workspace:FindFirstChild(find.player.Name)
 
-	if a[1] == true then
-		if invc then
+	local character = find.player.Character
+	local b = character or workspace:FindFirstChild(find.player.Name)
+
+	if not b then
+		return
+	end
+
+	local function applyInvisible()
+		if not b or not b.Parent then
 			return
 		end
 
-		invc = farming.conAF(
-			find.prerender, 4,
-			function(delta)
-				for _, v in ipairs(b:GetChildren()) do
-					if v:IsA("MeshPart") then
-						if v.Name ~= "HumanoidRootPart"then
-							v.Transparency = 0.6
-						end
-						v.CanCollide = false
-						v.CanTouch = false
-						v.CanQuery = false
-					end
+		for _, v in ipairs(b:GetChildren()) do
+			if v:IsA("MeshPart") then
+				if v.Name ~= "HumanoidRootPart" then
+					v.Transparency = 0.6
 				end
+
+				v.CanCollide = false
+				v.CanTouch = false
+				v.CanQuery = false
 			end
-		)
-	else
-		if invc then
-			invc:Disconnect()
-			invc = nil
+		end
+	end
+
+	local function applyVisible()
+		if not b or not b.Parent then
+			return
 		end
 
 		for _, v in ipairs(b:GetChildren()) do
@@ -133,13 +179,40 @@ function farming.inv(...)
 				if v.Name ~= "HumanoidRootPart" then
 					v.Transparency = 0
 				end
+
 				v.CanCollide = false
 				v.CanTouch = true
 				v.CanQuery = true
 			end
 		end
 	end
+
+	if a[1] == true then
+		-- Включаем СРАЗУ.
+		applyInvisible()
+
+		if invc then
+			return
+		end
+
+		invc = farming.conAF(
+			find.prerender,
+			4,
+			function()
+				applyInvisible()
+			end
+		)
+
+	else
+		if invc then
+			invc:Disconnect()
+			invc = nil
+		end
+
+		applyVisible()
+	end
 end
+
 
 function farming.move(...)
 	local a = {...}
@@ -673,7 +746,8 @@ function farming.go_to_hive_and_convert()
 	local savedAutoRotate = humanoid.AutoRotate
 
 	-- =========================================================
-	-- ПОЛЁТ ЧЕРЕЗ ФИЗИКУ, А НЕ ЧЕРЕЗ ANCHORED + CFRAME TWEEN
+	-- ФИЗИЧЕСКИЙ ПОЛЁТ
+	-- inv автоматически включён НА ВСЁМ ПУТИ
 	-- =========================================================
 
 	local function physicalMoveTo(targetPosition, speed, timeout)
@@ -684,6 +758,9 @@ function farming.go_to_hive_and_convert()
 			return false
 		end
 
+		-- ВОТ ЗДЕСЬ ВКЛЮЧАЕМ INV ДО НАЧАЛА ПОЛЁТА
+		farming.inv(true)
+
 		root.Anchored = false
 
 		humanoid.WalkSpeed = 0
@@ -691,7 +768,7 @@ function farming.go_to_hive_and_convert()
 		humanoid:Move(Vector3.zero)
 		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 
-		-- Убираем старые силы, если вдруг остались
+		-- Удаляем старые силы
 		for _, object in ipairs(root:GetChildren()) do
 			if object.Name == "__AutoConvertVelocity"
 				or object.Name == "__AutoConvertAttachment"
@@ -719,26 +796,34 @@ function farming.go_to_hive_and_convert()
 			local offset = targetPosition - root.Position
 			local distance = offset.Magnitude
 
-			-- Уже практически приехали
 			if distance <= 2.5 then
 				break
 			end
 
 			local direction = offset.Unit
 
-			-- Реальное физическое движение
 			linearVelocity.VectorVelocity = direction * speed
+
+			-- Пока летим — inv гарантированно остаётся включён.
+			if not invc then
+				farming.inv(true)
+			end
 
 			game:GetService("RunService").Heartbeat:Wait()
 		end
 
-		-- Полностью останавливаем физику
+		-- Полностью останавливаем движение
 		linearVelocity.VectorVelocity = Vector3.zero
 
 		task.wait(0.08)
 
-		linearVelocity:Destroy()
-		attachment:Destroy()
+		if linearVelocity.Parent then
+			linearVelocity:Destroy()
+		end
+
+		if attachment.Parent then
+			attachment:Destroy()
+		end
 
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
@@ -747,7 +832,7 @@ function farming.go_to_hive_and_convert()
 	end
 
 	-- =========================================================
-	-- ПОЛНОСТЬЮ ОТПУСТИТЬ ИГРОКА
+	-- ОТПУСТИТЬ ИГРОКА НА УЛЕЕ
 	-- =========================================================
 
 	local function releasePlayer()
@@ -755,8 +840,9 @@ function farming.go_to_hive_and_convert()
 			return
 		end
 
-		-- Во время фарма inv(true) выключает CanTouch.
-		-- Для улья возвращаем нормальные touch/query.
+		-- ДОСТИГЛИ УЛЬЯ:
+		-- теперь inv выключаем, чтобы улей/персонаж нормально
+		-- взаимодействовали физически.
 		farming.inv(false)
 
 		root.Anchored = false
@@ -768,8 +854,7 @@ function farming.go_to_hive_and_convert()
 		humanoid.AutoRotate = false
 		humanoid:Move(Vector3.zero)
 
-		-- Главное: НЕ оставляем Physics + Anchored.
-		-- Персонаж реально должен упасть.
+		-- Реально отпускаем персонажа.
 		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
 
 		local groundedStart = tick()
@@ -789,7 +874,7 @@ function farming.go_to_hive_and_convert()
 		end
 
 		if grounded then
-			print("[AutoConvert] Игрок реально приземлился")
+			print("[AutoConvert] Игрок приземлился на улей")
 		else
 			warn("[AutoConvert] Не дождались приземления")
 		end
@@ -798,7 +883,7 @@ function farming.go_to_hive_and_convert()
 	end
 
 	-- =========================================================
-	-- 1. ИЩЕМ СВОЙ УЛЕЙ
+	-- 1. ИЩЕМ УЛЕЙ
 	-- =========================================================
 
 	local hivePos = farming.get_hive_position()
@@ -810,6 +895,8 @@ function farming.go_to_hive_and_convert()
 
 		if not freeHive then
 			warn("[AutoConvert] Свободных ульев нет")
+
+			farming.inv(false)
 
 			root.Anchored = false
 			humanoid.WalkSpeed = savedWalkSpeed
@@ -823,17 +910,26 @@ function farming.go_to_hive_and_convert()
 
 		print("[AutoConvert] Найден свободный улей:", freeHive.hive.Name)
 
-		-- Летим НАД ульем.
 		local targetPos = freeHive.pos + Vector3.new(0, 3.5, 0)
 
+		-- physicalMoveTo сам включает inv
 		local distance = (root.Position - targetPos).Magnitude
 		local speed = mod.data.actives["move_speed"] or 100
-		local timeout = math.max((distance / math.max(speed, 1)) * 3, 10)
+		local timeout = math.max(
+			(distance / math.max(speed, 1)) * 3,
+			10
+		)
 
-		local ok = physicalMoveTo(targetPos, speed, timeout)
+		local ok = physicalMoveTo(
+			targetPos,
+			speed,
+			timeout
+		)
 
 		if not ok then
 			warn("[AutoConvert] Не удалось долететь до свободного улья")
+
+			farming.inv(false)
 
 			root.Anchored = false
 			humanoid.WalkSpeed = savedWalkSpeed
@@ -845,13 +941,15 @@ function farming.go_to_hive_and_convert()
 
 		print("[AutoConvert] Долетели до свободного улья")
 
-		-- Вот здесь теперь действительно отпускаем игрока.
+		-- Теперь inv выключается и игрок падает.
 		releasePlayer()
 
 		local occupied, newHivePos = farming.press_e_until_hive(5)
 
 		if not occupied or not newHivePos then
 			warn("[AutoConvert] Не удалось занять улей")
+
+			farming.inv(false)
 
 			root.Anchored = false
 			humanoid.WalkSpeed = savedWalkSpeed
@@ -872,7 +970,7 @@ function farming.go_to_hive_and_convert()
 	end
 
 	-- =========================================================
-	-- 2. ЗАПОМИНАЕМ КУДА ВОЗВРАЩАТЬСЯ
+	-- 2. ТОЧКА ВОЗВРАТА
 	-- =========================================================
 
 	local selectedField = mod.data.actives["selected_field"]
@@ -882,12 +980,11 @@ function farming.go_to_hive_and_convert()
 	local returnPos = root.Position
 
 	if field and field:IsA("BasePart") then
-		-- Немного выше поля, чтобы потом просто упасть.
 		returnPos = field.Position + Vector3.new(0, 3, 0)
 	end
 
 	-- =========================================================
-	-- 3. ЕСЛИ СВОЙ УЛЕЙ ЕЩЁ ДАЛЕКО — ЛЕТИМ К НЕМУ
+	-- 3. ПОЛЁТ К СВОЕМУ УЛЬЮ
 	-- =========================================================
 
 	if (root.Position - hivePos).Magnitude > 4 then
@@ -895,12 +992,21 @@ function farming.go_to_hive_and_convert()
 
 		local distance = (root.Position - targetPos).Magnitude
 		local speed = mod.data.actives["move_speed"] or 100
-		local timeout = math.max((distance / math.max(speed, 1)) * 3, 10)
+		local timeout = math.max(
+			(distance / math.max(speed, 1)) * 3,
+			10
+		)
 
-		local ok = physicalMoveTo(targetPos, speed, timeout)
+		local ok = physicalMoveTo(
+			targetPos,
+			speed,
+			timeout
+		)
 
 		if not ok then
-			warn("[AutoConvert] Не удалось долететь до своего улья")
+			warn("[AutoConvert] Не удалось долететь до улья")
+
+			farming.inv(false)
 
 			root.Anchored = false
 			humanoid.WalkSpeed = savedWalkSpeed
@@ -914,8 +1020,7 @@ function farming.go_to_hive_and_convert()
 	print("[AutoConvert] Долетели до улья")
 
 	-- =========================================================
-	-- 4. САМОЕ ВАЖНОЕ:
-	--    ПЕРЕСТАЁМ ЛЕТЕТЬ И ДАЁМ ПЕРСОНАЖУ УПАСТЬ
+	-- 4. ОТПУСКАЕМ
 	-- =========================================================
 
 	releasePlayer()
@@ -929,7 +1034,7 @@ function farming.go_to_hive_and_convert()
 	farming.press_e_until_convert(hivePos, 3)
 
 	-- =========================================================
-	-- 6. ЖДЁМ, ПОКА ПОЛЛЕН РЕАЛЬНО УЙДЁТ
+	-- 6. ЖДЁМ РАЗГРУЗКУ
 	-- =========================================================
 
 	print("[AutoConvert] Ждём завершения конвертации...")
@@ -945,10 +1050,6 @@ function farming.go_to_hive_and_convert()
 			break
 		end
 
-		-- Никакого Anchored.
-		-- Никакого Tween.
-		-- Никакого продолжающегося полёта.
-
 		root.Anchored = false
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
@@ -961,7 +1062,7 @@ function farming.go_to_hive_and_convert()
 				info.pollen,
 				info.max,
 				info.percent
-			))
+				))
 
 			if info.percent <= 5 then
 				lowCount += 1
@@ -988,34 +1089,42 @@ function farming.go_to_hive_and_convert()
 	end
 
 	-- =========================================================
-	-- 8. ВОЗВРАЩАЕМСЯ НА ПОЛЕ
+	-- 8. ОБРАТНЫЙ ПОЛЁТ
 	-- =========================================================
 
 	print("[AutoConvert] Возвращаемся на поле")
 
-	-- Перед полётом снова включаем режим, при котором
-	-- персонаж не мешает сбору токенов.
-	farming.inv(true)
+	-- ВАЖНО:
+	-- physicalMoveTo() снова сам включит inv
+	-- ДО начала обратного полёта.
 
 	local distanceBack = (root.Position - returnPos).Magnitude
 	local speedBack = mod.data.actives["move_speed"] or 100
+
 	local timeoutBack = math.max(
 		(distanceBack / math.max(speedBack, 1)) * 3,
 		10
 	)
 
-	-- Опять физический сетевой полёт.
-	physicalMoveTo(
+	local okBack = physicalMoveTo(
 		returnPos,
 		speedBack,
 		timeoutBack
 	)
 
+	if not okBack then
+		warn("[AutoConvert] Не удалось вернуться на поле")
+	end
+
 	print("[AutoConvert] Долетели обратно на поле")
 
 	-- =========================================================
-	-- 9. НА ПОЛЕ ТОЖЕ НЕ ОСТАВЛЯЕМ В ВОЗДУХЕ
+	-- 9. ПРИЗЕМЛЯЕМСЯ НА ПОЛЕ
 	-- =========================================================
+
+	-- inv пока ещё включён.
+	-- Выключать его здесь НЕ нужно: обычный фарм снова
+	-- сам оставит inv включённым.
 
 	root.Anchored = false
 	root.AssemblyLinearVelocity = Vector3.zero
