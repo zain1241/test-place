@@ -1443,7 +1443,7 @@ function menu.dop_create()
 							type = "button",
 							text = "Auto Sprinkler",
 							key = "auto_sprinkler",
-							callback = mod.farming.autosprinkler,
+							--callback = mod.farming.autosprinkler,
 						},
 						{ type = "button", text = "Auto Dig", key = "auto_dig", callback = mod.farming.autoDig},
 						{
