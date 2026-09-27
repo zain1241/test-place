@@ -11,11 +11,11 @@ end
 
 local farming = {}
 
-print("loaded 0.0.1")
-
 local mod = {
 	data = data,
 }
+
+print("loaded 0.0.2")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -588,31 +588,25 @@ function farming.autoHive(...)
 	local honeycombs = workspace:FindFirstChild("Honeycombs")
 	if not honeycombs then return end
 	if mod.data.actives.autohive == false then return end
-	
+
 	print(1)
-	
-	local pos = nil
-	local isFree = false
+
 	local activeNames = {}
-	
+
 	for _, p in ipairs(find.players:GetPlayers()) do
 		activeNames[string.lower(p.Name)] = true
 	end
-	
+
 	for _, hive in ipairs(honeycombs:GetChildren()) do
 		print(2)
-		local name = hive:FindFirstChild("Display"):FindFirstChild("Gui"):FindFirstChild("Frame"):FindFirstChild("OwnerName")
+		local display = hive:FindFirstChild("Display")
+		local gui = display and display:FindFirstChild("Gui")
+		local frame = gui and gui:FindFirstChild("Frame")
+		local name = frame and frame:FindFirstChild("OwnerName")
+
 		if name and name:IsA("TextLabel") then
 			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
-			if string.lower(trimmed) == string.lower(find.player.Name) then
-				local spawnPos = hive:FindFirstChild("SpawnPos")
-				if spawnPos then
-					if spawnPos:IsA("BasePart") then pos = spawnPos.Position
-					elseif spawnPos:IsA("CFrameValue") then pos = spawnPos.Value.Position
-					elseif spawnPos:IsA("Attachment") then pos = spawnPos.WorldPosition
-					elseif spawnPos:IsA("Vector3Value") then pos = spawnPos.Value end
-				end
-			end
+			local isFree = false
 
 			if trimmed == "" then
 				isFree = true
@@ -622,13 +616,26 @@ function farming.autoHive(...)
 					isFree = true
 				end
 			end
-			
-			if isFree == true then
-				farming.move(
-					"hive",
-					mod.data.actives["move_speed"],
-					pos
-				)
+
+			if isFree then
+				local pos = nil
+				local spawnPos = hive:FindFirstChild("SpawnPos")
+
+				if spawnPos then
+					if spawnPos:IsA("BasePart") then pos = spawnPos.Position
+					elseif spawnPos:IsA("CFrameValue") then pos = spawnPos.Value.Position
+					elseif spawnPos:IsA("Attachment") then pos = spawnPos.WorldPosition
+					elseif spawnPos:IsA("Vector3Value") then pos = spawnPos.Value end
+				end
+
+				if pos then
+					farming.move(
+						"hive",
+						mod.data.actives["move_speed"],
+						pos
+					)
+					break
+				end
 			end
 		end
 	end
