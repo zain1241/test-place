@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.94")
+print("loaded 0.0.941")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -93,9 +93,10 @@ local function activateButton(...)
 	end
 
 	local waitStart = tick()
-	while tick() - waitStart < 2 do
+	while tick() - waitStart < 3 do
 		if button.Visible and button.AbsoluteSize.X > 0 then break end
 		task.wait(0.05)
+		button = findActivateButton() or button
 	end
 
 	local pos = button.AbsolutePosition
@@ -109,25 +110,18 @@ local function activateButton(...)
 	local cy = pos.Y + (size.Y / 2)
 	local inset = find.guiservice:GetGuiInset()
 
-	local function vic(x, y)
-		pcall(function() find.virtual:SendMouseMoveEvent(x, y, false, game) end)
-		task.wait(0.1)
-		pcall(function()
-			local VU = game:GetService("VirtualUser")
-			VU:CaptureController()
-			VU:ClickButton1(Vector2.new(x, y))
-		end)
-		task.wait(0.1)
-		pcall(function() find.virtual:SendMouseButtonEvent(x, y, 0, true, game, 1) end)
-		task.wait(0.05)
-		pcall(function() find.virtual:SendMouseButtonEvent(x, y, 0, false, game, 1) end)
-	end
-	
-	vic(cx, cy + inset.Y)
-	--task.wait(0.15)
-	--vic(cx, cy)
+	pcall(function() find.virtual:SendMouseMoveEvent(cx, cy + inset.Y, false, game) end)
+	task.wait(0.1)
+	pcall(function()
+		local VU = game:GetService("VirtualUser")
+		VU:CaptureController()
+		VU:ClickButton1(Vector2.new(cx, cy + inset.Y))
+	end)
+	task.wait(0.1)
+	pcall(function() find.virtual:SendMouseButtonEvent(cx, cy + inset.Y, 0, true, game, 1) end)
+	task.wait(0.05)
+	pcall(function() find.virtual:SendMouseButtonEvent(cx, cy + inset.Y, 0, false, game, 1) end)
 
-	--print("activateButton: done")
 	return true
 end
 
@@ -477,39 +471,23 @@ function farming.move(...)
 				mod.data.actives["move"] = false
 				return
 			end
+			
+			if not farming.getHive() then
+				task.wait(0.6)
 
-			local clicked = activateButton()
+				local clicked = false
+				for try = 1, 3 do
+					clicked = activateButton()
+					task.wait(0.5)
+					if farming.getHive() then break end
+				end
 
-			if not clicked then
-				mod.data.actives["move"] = false
-				mod.data.actives["converting"] = false
-				return
-			end
-
-			local occupied = false
-			local checkStart = tick()
-
-			while tick() - checkStart < 5 do
-				if currentFarmId ~= farmId
-					or mod.data.actives["auto_farm"] ~= true
-				then
+				if not farming.getHive() then
+					warn("[hive] не занялся после 3 попыток")
 					mod.data.actives["move"] = false
 					mod.data.actives["converting"] = false
 					return
 				end
-
-				if farming.getHive() then
-					occupied = true
-					break
-				end
-
-				task.wait(0.2)
-			end
-
-			if not occupied then
-				mod.data.actives["move"] = false
-				mod.data.actives["converting"] = false
-				return
 			end
 
 			mod.data.actives["converting"] = true
