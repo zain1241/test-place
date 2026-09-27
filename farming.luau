@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.61")
+print("loaded 0.0.62")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -81,6 +81,7 @@ local function activateButton(...)
 	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1) -- down
 	task.wait(0.1)
 	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1) -- up
+	print("activated")
 end
 
 function farming.conAF(...)
@@ -416,10 +417,10 @@ function farming.move(...)
 
 			root.Anchored = false
 			mod.data.actives["move"] = false
-			task.wait(.2)
+			task.wait(1)
 			print("completed")
 			activateButton()
-			task.wait(.4)
+			task.wait(2)
 			if mod.data.actives["auto_farm"] == true then
 				farming.farm()
 			end
@@ -1415,7 +1416,7 @@ function farming.farm(...)
 	
 	local hivePos = farming.getHive()
 	if not hivePos then
-		mod.data.actives["auto_farm"] = false
+		--mod.data.actives["auto_farm"] = false
 		resetFarmMovement(false)
 		farming.autoHive()
 		return
