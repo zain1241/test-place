@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8419")
+print("loaded 0.0.843")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -511,13 +511,15 @@ function farming.move(...)
 				return
 			end
 
-			if occupied then
-				farming.convert()
-			else
-				mod.data.actives["move"] = false
-				mod.data.actives["converting"] = false
-				--warn("[hive] не удалось занять улей")
-			end
+			--if occupied then
+			--	farming.convert()
+			--else
+			--	mod.data.actives["move"] = false
+			--	mod.data.actives["converting"] = false
+			--	--warn("[hive] не удалось занять улей")
+			--end
+			
+			farming.convert()
 
 			--mod.data.actives["move"] = false
 
@@ -584,7 +586,7 @@ function farming.move(...)
 			j(false)
 			farming.inv(false)
 			root.Anchored = false
-			task.wait(.2)
+			task.wait(1)
 
 			--if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
 			--	mod.data.actives["move"] = false
@@ -646,34 +648,68 @@ function farming.convert(...)
 		aconvert:Disconnect()
 		aconvert = nil
 	end
-	
+
 	if mod.data.actives["honey_mask"] == true then
 		farming.honey_mask()
 	end
 
 	task.wait(1)
+	
+	local maxEAttempts = 5
+	local eWait = 5
+	local eSucceeded = false
 
-	local initial = farming.get_pollen_info()
-	local initial_pollen = initial and initial.pollen or 0
-	if initial_pollen > 0 then
-		local now = farming.get_pollen_info()
+	for attempt = 1, maxEAttempts do
+		local before = farming.get_pollen_info()
+		local before_pollen = before and before.pollen or 0
 
-		if now and now.pollen >= initial_pollen then
-			pressE()
+		pressE()
+		--print("[convert] E попытка " .. attempt .. ", pollen до: " .. before_pollen)
+
+		local checkStart = tick()
+		local dropped = false
+
+		while tick() - checkStart < eWait do
 			task.wait(1)
+
+			local now = farming.get_pollen_info()
+			if now then
+				if now.pollen <= 0 then
+					dropped = true
+					--print("[convert] E сработало, pollen = 0")
+					break
+				end
+				if now.pollen < before_pollen then
+					dropped = true
+					--print("[convert] E сработало, pollen упал до " .. now.pollen)
+					break
+				end
+			end
 		end
+
+		if dropped then
+			eSucceeded = true
+			break
+		end
+
+		--print("[convert] E не дало эффекта за " .. eWait .. " сек")
 	end
 
-	local startTime = tick()
-	local pollenZeroSince = nil
-	
-	--pressE()
-	--task.wait(2)
+	if not eSucceeded then
+		--warn("[convert] E не сработало за " .. maxEAttempts .. " попыток, перезапуск")
 
-	--local after = farming.get_pollen_info()
-	--if after and after.pollen > 0 then
-	--	print("pollen not dropped yet")
-	--end
+		if aconvert then aconvert:Disconnect() aconvert = nil end
+		mod.data.actives["converting"] = false
+		mod.data.actives["move"] = false
+
+		task.defer(function()
+			task.wait(2)
+			if mod.data.actives["auto_farm"] then
+				farming.farm()
+			end
+		end)
+		return
+	end
 
 	local startTime = tick()
 	local pollenZeroSince = nil
@@ -1499,7 +1535,7 @@ function farming.farm(...)
 						- Vector3.new(token.Position.X, 0, token.Position.Z)
 					).Magnitude
 
-					if dist > 1 then
+					if dist > 0.1 then
 						table.insert(queue["tokens"], token)
 
 						if dist < nearestDist then
@@ -1609,14 +1645,14 @@ function farming.farm(...)
 				)
 
 				local distance = direction.Magnitude
-				if targetIsToken and distance <= 5 then
+				if targetIsToken and not target.Parent then
 					target = nil
 					targetIsToken = false
 					continue
 				end
-
-				if not targetIsToken and distance <= 2 then
-					hum:Move(direction, false)
+				
+				if targetIsToken and distance <= 0.5 then
+					hum:Move(Vector3.zero, false)
 					break
 				end
 
