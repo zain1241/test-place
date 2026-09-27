@@ -10,33 +10,67 @@ if loaded
 	and loaded.farming
 	and loaded.menu
 then
-	-- load github loaded
 	data = loaded.data
 	farming = loaded.farming
 	menu = loaded.menu
 else
-	-- load roblox studio
 	data = require(script:WaitForChild("data"))
 	farming = require(script:WaitForChild("farming"))
 	menu = require(script:WaitForChild("menu"))
 end
 
-assert(
-	type(data) == "table"
-		and type(data.actives) == "table",
-	"client: data not loaded"
-)
+assert(type(data) == "table" and type(data.actives) == "table", "client: data not loaded")
+assert(type(farming) == "table", "client: farming not loaded")
+assert(type(menu) == "table" and type(menu.client_menu) == "function", "client: menu.client_menu not loaded")
 
-assert(
-	type(farming) == "table",
-	"client: farming not loaded"
-)
+local CONFIG_FILE = "Nectar_config.json"
 
-assert(
-	type(menu) == "table"
-		and type(menu.client_menu) == "function",
-	"client: menu.client_menu not loaded"
-)
+local function saveConfig()
+	if not writefile then return end
+
+	local saveData = {
+		actives = data.actives,
+	}
+
+	local ok, encoded = pcall(function()
+		return game:GetService("HttpService"):JSONEncode(saveData)
+	end)
+
+	if ok then
+		pcall(function()
+			writefile(CONFIG_FILE, encoded)
+		end)
+	end
+end
+
+local function loadConfig()
+	if not (isfile and readfile) then return end
+	if not isfile(CONFIG_FILE) then return end
+
+	local ok, content = pcall(function()
+		return readfile(CONFIG_FILE)
+	end)
+
+	if not ok or not content or content == "" then return end
+
+	local ok2, decoded = pcall(function()
+		return game:GetService("HttpService"):JSONDecode(content)
+	end)
+
+	if not ok2 or type(decoded) ~= "table" then return end
+
+	if type(decoded.actives) == "table" then
+		for key, value in pairs(decoded.actives) do
+			if key ~= "position_script" then
+				data.actives[key] = value
+			end
+		end
+	end
+end
+
+loadConfig()
+
+env.__NECTAR_SAVE = saveConfig
 
 local find = {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -53,12 +87,12 @@ local mod = {
 	data = data,
 	farming = farming,
 	menu = menu,
+	save = saveConfig,
 }
 
 local function characterAdded(character)
 	local humanoid = character:WaitForChild("Humanoid")
 	character:WaitForChild("HumanoidRootPart")
-
 	humanoid.WalkSpeed = mod.data.actives["walkspeed"]
 end
 
@@ -75,5 +109,13 @@ if find.player.Character then
 end
 
 find.player.CharacterAdded:Connect(characterAdded)
+
+if writefile then
+	task.spawn(function()
+		while task.wait(5) do
+			saveConfig()
+		end
+	end)
+end
 
 return mod
