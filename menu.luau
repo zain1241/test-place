@@ -1547,7 +1547,8 @@ function menu.dop_create()
 							key = "style_auto_farm",
 							list = mod.data.other,
 							allow_none = false,
-						}
+						},
+						{ type = "button", text = "Auto Hive", key = "autohive", callback = mod.farming.autoHive},
 					},
 				},
 			},
