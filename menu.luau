@@ -298,7 +298,7 @@ function menu.main_nav()
 
 	local b1l = Instance.new("UIListLayout")
 	b1l.SortOrder = Enum.SortOrder.LayoutOrder
-	b1l.Padding = UDim.new(0.08, 0)
+	b1l.Padding = UDim.new(0.04, 0)
 	b1l.Parent = b1
 	b1l.FillDirection = Enum.FillDirection.Horizontal
 	b1l.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -309,7 +309,7 @@ function menu.main_nav()
 	b1t.Parent = b1
 	b1t.BackgroundTransparency = 1
 	b1t.BorderSizePixel = 0
-	b1t.Size = UDim2.new(0.678, 0,0.37, 0)
+	b1t.Size = UDim2.new(0.468, 0,0.37, 0)
 	b1t.ZIndex = 1004
 	b1t.Font = Enum.Font.BuilderSansBold
 	b1t.Text = mod.data.actives["script_name"]
@@ -317,6 +317,16 @@ function menu.main_nav()
 	b1t.TextColor3 = Color3.fromRGB(255, 255, 255)
 	b1t.TextScaled = true
 	b1t.TextXAlignment = Enum.TextXAlignment.Right
+	
+	local f2i = Instance.new("ImageLabel")
+	f2i.BackgroundTransparency = 1
+	f2i.BorderSizePixel = 0
+	f2i.Size = UDim2.new(0.177, 0, 0.659, 0)
+	f2i.ScaleType = Enum.ScaleType.Fit
+	f2i.LayoutOrder = -1
+	f2i.ZIndex = 1004
+	f2i.Image = "rbxassetid://15505167958"
+	f2i.Parent = b1
 
 	local b1b = Instance.new("TextButton")
 	b1b.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1549,6 +1559,7 @@ function menu.dop_create()
 							allow_none = false,
 						},
 						{ type = "button", text = "Auto Hive", key = "autohive", callback = mod.farming.autoHive},
+						{ type = "button", text = "Anti AFK", key = "anti_afk" },
 					},
 				},
 			},
