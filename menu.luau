@@ -1524,14 +1524,14 @@ function menu.dop_create()
 						},
 					},
 				},
-				{
-					name = "Farm Settings",
-					opened = true,
-					items = {
-						{ type = "button", text = "Collect Bubbles", key = "collect_bubbles"},
-						{ type = "button", text = "Wealth Clock", key = "weatlh_clock"},
-					},
-				},
+				--{
+				--	name = "Farm Settings",
+				--	opened = true,
+				--	items = {
+				--		{ type = "button", text = "Collect Bubbles", key = "collect_bubbles"},
+				--		{ type = "button", text = "Wealth Clock", key = "weatlh_clock"},
+				--	},
+				--},
 			},
 		},
 		{
