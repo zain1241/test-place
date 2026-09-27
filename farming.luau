@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8433")
+print("loaded 0.0.86")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -376,42 +376,65 @@ function farming.move(...)
 				return currentTween
 			end
 		end
-	elseif a[1] == "hive" then -- ai 50/50
-		--mod.data.actives["move"] = true
-		--print(actives["move"])
-		
+	elseif a[1] == "hive" then
 		if mod.data.actives["autohive"] == false then
 			return
 		end
-		
+
 		local target = a[3]
-		print(target)
-		if typeof(target) ~= "Vector3" then return end
-		if tween then tween:Cancel() tween = nil end
-		if not workspace:FindFirstChild(find.player.Name) then return end
+
+		if typeof(target) ~= "Vector3" then
+			return
+		end
+
+		if not workspace:FindFirstChild(find.player.Name) then
+			return
+		end
+
+		if tween then
+			tween:Cancel()
+			tween = nil
+		end
+
+		if atween then
+			atween:Cancel()
+			atween = nil
+		end
 
 		local character = find.player.Character
-		if not character then return end
+		if not character then
+			return
+		end
 
 		local root = character:FindFirstChild("HumanoidRootPart")
-		if not root then return end
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+		if not root or not humanoid then
+			return
+		end
+		
+		humanoid:MoveTo(root.Position)
+		humanoid:Move(Vector3.zero, false)
+		
+		mod.data.actives["point"] = false
 		mod.data.actives["move"] = true
+		mod.data.actives["converting"] = false
+
 		local currentFarmId = farmId
 
-		local d1 = (root.Position - target).Magnitude
-			/ math.max(a[2], .001)
+		local d1 =
+			(root.Position - target).Magnitude
+			/ math.max(a[2], 0.001)
 
 		root.Anchored = true
 
-		local t = TweenInfo.new(
-			d1,
-			Enum.EasingStyle.Linear,
-			Enum.EasingDirection.Out
-		)
-
 		local currentTween = find.tweenservice:Create(
 			root,
-			t,
+			TweenInfo.new(
+				d1,
+				Enum.EasingStyle.Linear,
+				Enum.EasingDirection.Out
+			),
 			{
 				CFrame = CFrame.new(target)
 			}
@@ -421,87 +444,71 @@ function farming.move(...)
 
 		currentTween:Play()
 		farming.inv(true)
-		j(true)
-		
+
 		currentTween.Completed:Once(function(state)
-			if tween == currentTween then tween = nil end
-			if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
-				mod.data.actives["converting"] = false
+			if tween == currentTween then
+				tween = nil
+			end
+
+			if state == Enum.PlaybackState.Cancelled
+				or currentFarmId ~= farmId
+			then
+				root.Anchored = false
 				mod.data.actives["move"] = false
 				return
 			end
 
-			j(false)
 			farming.inv(false)
-			root.Anchored = false
-			task.wait(1)
 
-			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
+			root.Anchored = false
+
+			if currentFarmId ~= farmId
+				or mod.data.actives["auto_farm"] ~= true
+			then
+				mod.data.actives["move"] = false
+				return
+			end
+
+			local clicked = activateButton()
+
+			if not clicked then
 				mod.data.actives["move"] = false
 				mod.data.actives["converting"] = false
 				return
 			end
-			
-			local tries = 0
-			local maxTries = 4
-			local occupied = false
 
-			while tries < maxTries and not occupied do
+			local occupied = false
+			local checkStart = tick()
+
+			while tick() - checkStart < 5 do
+				if currentFarmId ~= farmId
+					or mod.data.actives["auto_farm"] ~= true
+				then
+					mod.data.actives["move"] = false
+					mod.data.actives["converting"] = false
+					return
+				end
+
 				if farming.getHive() then
 					occupied = true
 					break
 				end
 
-				tries += 1
-				pcall(activateButton)
-
-				local checkStart = tick()
-				while tick() - checkStart < 0.6 do
-					if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
-						mod.data.actives["move"] = false
-						mod.data.actives["converting"] = false
-						return
-					end
-
-					if farming.getHive() then
-						occupied = true
-						break
-					end
-
-					task.wait(0.15)
-				end
-
-				if occupied then
-					break
-				end
+				task.wait(0.2)
 			end
 
-			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
+			if not occupied then
 				mod.data.actives["move"] = false
 				mod.data.actives["converting"] = false
 				return
 			end
 
-			--if occupied then
-			--	farming.convert()
-			--else
-			--	mod.data.actives["move"] = false
-			--	mod.data.actives["converting"] = false
-			--	--warn("[hive] не удалось занять улей")
-			--end
-			
+			mod.data.actives["converting"] = true
+			mod.data.actives["move"] = true
+
 			farming.convert()
-
-			--mod.data.actives["move"] = false
-
-			--if occupied then
-			--	pcall(farming.farm)
-			--else
-			--	mod.data.actives["converting"] = false
-			--end
-			
-			--farming.convert()
 		end)
+
 		return currentTween
 	elseif a[1] == "convert" then
 		--mod.data.actives["move"] = true
@@ -579,7 +586,6 @@ local function pressE()
 		task.wait(0.05)
 		find.virtual:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 	end)
-	pcall(activateButton)
 end
 
 function farming.forceWalkSpeed(speed)
@@ -990,22 +996,73 @@ function farming.getHive(...)
 end
 
 function farming.autoHive(...)
+	if mod.data.actives["autohive"] == false then
+		return
+	end
+
 	local honeycombs = workspace:FindFirstChild("Honeycombs")
-	if not honeycombs then return end
-	if mod.data.actives.autohive == false then return end
+	if not honeycombs then
+		return
+	end
+
+	if afarm then
+		afarm:Disconnect()
+		afarm = nil
+	end
+
+	if tween then
+		tween:Cancel()
+		tween = nil
+	end
+
+	if atween then
+		atween:Cancel()
+		atween = nil
+	end
+
+	table.clear(queue["auto_farm"])
+	table.clear(queue["tokens"])
+	farmId += 1
+
+	local character = find.player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+
+	if humanoid and root then
+		humanoid:MoveTo(root.Position)
+		humanoid:Move(Vector3.zero, false)
+
+		root.Anchored = false
+	end
+
+	mod.data.actives["point"] = false
+	mod.data.actives["converting"] = false
+	mod.data.actives["move"] = true
+
+	farming.cornl(false)
+	farming.inv(false)
 
 	local activeNames = {}
+
 	for _, p in ipairs(find.players:GetPlayers()) do
 		activeNames[string.lower(p.Name)] = true
 	end
 
 	local myName = string.lower(find.player.Name)
+
 	local myHivePos = nil
 	local freeHivePos = nil
 
 	local EMPTY = {
-		[""] = true, [" "] = true, ["-"] = true, ["--"] = true, ["—"] = true,
-		["none"] = true, ["empty"] = true, ["free"] = true, ["n/a"] = true,
+		[""] = true,
+		[" "] = true,
+		["-"] = true,
+		["--"] = true,
+		["—"] = true,
+		["none"] = true,
+		["empty"] = true,
+		["free"] = true,
+		["n/a"] = true,
 	}
 
 	for _, hive in ipairs(honeycombs:GetChildren()) do
@@ -1015,29 +1072,48 @@ function farming.autoHive(...)
 		local name = frame and frame:FindFirstChild("OwnerName")
 
 		if name and name:IsA("TextLabel") then
-			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
+			local trimmed =
+				string.match(name.Text, "^%s*(.-)%s*$") or ""
+
 			local lower = string.lower(trimmed)
 
 			if lower == myName then
 				local spawnPos = hive:FindFirstChild("SpawnPos")
-				if spawnPos then
-					if spawnPos:IsA("BasePart") then myHivePos = spawnPos.Position
-					elseif spawnPos:IsA("CFrameValue") then myHivePos = spawnPos.Value.Position
-					elseif spawnPos:IsA("Attachment") then myHivePos = spawnPos.WorldPosition
-					elseif spawnPos:IsA("Vector3Value") then myHivePos = spawnPos.Value end
-				end
-				if myHivePos then break end
-			else
-				if not freeHivePos then
-					local isFree = EMPTY[lower] == true or not activeNames[lower]
 
-					if isFree then
-						local spawnPos = hive:FindFirstChild("SpawnPos")
-						if spawnPos then
-							if spawnPos:IsA("BasePart") then freeHivePos = spawnPos.Position
-							elseif spawnPos:IsA("CFrameValue") then freeHivePos = spawnPos.Value.Position
-							elseif spawnPos:IsA("Attachment") then freeHivePos = spawnPos.WorldPosition
-							elseif spawnPos:IsA("Vector3Value") then freeHivePos = spawnPos.Value end
+				if spawnPos then
+					if spawnPos:IsA("BasePart") then
+						myHivePos = spawnPos.Position
+					elseif spawnPos:IsA("CFrameValue") then
+						myHivePos = spawnPos.Value.Position
+					elseif spawnPos:IsA("Attachment") then
+						myHivePos = spawnPos.WorldPosition
+					elseif spawnPos:IsA("Vector3Value") then
+						myHivePos = spawnPos.Value
+					end
+				end
+
+				if myHivePos then
+					break
+				end
+			end
+
+			if not freeHivePos and lower ~= myName then
+				local isFree =
+					EMPTY[lower] == true
+					or not activeNames[lower]
+
+				if isFree then
+					local spawnPos = hive:FindFirstChild("SpawnPos")
+
+					if spawnPos then
+						if spawnPos:IsA("BasePart") then
+							freeHivePos = spawnPos.Position
+						elseif spawnPos:IsA("CFrameValue") then
+							freeHivePos = spawnPos.Value.Position
+						elseif spawnPos:IsA("Attachment") then
+							freeHivePos = spawnPos.WorldPosition
+						elseif spawnPos:IsA("Vector3Value") then
+							freeHivePos = spawnPos.Value
 						end
 					end
 				end
@@ -1047,15 +1123,16 @@ function farming.autoHive(...)
 
 	local targetPos = myHivePos or freeHivePos
 
-	if targetPos then
-		farming.move(
-			"hive",
-			mod.data.actives["move_speed"],
-			targetPos
-		)
-	else
-		--warn("[autoHive] не нашёл ни свой, ни свободный улей")
+	if not targetPos then
+		mod.data.actives["move"] = false
+		return
 	end
+
+	farming.move(
+		"hive",
+		mod.data.actives["move_speed"],
+		targetPos
+	)
 end
 
 local function stopTweenWalkAnimation()
@@ -1465,6 +1542,13 @@ function farming.farm(...)
 
 		mod.data.actives["point"] = true
 
+		local currentTarget = nil
+		local targetIsToken = false
+		local visited = {}
+		local walkConn = nil
+		local fallbackPosition = nil
+		local speed = mod.data.actives["move_speed"] or 80
+
 		local function isTokenInField(token, field)
 			if not token or not token.Parent or not field then
 				return false
@@ -1480,12 +1564,9 @@ function farming.farm(...)
 		end
 
 		local function getNearestToken(root, field)
-			if not root or not field then
-				return nil
-			end
-
 			local collectibles = workspace:FindFirstChild("Collectibles")
-			if not collectibles then
+
+			if not collectibles or not field then
 				return nil
 			end
 
@@ -1495,12 +1576,13 @@ function farming.farm(...)
 			for _, token in ipairs(collectibles:GetChildren()) do
 				if token:IsA("BasePart")
 					and token.Parent
+					and not visited[token]
 					and isTokenInField(token, field)
 				then
-					local dist = (
-						Vector3.new(root.Position.X, 0, root.Position.Z)
-						- Vector3.new(token.Position.X, 0, token.Position.Z)
-					).Magnitude
+					local dx = root.Position.X - token.Position.X
+					local dz = root.Position.Z - token.Position.Z
+
+					local dist = math.sqrt(dx * dx + dz * dz)
 
 					if dist < nearestDist then
 						nearestDist = dist
@@ -1512,89 +1594,205 @@ function farming.farm(...)
 			return nearest
 		end
 
-		while id == farmId
-			and mod.data.actives["auto_farm"] == true
-			and #queue["auto_farm"] > 0
-			and not mod.data.actives["converting"]
-		do
-			local a = table.remove(queue["auto_farm"], 1)
+		local function getField()
+			local zones = workspace:FindFirstChild("FlowerZones")
 
-			local flowerZones = workspace:FindFirstChild("FlowerZones")
-			local field = nil
-
-			if mod.data.actives["selected_field"] ~= false and flowerZones then
-				field = flowerZones:FindFirstChild(
-					mod.data.actives["selected_field"]
-				)
+			if not zones then
+				return nil
 			end
 
-			local speed = (a and a.Speed) or mod.data.actives["move_speed"] or 80
-			if type(speed) ~= "number" or speed <= 0 then
-				speed = 80
+			local selected = mod.data.actives["selected_field"]
+
+			if not selected or selected == false then
+				return nil
 			end
 
-			local targetPosition = a and a.TargetPosition or nil
+			return zones:FindFirstChild(selected)
+		end
+		
+		local a = table.remove(queue["auto_farm"], 1)
 
-			while id == farmId
-				and mod.data.actives["auto_farm"] == true
-				and not mod.data.actives["converting"]
-			do
+		if a then
+			fallbackPosition = a.TargetPosition
+			speed = a.Speed or speed
+		end
+
+		walkConn = farming.conAF(
+			find.prerender,
+			4,
+			function(delta)
+				if id ~= farmId
+					or mod.data.actives["auto_farm"] ~= true
+					or mod.data.actives["converting"]
+				then
+					if walkConn then
+						walkConn:Disconnect()
+						walkConn = nil
+					end
+
+					local char = find.player.Character
+					local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+					if hum then
+						hum:Move(Vector3.zero, false)
+					end
+
+					mod.data.actives["point"] = false
+					return
+				end
+
 				local char = find.player.Character
 				local hum = char and char:FindFirstChildOfClass("Humanoid")
 				local root = char and char:FindFirstChild("HumanoidRootPart")
 
 				if not char or not hum or not root then
-					break
+					return
 				end
 
 				if root.Anchored then
-					hum:Move(Vector3.zero, false)
-					task.wait(0.1)
-					continue
+					return
 				end
 
-				local token = getNearestToken(root, field)
+				local field = getField()
 
-				local target
-				if token then
-					target = token.Position
-				elseif targetPosition then
-					target = targetPosition
-				else
-					hum:Move(Vector3.zero, false)
-					break
-				end
-
-				local direction = Vector3.new(
-					target.X - root.Position.X,
-					0,
-					target.Z - root.Position.Z
-				)
-
-				if direction.Magnitude <= 1 then
-					hum:Move(Vector3.zero, false)
-					break
-				end
-
-				if not token and direction.Magnitude <= 2 then
-					hum:Move(Vector3.zero, false)
-					break
+				if not field then
+					return
 				end
 
 				hum.WalkSpeed = speed
-				hum:MoveTo(Vector3.new(
-					target.X,
-					root.Position.Y,
-					target.Z
-					))
 
-				task.wait(0.05)
+				if targetIsToken then
+					if not currentTarget or not currentTarget.Parent then
+						if currentTarget then
+							visited[currentTarget] = true
+						end
+
+						currentTarget = nil
+						targetIsToken = false
+					end
+				end
+
+				if not currentTarget then
+					currentTarget = getNearestToken(root, field)
+
+					if currentTarget then
+						targetIsToken = true
+					else
+						-- Все старые токены обработаны -> начинаем заново
+						table.clear(visited)
+
+						currentTarget = getNearestToken(root, field)
+
+						if currentTarget then
+							targetIsToken = true
+						elseif fallbackPosition then
+							currentTarget = {
+								Position = fallbackPosition
+							}
+
+							targetIsToken = false
+						else
+							return
+						end
+					end
+				end
+
+				if not currentTarget then
+					return
+				end
+
+				local targetPosition
+
+				if targetIsToken then
+					if not currentTarget.Parent then
+						visited[currentTarget] = true
+						currentTarget = nil
+						targetIsToken = false
+						return
+					end
+
+					targetPosition = currentTarget.Position
+				else
+					targetPosition = currentTarget.Position
+				end
+
+				local direction = Vector3.new(
+					targetPosition.X - root.Position.X,
+					0,
+					targetPosition.Z - root.Position.Z
+				)
+
+				local distance = direction.Magnitude
+
+				if targetIsToken and distance <= 2.5 then
+					visited[currentTarget] = true
+
+					currentTarget = getNearestToken(
+						root,
+						field
+					)
+
+					if currentTarget then
+						targetIsToken = true
+
+						-- уже в этом же callback
+						local nextDirection = Vector3.new(
+							currentTarget.Position.X - root.Position.X,
+							0,
+							currentTarget.Position.Z - root.Position.Z
+						)
+
+						if nextDirection.Magnitude > 0.001 then
+							hum:Move(
+								nextDirection.Unit,
+								false
+							)
+						end
+					else
+						table.clear(visited)
+
+						currentTarget = getNearestToken(
+							root,
+							field
+						)
+
+						if currentTarget then
+							targetIsToken = true
+
+							local nextDirection = Vector3.new(
+								currentTarget.Position.X - root.Position.X,
+								0,
+								currentTarget.Position.Z - root.Position.Z
+							)
+
+							if nextDirection.Magnitude > 0.001 then
+								hum:Move(
+									nextDirection.Unit,
+									false
+								)
+							end
+						else
+							currentTarget = nil
+							targetIsToken = false
+						end
+					end
+
+					return
+				end
+
+				if not targetIsToken and distance <= 2 then
+					currentTarget = nil
+					return
+				end
+
+				if direction.Magnitude > 0.001 then
+					hum:Move(
+						direction.Unit,
+						false
+					)
+				end
 			end
-
-			task.wait()
-		end
-
-		mod.data.actives["point"] = false
+		)
 	end
 	
 	--local function q1(...)
