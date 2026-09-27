@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8432")
+print("loaded 0.0.8433")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -443,7 +443,7 @@ function farming.move(...)
 			end
 			
 			local tries = 0
-			local maxTries = 8
+			local maxTries = 4
 			local occupied = false
 
 			while tries < maxTries and not occupied do
@@ -456,7 +456,7 @@ function farming.move(...)
 				pcall(activateButton)
 
 				local checkStart = tick()
-				while tick() - checkStart < 1.2 do
+				while tick() - checkStart < 0.6 do
 					if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
 						mod.data.actives["move"] = false
 						mod.data.actives["converting"] = false
@@ -579,6 +579,7 @@ local function pressE()
 		task.wait(0.05)
 		find.virtual:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 	end)
+	pcall(activateButton)
 end
 
 function farming.forceWalkSpeed(speed)
@@ -1569,6 +1570,11 @@ function farming.farm(...)
 					0,
 					target.Z - root.Position.Z
 				)
+
+				if direction.Magnitude <= 1 then
+					hum:Move(Vector3.zero, false)
+					break
+				end
 
 				if not token and direction.Magnitude <= 2 then
 					hum:Move(Vector3.zero, false)
