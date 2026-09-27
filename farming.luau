@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.86")
+print("loaded 0.0.87")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1037,7 +1037,7 @@ function farming.autoHive(...)
 
 	mod.data.actives["point"] = false
 	mod.data.actives["converting"] = false
-	mod.data.actives["move"] = true
+	-- mod.data.actives["move"] = true   <-- УБРАНО: иначе farming.move("hive", ...) отсекается guard'ом
 
 	farming.cornl(false)
 	farming.inv(false)
@@ -1542,18 +1542,7 @@ function farming.farm(...)
 
 		mod.data.actives["point"] = true
 
-		local currentTarget = nil
-		local targetIsToken = false
-		local visited = {}
-		local walkConn = nil
-		local fallbackPosition = nil
-		local speed = mod.data.actives["move_speed"] or 80
-
 		local function isTokenInField(token, field)
-			if not token or not token.Parent or not field then
-				return false
-			end
-
 			local p = field.CFrame:PointToObjectSpace(token.Position)
 			local s = field.Size / 2
 
@@ -1563,236 +1552,122 @@ function farming.farm(...)
 				and p.Y <= 15
 		end
 
-		local function getNearestToken(root, field)
-			local collectibles = workspace:FindFirstChild("Collectibles")
+		local function walkTo(targetPos, speed)
+			local char = find.player.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			local root = char and char:FindFirstChild("HumanoidRootPart")
 
-			if not collectibles or not field then
-				return nil
+			if not hum or not root or root.Anchored then
+				return
 			end
 
-			local nearest = nil
-			local nearestDist = math.huge
+			hum.WalkSpeed = speed
 
-			for _, token in ipairs(collectibles:GetChildren()) do
-				if token:IsA("BasePart")
-					and token.Parent
-					and not visited[token]
-					and isTokenInField(token, field)
-				then
-					local dx = root.Position.X - token.Position.X
-					local dz = root.Position.Z - token.Position.Z
+			local startTime = tick()
 
-					local dist = math.sqrt(dx * dx + dz * dz)
-
-					if dist < nearestDist then
-						nearestDist = dist
-						nearest = token
-					end
-				end
-			end
-
-			return nearest
-		end
-
-		local function getField()
-			local zones = workspace:FindFirstChild("FlowerZones")
-
-			if not zones then
-				return nil
-			end
-
-			local selected = mod.data.actives["selected_field"]
-
-			if not selected or selected == false then
-				return nil
-			end
-
-			return zones:FindFirstChild(selected)
-		end
-		
-		local a = table.remove(queue["auto_farm"], 1)
-
-		if a then
-			fallbackPosition = a.TargetPosition
-			speed = a.Speed or speed
-		end
-
-		walkConn = farming.conAF(
-			find.prerender,
-			4,
-			function(delta)
+			while tick() - startTime < 15 do
 				if id ~= farmId
 					or mod.data.actives["auto_farm"] ~= true
 					or mod.data.actives["converting"]
 				then
-					if walkConn then
-						walkConn:Disconnect()
-						walkConn = nil
-					end
-
-					local char = find.player.Character
-					local hum = char and char:FindFirstChildOfClass("Humanoid")
-
-					if hum then
-						hum:Move(Vector3.zero, false)
-					end
-
-					mod.data.actives["point"] = false
+					local c2 = find.player.Character
+					local h2 = c2 and c2:FindFirstChildOfClass("Humanoid")
+					if h2 then h2:Move(Vector3.zero, false) end
 					return
 				end
 
-				local char = find.player.Character
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				local root = char and char:FindFirstChild("HumanoidRootPart")
+				char = find.player.Character
+				hum = char and char:FindFirstChildOfClass("Humanoid")
+				root = char and char:FindFirstChild("HumanoidRootPart")
 
-				if not char or not hum or not root then
+				if not hum or not root or root.Anchored then
 					return
-				end
-
-				if root.Anchored then
-					return
-				end
-
-				local field = getField()
-
-				if not field then
-					return
-				end
-
-				hum.WalkSpeed = speed
-
-				if targetIsToken then
-					if not currentTarget or not currentTarget.Parent then
-						if currentTarget then
-							visited[currentTarget] = true
-						end
-
-						currentTarget = nil
-						targetIsToken = false
-					end
-				end
-
-				if not currentTarget then
-					currentTarget = getNearestToken(root, field)
-
-					if currentTarget then
-						targetIsToken = true
-					else
-						-- Все старые токены обработаны -> начинаем заново
-						table.clear(visited)
-
-						currentTarget = getNearestToken(root, field)
-
-						if currentTarget then
-							targetIsToken = true
-						elseif fallbackPosition then
-							currentTarget = {
-								Position = fallbackPosition
-							}
-
-							targetIsToken = false
-						else
-							return
-						end
-					end
-				end
-
-				if not currentTarget then
-					return
-				end
-
-				local targetPosition
-
-				if targetIsToken then
-					if not currentTarget.Parent then
-						visited[currentTarget] = true
-						currentTarget = nil
-						targetIsToken = false
-						return
-					end
-
-					targetPosition = currentTarget.Position
-				else
-					targetPosition = currentTarget.Position
 				end
 
 				local direction = Vector3.new(
-					targetPosition.X - root.Position.X,
+					targetPos.X - root.Position.X,
 					0,
-					targetPosition.Z - root.Position.Z
+					targetPos.Z - root.Position.Z
 				)
 
 				local distance = direction.Magnitude
 
-				if targetIsToken and distance <= 2.5 then
-					visited[currentTarget] = true
+				if distance <= 2.5 then
+					hum:Move(Vector3.zero, false)
+					return
+				end
 
-					currentTarget = getNearestToken(
-						root,
-						field
-					)
+				if distance > 0.001 then
+					hum:Move(direction.Unit, false)
+				end
 
-					if currentTarget then
-						targetIsToken = true
+				task.wait()
+			end
 
-						-- уже в этом же callback
-						local nextDirection = Vector3.new(
-							currentTarget.Position.X - root.Position.X,
-							0,
-							currentTarget.Position.Z - root.Position.Z
-						)
+			local c3 = find.player.Character
+			local h3 = c3 and c3:FindFirstChildOfClass("Humanoid")
+			if h3 then h3:Move(Vector3.zero, false) end
+		end
 
-						if nextDirection.Magnitude > 0.001 then
-							hum:Move(
-								nextDirection.Unit,
-								false
-							)
-						end
-					else
-						table.clear(visited)
+		while id == farmId
+			and mod.data.actives["auto_farm"] == true
+			and #queue["auto_farm"] > 0
+			and not mod.data.actives["converting"]
+		do
+			local a = table.remove(queue["auto_farm"], 1)
+			local c = workspace:FindFirstChild("Collectibles")
+			local f = workspace:FindFirstChild("FlowerZones")
+			local field
 
-						currentTarget = getNearestToken(
-							root,
-							field
-						)
+			if mod.data.actives["selected_field"] == false then
+				field = nil
+			else
+				field = f and f:FindFirstChild(mod.data.actives["selected_field"])
+			end
 
-						if currentTarget then
-							targetIsToken = true
+			table.clear(queue["tokens"])
 
-							local nextDirection = Vector3.new(
-								currentTarget.Position.X - root.Position.X,
-								0,
-								currentTarget.Position.Z - root.Position.Z
-							)
+			if c and field then
+				local root = find.player.Character
+					and find.player.Character:FindFirstChild("HumanoidRootPart")
 
-							if nextDirection.Magnitude > 0.001 then
-								hum:Move(
-									nextDirection.Unit,
-									false
-								)
-							end
-						else
-							currentTarget = nil
-							targetIsToken = false
+				if root then
+					for _, v in ipairs(c:GetChildren()) do
+						if v:IsA("BasePart")
+							and isTokenInField(v, field)
+							and (root.Position - v.Position).Magnitude > 4
+						then
+							table.insert(queue["tokens"], v)
 						end
 					end
-
-					return
-				end
-
-				if not targetIsToken and distance <= 2 then
-					currentTarget = nil
-					return
-				end
-
-				if direction.Magnitude > 0.001 then
-					hum:Move(
-						direction.Unit,
-						false
-					)
 				end
 			end
-		)
+
+			if #queue["tokens"] > 0 then
+				while id == farmId
+					and mod.data.actives["auto_farm"] == true
+					and #queue["tokens"] > 0
+				do
+					table.sort(queue["tokens"], function(a, b)
+						return (find.player.Character:FindFirstChild("HumanoidRootPart").Position - a.Position).Magnitude
+							< (find.player.Character:FindFirstChild("HumanoidRootPart").Position - b.Position).Magnitude
+					end)
+
+					local v = table.remove(queue["tokens"], 1)
+					if v and v.Parent and a.Speed then
+						walkTo(v.Position, a.Speed)
+					end
+				end
+			else
+				if a.TargetPosition and a.Speed then
+					walkTo(a.TargetPosition, a.Speed)
+				end
+			end
+
+			task.wait()
+		end
+
+		mod.data.actives["point"] = false
 	end
 	
 	--local function q1(...)
