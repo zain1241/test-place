@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8416")
+print("loaded 0.0.8417")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -91,24 +91,49 @@ local function activateButton(...)
 		warn("ActivateButton not found")
 		return false
 	end
+	
+	local waitStart = tick()
+	while tick() - waitStart < 2 do
+		if button.Visible and button.AbsoluteSize.X > 0 then
+			break
+		end
+		task.wait(0.05)
+	end
 
 	local inset = find.guiservice:GetGuiInset()
 	local pos = button.AbsolutePosition
 	local size = button.AbsoluteSize
+	if size.X <= 0 or size.Y <= 0 then
+		warn("ActivateButton has no size")
+		return false
+	end
+
 	local clickX = pos.X + (size.X / 2)
 	local clickY = pos.Y + (size.Y / 2) + inset.Y
+	local vec = Vector2.new(clickX, clickY)
+
+	local VirtualUser = game:GetService("VirtualUser")
+	local VIM = find.virtual
 	
 	pcall(function()
-		game:GetService("VirtualUser"):ClickButton1(Vector2.new(clickX, clickY))
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton1(vec)
 	end)
-	task.wait(0.08)
+	task.wait(1)
 	
 	pcall(function()
-		find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, button, 1)
+		VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
 		task.wait(0.05)
-		find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, button, 1)
+		VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
 	end)
-	task.wait(0.08)
+	task.wait(1)
+	
+	pcall(function()
+		VIM:SendMouseButtonEvent(clickX, clickY, 0, true, button, 1)
+		task.wait(0.05)
+		VIM:SendMouseButtonEvent(clickX, clickY, 0, false, button, 1)
+	end)
+	task.wait(1)
 	
 	pcall(function()
 		if button.Activated then button.Activated:Fire() end
@@ -119,6 +144,12 @@ local function activateButton(...)
 	pcall(function()
 		if button.MouseButton1Down then button.MouseButton1Down:Fire() end
 		if button.MouseButton1Up then button.MouseButton1Up:Fire() end
+	end)
+	pcall(function()
+		if button.MouseEnter then button.MouseEnter:Fire() end
+		if button.InputBegan then
+			--
+		end
 	end)
 
 	print("activateButton: fired all methods")
