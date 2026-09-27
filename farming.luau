@@ -499,14 +499,20 @@ function farming.move(...)
 					break
 				end
 			end
-
-			mod.data.actives["move"] = false
-
-			if occupied then
-				pcall(farming.farm)
-			else
+			
+			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
+				mod.data.actives["move"] = false
 				mod.data.actives["converting"] = false
+				return
 			end
+
+			--mod.data.actives["move"] = false
+
+			--if occupied then
+			--	pcall(farming.farm)
+			--else
+			--	mod.data.actives["converting"] = false
+			--end
 			
 			farming.convert()
 		end)
