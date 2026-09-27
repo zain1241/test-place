@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.66")
+print("loaded 0.0.67")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -410,9 +410,9 @@ function farming.move(...)
 					end
 
 					root.Anchored = false
+					mod.data.actives["move"] = false
 					farming.autosprinkler()
 					task.wait(.4)
-					mod.data.actives["move"] = false
 				end)
 
 				return currentTween
@@ -490,7 +490,7 @@ function farming.move(...)
 
 			while tries < maxTries and not occupied do
 				tries += 1
-				print("[hive] попытка занять улей:", tries)
+				--print("[hive] попытка занять улей:", tries)
 
 				local ok, res = pcall(activateButton)
 				if not ok or res ~= true then
@@ -501,7 +501,7 @@ function farming.move(...)
 
 				if farming.getHive() then
 					occupied = true
-					print("[hive] улей занят")
+					--print("[hive] улей занят")
 					break
 				end
 			end
@@ -511,7 +511,7 @@ function farming.move(...)
 			if occupied then
 				pcall(farming.farm)
 			else
-				warn("[hive] не удалось занять улей за " .. maxTries .. " попыток")
+				--warn("[hive] не удалось занять улей за " .. maxTries .. " попыток")
 				mod.data.actives["converting"] = false
 			end
 		end)
@@ -599,13 +599,18 @@ function farming.convert(...)
 		mod.data.actives["move"] = false
 		return
 	end
+	
+	if mod.data.actives["honey_mask"] == true then
+		farming.honey_mask()
+	end
+	
 	task.wait(1)
-
 	local startTime = tick()
 	
 	aconvert = farming.conAF(find.prerender, 4, function(delta)
 		local info = farming.get_pollen_info()
-		if tick() - startTime > 300 then
+
+		if tick() - startTime > 600 then
 			if aconvert then aconvert:Disconnect() aconvert = nil end
 			mod.data.actives["converting"] = false
 			mod.data.actives["move"] = false
@@ -618,11 +623,57 @@ function farming.convert(...)
 		print("completed autoconvert")
 		if aconvert then aconvert:Disconnect() aconvert = nil end
 
+		if mod.data.actives["balloon"] == true then
+			local hivePos = farming.getHive()
+			if hivePos then
+				local function findHiveBalloon()
+					for _, obj in ipairs(workspace:GetDescendants()) do
+						if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
+							if (obj.Position - hivePos).Magnitude <= 25 then
+								return obj
+							end
+						end
+					end
+					return nil
+				end
+
+				local balloon = findHiveBalloon()
+
+				if balloon then
+					local balloonStart = tick()
+					local balloonTimeout = 600
+					while tick() - balloonStart < balloonTimeout do
+						if not balloon.Parent then
+							print("balloon is converted")
+							break
+						end
+
+						local current = findHiveBalloon()
+						if not current then
+							break
+						end
+
+						balloon = current
+						task.wait(1)
+					end
+				else
+					print("balloon is not")
+				end
+			else
+				warn("not hive")
+			end
+		end
+		
+		local target_mask = mod.data.actives["mask"]
+		if target_mask and target_mask ~= "None" then
+			farming.equip_mask(target_mask)
+		end
+
 		mod.data.actives["converting"] = false
 		mod.data.actives["move"] = false
 
 		task.defer(function()
-			task.wait(1)
+			task.wait(2)
 			farming.farm()
 		end)
 	end)
@@ -664,7 +715,7 @@ function farming.get_pollen_from_gui() -- ai
 end
 
 function farming.autosprinkler()
-	if mod.data.actives["auto_sprinkler"] == "" or nil then return end
+	if mod.data.actives["auto_sprinkler"] ~= true then return end
 	if mod.data.actives["move"] == true then return end
 
 	local character = find.player.Character
@@ -696,16 +747,67 @@ local function getStats()
 	return nil
 end
 
-function farming.honey_mask()
+--function farming.honey_mask()
+--	local stats = getStats()
+--	if not stats then return false end
+
+--	local mask = stats.Accessories
+--	if type(mask) ~= "string" then return false end
+--	if mask == "Honey Mask" then return true end
+	
+--	local Events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
+--	if not Events then return false end
+
+--	local ItemPackageEvent = Events:FindFirstChild("ItemPackageEvent")
+--	if not ItemPackageEvent then return false end
+
+--	ItemPackageEvent:InvokeServer("Equip", {
+--		Mute = false,
+--		Type = "Honey Mask",
+--		Category = "Accessory"
+--	})
+
+--	--print("honey mask equipped")
+--	return true
+--end
+
+function farming.equip_mask(name)
+	if type(name) ~= "string" or name == "" or name == "None" then
+		return false
+	end
+
 	local stats = getStats()
 	if not stats then return false end
 
-	local mask = stats.Accessories
-	if not mask then return end
-	if type(mask) ~= "string" then return false end
-	if mask == "Honey Mask" then
-		
+	local current = stats.Accessories
+	if type(current) ~= "string" then return false end
+	if current == name then
+		return true  -- уже надета
 	end
+
+	local Events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
+	if not Events then return false end
+
+	local ItemPackageEvent = Events:FindFirstChild("ItemPackageEvent")
+	if not ItemPackageEvent then return false end
+
+	local ok = pcall(function()
+		ItemPackageEvent:InvokeServer("Equip", {
+			Mute = false,
+			Type = name,
+			Category = "Accessory"
+		})
+	end)
+
+	if ok then
+		-- print("equipped:", name)
+	end
+	return ok
+end
+
+-- обратная совместимость
+function farming.honey_mask()
+	return farming.equip_mask("Honey Mask")
 end
 
 function farming.get_pollen_info() -- ai
@@ -876,104 +978,49 @@ function farming.autoHive(...)
 	end
 end
 
-function farming.wait_for_balloon(hivePos, timeout) -- ai
-	timeout = timeout or 300
+--function farming.wait_for_balloon(hivePos, timeout) -- ai
+--	timeout = timeout or 300
 
-	if not hivePos then
-		return true
-	end
+--	if not hivePos then
+--		return true
+--	end
 
-	local function findHiveBalloon()
-		for _, obj in ipairs(workspace:GetDescendants()) do
-			if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
-				if (obj.Position - hivePos).Magnitude <= 25 then
-					return obj
-				end
-			end
-		end
+--	local function findHiveBalloon()
+--		for _, obj in ipairs(workspace:GetDescendants()) do
+--			if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
+--				if (obj.Position - hivePos).Magnitude <= 25 then
+--					return obj
+--				end
+--			end
+--		end
 
-		return nil
-	end
-	local balloon = findHiveBalloon()
+--		return nil
+--	end
+--	local balloon = findHiveBalloon()
 
-	if not balloon then
-		task.wait(1)
-		return true
-	end
+--	if not balloon then
+--		task.wait(1)
+--		return true
+--	end
 	
-	local startTime = tick()
-	while tick() - startTime < timeout do
-		if not balloon.Parent then
-			task.wait(2)
-			return true
-		end
+--	local startTime = tick()
+--	while tick() - startTime < timeout do
+--		if not balloon.Parent then
+--			task.wait(2)
+--			return true
+--		end
 		
-		local currentBalloon = findHiveBalloon()
-		if not currentBalloon then
-			task.wait(1)
-			return true
-		end
+--		local currentBalloon = findHiveBalloon()
+--		if not currentBalloon then
+--			task.wait(1)
+--			return true
+--		end
 
-		balloon = currentBalloon
-		task.wait(1)
-	end
-	return false
-end
-
-
-function farming.press_e_until_convert(hivePos, maxAttempts)
-	maxAttempts = maxAttempts or 3
-
-	local VirtualInputManager = game:GetService("VirtualInputManager")
-
-	if not VirtualInputManager then
-		warn("[AutoConvert] VirtualInputManager недоступен")
-		return false
-	end
-
-	local initialInfo = farming.get_pollen_info()
-	local initialPollen = initialInfo and initialInfo.pollen or 0
-
-	for attempt = 1, maxAttempts do
-		print("[AutoConvert] Попытка " .. attempt .. ": жмём E")
-
-		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-		task.wait(0.08)
-		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-
-		local checkStart = tick()
-
-		while tick() - checkStart < 6 do
-			task.wait(0.5)
-
-			local now = farming.get_pollen_info()
-
-			if now then
-				local dropped = false
-
-				if initialPollen > 0 and now.pollen < initialPollen * 0.9 then
-					dropped = true
-				end
-
-				if now.percent <= 3 then
-					dropped = true
-				end
-
-				if dropped then
-					print("[AutoConvert] Конвертация началась")
-					return true
-				end
-			end
-		end
-
-		print("[AutoConvert] E не запустил конвертацию")
-	end
-
-	-- Даже если E не дал мгновенного результата,
-	-- игрок уже стоит на улье и сервер может начать разгрузку сам.
-	print("[AutoConvert] E не дал ответа — ждём автоматическую разгрузку")
-	return false
-end
+--		balloon = currentBalloon
+--		task.wait(1)
+--	end
+--	return false
+--end
 
 --function farming.press_e_until_hive(maxAttempts)
 --	maxAttempts = maxAttempts or 5
