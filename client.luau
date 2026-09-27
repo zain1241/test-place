@@ -9,14 +9,17 @@ if loaded
 	and loaded.data
 	and loaded.farming
 	and loaded.menu
+	and loaded.config
 then
 	data = loaded.data
 	farming = loaded.farming
 	menu = loaded.menu
+	config = loaded.config
 else
 	data = require(script:WaitForChild("data"))
 	farming = require(script:WaitForChild("farming"))
 	menu = require(script:WaitForChild("menu"))
+	config = require(script:WaitForChild("config"))
 end
 
 assert(type(data) == "table" and type(data.actives) == "table", "client: data not loaded")
@@ -87,6 +90,7 @@ local mod = {
 	data = data,
 	farming = farming,
 	menu = menu,
+	config = config,
 	save = saveConfig,
 }
 
@@ -110,9 +114,70 @@ end
 
 find.player.CharacterAdded:Connect(characterAdded)
 
+local function startAntiAFK()
+	local env_ref = env
+
+	if env_ref.__NECTAR_ANTI_AFK_CONN then
+		pcall(function() env_ref.__NECTAR_ANTI_AFK_CONN:Disconnect() end)
+		env_ref.__NECTAR_ANTI_AFK_CONN = nil
+	end
+
+	local VU = game:GetService("VirtualUser")
+	local player = find.player
+	
+	env_ref.__NECTAR_ANTI_AFK_CONN = player.Idled:Connect(function()
+		if mod.data.actives["anti_afk"] ~= true then return end
+		
+		pcall(function()
+			VU:CaptureController()
+			VU:ClickButton2(Vector2.new())
+		end)
+		task.wait(0.1)
+		pcall(function()
+			VU:SendMouseMoveEvent(math.random(-5, 5), math.random(-5, 5), true, game)
+		end)
+		task.wait(0.1)
+		pcall(function()
+			VU:SendKeyEvent(true, Enum.KeyCode.LeftShift, false, game)
+			task.wait(0.05)
+			VU:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
+		end)
+	end)
+	
+	task.spawn(function()
+		if env_ref.__NECTAR_ANTI_AFK_WORKER then return end
+		env_ref.__NECTAR_ANTI_AFK_WORKER = true
+
+		while player.Parent do
+			task.wait(45)
+
+			if mod.data.actives["anti_afk"] == true then
+				pcall(function()
+					local dx = math.random(-3, 3)
+					local dy = math.random(-3, 3)
+					VU:SendMouseMoveEvent(dx, dy, true, game)
+					task.wait(0.05)
+					VU:SendMouseMoveEvent(-dx, -dy, true, game)
+					task.wait(0.05)
+					
+					local keys = {Enum.KeyCode.LeftShift, Enum.KeyCode.LeftControl, Enum.KeyCode.Tab}
+					local key = keys[math.random(#keys)]
+					VU:SendKeyEvent(true, key, false, game)
+					task.wait(0.05)
+					VU:SendKeyEvent(false, key, false, game)
+				end)
+			end
+		end
+
+		env_ref.__NECTAR_ANTI_AFK_WORKER = false
+	end)
+end
+
+startAntiAFK()
+
 if writefile then
 	task.spawn(function()
-		while task.wait(5) do
+		while task.wait(10) do
 			saveConfig()
 		end
 	end)
