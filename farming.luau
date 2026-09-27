@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.942")
+print("loaded 0.0.943")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -633,84 +633,32 @@ function farming.convert(...)
 	end
 
 	local eSucceeded = false
-	local initial = farming.get_pollen_info()
-	local initial_pollen = initial and initial.pollen
+	task.wait(1.5)
+	
+	for attempt = 1, 10 do
+		local before = farming.get_pollen_info()
+		local before_pollen = before and before.pollen or 0
 
-	task.wait(3)
+		activateButton()
 
-	local after = farming.get_pollen_info()
-	local after_pollen = after and after.pollen
+		local checkStart = tick()
+		while tick() - checkStart < 10 do
+			task.wait(1)
 
-	if initial_pollen
-		and after_pollen
-		and initial_pollen > 0
-		and after_pollen < initial_pollen - 50
-	then
-		eSucceeded = true
-	end
-
-	if not eSucceeded then
-		local maxEAttempts = 8
-		local eWait = 5
-		
-		task.wait(1.5)
-
-		for attempt = 1, maxEAttempts do
-			local before = farming.get_pollen_info()
-			local before_pollen = before and before.pollen or 0
-
-			-- ждём появления СВЕЖЕЙ кнопки
-			local btn = nil
-			local btnStart = tick()
-			while tick() - btnStart < 2 do
-				btn = findActivateButton()
-				if btn and btn.Visible and btn.AbsoluteSize.X > 0 then
+			local now = farming.get_pollen_info()
+			if now then
+				if now.pollen <= 0 then
+					eSucceeded = true
 					break
 				end
-				btn = nil
-				task.wait(0.1)
-			end
-			
-			activateButton()
-			task.wait(0.4)
-			
-			local now1 = farming.get_pollen_info()
-			if now1 and before_pollen > 0
-				and (now1.pollen <= 0 or now1.pollen < before_pollen - 50)
-			then
-				eSucceeded = true
-				break
-			end
-			
-			btn = findActivateButton()
-			if btn and btn.Visible and btn.AbsoluteSize.X > 0 then
-				activateButton()
-			end
-
-			local checkStart = tick()
-			local dropped = false
-
-			while tick() - checkStart < eWait do
-				task.wait(1)
-
-				local now = farming.get_pollen_info()
-				if now then
-					if now.pollen <= 0 then
-						dropped = true
-						break
-					end
-					if before_pollen > 0 and now.pollen < before_pollen - 50 then
-						dropped = true
-						break
-					end
+				if before_pollen > 0 and now.pollen < before_pollen - 50 then
+					eSucceeded = true
+					break
 				end
 			end
-
-			if dropped then
-				eSucceeded = true
-				break
-			end
 		end
+
+		if eSucceeded then break end
 	end
 
 	if not eSucceeded then
