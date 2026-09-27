@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.4")
+print("loaded 0.0.5")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -25,6 +25,8 @@ local find= {
 	players = game:GetService("Players"),
 	httpservice = game:GetService("HttpService"),
 	contextactionservice = game:GetService("ContextActionService"),
+	virtual = game:GetService("VirtualInputManager"),
+	guiservice = game:GetService("GuiService"),
 	random = Random.new(),
 }
 
@@ -399,12 +401,29 @@ function farming.move(...)
 
 			root.Anchored = false
 			mod.data.actives["move"] = false
+			farming.activateButton()
+			task.wait(1)
 			if mod.data.actives["auto_farm"] == true then
 				farming.farm()
 			end
 		end)
 		return currentTween
 	end
+end
+
+function farming.activateButton(...)
+	local button = find.player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("ActivateButton")
+	
+	local inset = find.guiservice:GetGuiInset()
+	local pos = button.AbsolutePosition
+	local size = button.AbsoluteSize
+
+	local clickX = pos.X + (size.X / 2)
+	local clickY = pos.Y + (size.Y / 2) + inset.Y
+	
+	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1) -- down
+	task.wait(0.1)
+	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1) -- up
 end
 
 function farming.get_pollen_from_gui() -- ai
