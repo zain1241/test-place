@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.6")
+print("loaded 0.0.61")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -66,6 +66,21 @@ local function clearFarmLines()
 			end
 		end
 	end
+end
+
+local function activateButton(...)
+	local button = find.player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("ActivateButton")
+
+	local inset = find.guiservice:GetGuiInset()
+	local pos = button.AbsolutePosition
+	local size = button.AbsoluteSize
+
+	local clickX = pos.X + (size.X / 2)
+	local clickY = pos.Y + (size.Y / 2) + inset.Y
+
+	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1) -- down
+	task.wait(0.1)
+	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1) -- up
 end
 
 function farming.conAF(...)
@@ -403,7 +418,7 @@ function farming.move(...)
 			mod.data.actives["move"] = false
 			task.wait(.2)
 			print("completed")
-			farming.activateButton()
+			activateButton()
 			task.wait(.4)
 			if mod.data.actives["auto_farm"] == true then
 				farming.farm()
@@ -411,21 +426,6 @@ function farming.move(...)
 		end)
 		return currentTween
 	end
-end
-
-function farming.activateButton(...)
-	local button = find.player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("ActivateButton")
-	
-	local inset = find.guiservice:GetGuiInset()
-	local pos = button.AbsolutePosition
-	local size = button.AbsoluteSize
-
-	local clickX = pos.X + (size.X / 2)
-	local clickY = pos.Y + (size.Y / 2) + inset.Y
-	
-	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1) -- down
-	task.wait(0.1)
-	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1) -- up
 end
 
 function farming.get_pollen_from_gui() -- ai
