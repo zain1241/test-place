@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.64")
+print("loaded 0.0.65")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -69,19 +69,22 @@ local function clearFarmLines()
 end
 
 local function activateButton(...)
-	local button = find.player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("ActivateButton")
+	local screenGui = find.player.PlayerGui:WaitForChild("ScreenGui", 5)
+	if not screenGui then warn("ScreenGui not found") return false end
+	local button = screenGui:WaitForChild("ActivateButton", 5)
+	if not button then warn("ActivateButton not found") return false end
 
 	local inset = find.guiservice:GetGuiInset()
 	local pos = button.AbsolutePosition
 	local size = button.AbsoluteSize
-
 	local clickX = pos.X + (size.X / 2)
 	local clickY = pos.Y + (size.Y / 2) + inset.Y
 
-	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1) -- down
-	task.wait(0.1)
-	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1) -- up
+	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
+	task.wait(0.05)
+	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
 	print("activated")
+	return true
 end
 
 function farming.conAF(...)
@@ -251,7 +254,7 @@ function farming.move(...)
 	--print(a[1])
 
 	if a[1] == "flowerzones" then
-		mod.data.actives["move"] = true
+		--mod.data.actives["move"] = true
 		--print(actives["move"])
 		for _, v in ipairs(workspace:FindFirstChild("FlowerZones"):GetChildren()) do
 			if v.Name == a[3] then
@@ -303,6 +306,7 @@ function farming.move(...)
 				)
 
 				tween = currentTween
+				mod.data.actives["move"] = true
 
 				currentTween:Play()
 				farming.inv(true)
@@ -352,7 +356,7 @@ function farming.move(...)
 			end
 		end
 	elseif a[1] == "hive" then -- ai 50/50
-		mod.data.actives["move"] = true
+		--mod.data.actives["move"] = true
 		--print(actives["move"])
 		
 		if mod.data.actives["autohive"] == false then
@@ -370,6 +374,7 @@ function farming.move(...)
 
 		local root = character:FindFirstChild("HumanoidRootPart")
 		if not root then return end
+		mod.data.actives["move"] = true
 		local currentFarmId = farmId
 
 		local d1 = (root.Position - target).Magnitude
@@ -400,6 +405,8 @@ function farming.move(...)
 		currentTween.Completed:Once(function(state)
 			if tween == currentTween then tween = nil end
 			if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+				mod.data.actives["converting"] = false
+				mod.data.actives["move"] = false
 				return
 			end
 
@@ -410,6 +417,7 @@ function farming.move(...)
 
 			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
 				mod.data.actives["move"] = false
+				mod.data.actives["converting"] = false
 				return
 			end
 			
@@ -417,22 +425,13 @@ function farming.move(...)
 			if not ok then warn("activateButton failed:", err) end
 
 			task.wait(1)
-			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
-				mod.data.actives["move"] = false
-				return
-			end
-
 			mod.data.actives["move"] = false
-			pcall(farming.farm)
+			pcall(farming.farm())
 		end)
 		return currentTween
 	elseif a[1] == "convert" then
-		mod.data.actives["move"] = true
+		--mod.data.actives["move"] = true
 		--print(actives["move"])
-
-		if mod.data.actives["autohive"] == false then
-			return
-		end
 
 		local target = a[3]
 		print(target)
@@ -445,6 +444,7 @@ function farming.move(...)
 
 		local root = character:FindFirstChild("HumanoidRootPart")
 		if not root then return end
+		mod.data.actives["move"] = true
 		local currentFarmId = farmId
 
 		local d1 = (root.Position - target).Magnitude
@@ -475,6 +475,8 @@ function farming.move(...)
 		currentTween.Completed:Once(function(state)
 			if tween == currentTween then tween = nil end
 			if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+				mod.data.actives["converting"] = false
+				mod.data.actives["move"] = false
 				return
 			end
 
@@ -485,38 +487,58 @@ function farming.move(...)
 
 			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
 				mod.data.actives["move"] = false
+				mod.data.actives["converting"] = false
 				return
 			end
 			
+			--mod.data.actives["move"] = false
 			farming.convert()
-
-			mod.data.actives["move"] = false
 		end)
 		return currentTween
 	end
+	return false
 end
 
 function farming.convert(...)
+	if aconvert then
+		aconvert:Disconnect()
+		aconvert = nil
+	end
+
 	local ok, err = pcall(activateButton)
-	if not ok then warn("activateButton failed:", err) end
+	if not ok or err == false then
+		warn("activateButton failed")
+		mod.data.actives["converting"] = false
+		mod.data.actives["move"] = false
+		return
+	end
 	task.wait(1)
+
+	local startTime = tick()
 	
-	aconvert = farming.conAF(
-		find.prerender, 4,
-		function(delta)
-			local info = farming.get_pollen_info()
-			
-			if info then
-				if info.pollen == 0 then
-					print("completed autoconvert")
-					aconvert:Disconnect()
-					aconvert = nil
-					task.wait(1)
-					farming.farm()
-				end
-			end
+	aconvert = farming.conAF(find.prerender, 4, function(delta)
+		local info = farming.get_pollen_info()
+		if tick() - startTime > 300 then
+			if aconvert then aconvert:Disconnect() aconvert = nil end
+			mod.data.actives["converting"] = false
+			mod.data.actives["move"] = false
+			return
 		end
-	)
+
+		if not info then return end
+		if info.pollen ~= 0 then return end
+
+		print("completed autoconvert")
+		if aconvert then aconvert:Disconnect() aconvert = nil end
+
+		mod.data.actives["converting"] = false
+		mod.data.actives["move"] = false
+
+		task.defer(function()
+			task.wait(1)
+			farming.farm()
+		end)
+	end)
 end
 
 function farming.get_pollen_from_gui() -- ai
@@ -896,443 +918,443 @@ end
 --	return false, nil
 --end
 
-function farming.go_to_hive_and_convert()
-	print("[AutoConvert] Начинаем...")
-
-	mod.data.actives["move"] = true
-	mod.data.actives["point"] = false
-
-	table.clear(queue["auto_farm"])
-	table.clear(queue["tokens"])
+--function farming.go_to_hive_and_convert()
+--	print("[AutoConvert] Начинаем...")
+
+--	mod.data.actives["move"] = true
+--	mod.data.actives["point"] = false
+
+--	table.clear(queue["auto_farm"])
+--	table.clear(queue["tokens"])
 
-	if tween then
-		tween:Cancel()
-		tween = nil
-	end
-
-	if atween then
-		atween:Cancel()
-		atween = nil
-	end
+--	if tween then
+--		tween:Cancel()
+--		tween = nil
+--	end
+
+--	if atween then
+--		atween:Cancel()
+--		atween = nil
+--	end
 
-	if track and track.IsPlaying then
-		track:Stop(0)
-	end
+--	if track and track.IsPlaying then
+--		track:Stop(0)
+--	end
 
-	local character = find.player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+--	local character = find.player.Character
+--	local root = character and character:FindFirstChild("HumanoidRootPart")
+--	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
-	if not root or not humanoid then
-		mod.data.actives["move"] = false
-		return false
-	end
+--	if not root or not humanoid then
+--		mod.data.actives["move"] = false
+--		return false
+--	end
 
-	local savedWalkSpeed = mod.data.actives["walkspeed"] or 16
-	local savedAutoRotate = humanoid.AutoRotate
-
-	-- =========================================================
-	-- ФИЗИЧЕСКИЙ ПОЛЁТ
-	-- inv автоматически включён НА ВСЁМ ПУТИ
-	-- =========================================================
+--	local savedWalkSpeed = mod.data.actives["walkspeed"] or 16
+--	local savedAutoRotate = humanoid.AutoRotate
+
+--	-- =========================================================
+--	-- ФИЗИЧЕСКИЙ ПОЛЁТ
+--	-- inv автоматически включён НА ВСЁМ ПУТИ
+--	-- =========================================================
 
-	local function physicalMoveTo(targetPosition, speed, timeout)
-		speed = speed or mod.data.actives["move_speed"] or 100
-		timeout = timeout or 30
+--	local function physicalMoveTo(targetPosition, speed, timeout)
+--		speed = speed or mod.data.actives["move_speed"] or 100
+--		timeout = timeout or 30
 
-		if not root or not root.Parent then
-			return false
-		end
+--		if not root or not root.Parent then
+--			return false
+--		end
 
-		-- ВОТ ЗДЕСЬ ВКЛЮЧАЕМ INV ДО НАЧАЛА ПОЛЁТА
-		farming.inv(true)
+--		-- ВОТ ЗДЕСЬ ВКЛЮЧАЕМ INV ДО НАЧАЛА ПОЛЁТА
+--		farming.inv(true)
 
-		root.Anchored = false
+--		root.Anchored = false
 
-		humanoid.WalkSpeed = 0
-		humanoid.AutoRotate = false
-		humanoid:Move(Vector3.zero)
-		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+--		humanoid.WalkSpeed = 0
+--		humanoid.AutoRotate = false
+--		humanoid:Move(Vector3.zero)
+--		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 
-		-- Удаляем старые силы
-		for _, object in ipairs(root:GetChildren()) do
-			if object.Name == "__AutoConvertVelocity"
-				or object.Name == "__AutoConvertAttachment"
-			then
-				object:Destroy()
-			end
-		end
+--		-- Удаляем старые силы
+--		for _, object in ipairs(root:GetChildren()) do
+--			if object.Name == "__AutoConvertVelocity"
+--				or object.Name == "__AutoConvertAttachment"
+--			then
+--				object:Destroy()
+--			end
+--		end
 
-		local attachment = Instance.new("Attachment")
-		attachment.Name = "__AutoConvertAttachment"
-		attachment.Parent = root
+--		local attachment = Instance.new("Attachment")
+--		attachment.Name = "__AutoConvertAttachment"
+--		attachment.Parent = root
 
-		local linearVelocity = Instance.new("LinearVelocity")
-		linearVelocity.Name = "__AutoConvertVelocity"
-		linearVelocity.Attachment0 = attachment
-		linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
-		linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
-		linearVelocity.ForceLimitsEnabled = false
-		linearVelocity.VectorVelocity = Vector3.zero
-		linearVelocity.Parent = root
+--		local linearVelocity = Instance.new("LinearVelocity")
+--		linearVelocity.Name = "__AutoConvertVelocity"
+--		linearVelocity.Attachment0 = attachment
+--		linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+--		linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+--		linearVelocity.ForceLimitsEnabled = false
+--		linearVelocity.VectorVelocity = Vector3.zero
+--		linearVelocity.Parent = root
 
-		local startTime = tick()
+--		local startTime = tick()
 
-		while root.Parent and tick() - startTime < timeout do
-			local offset = targetPosition - root.Position
-			local distance = offset.Magnitude
+--		while root.Parent and tick() - startTime < timeout do
+--			local offset = targetPosition - root.Position
+--			local distance = offset.Magnitude
 
-			if distance <= 2.5 then
-				break
-			end
+--			if distance <= 2.5 then
+--				break
+--			end
 
-			local direction = offset.Unit
+--			local direction = offset.Unit
 
-			linearVelocity.VectorVelocity = direction * speed
+--			linearVelocity.VectorVelocity = direction * speed
 
-			-- Пока летим — inv гарантированно остаётся включён.
-			if not invc then
-				farming.inv(true)
-			end
+--			-- Пока летим — inv гарантированно остаётся включён.
+--			if not invc then
+--				farming.inv(true)
+--			end
 
-			game:GetService("RunService").Heartbeat:Wait()
-		end
+--			game:GetService("RunService").Heartbeat:Wait()
+--		end
 
-		-- Полностью останавливаем движение
-		linearVelocity.VectorVelocity = Vector3.zero
+--		-- Полностью останавливаем движение
+--		linearVelocity.VectorVelocity = Vector3.zero
 
-		task.wait(0.08)
+--		task.wait(0.08)
 
-		if linearVelocity.Parent then
-			linearVelocity:Destroy()
-		end
+--		if linearVelocity.Parent then
+--			linearVelocity:Destroy()
+--		end
 
-		if attachment.Parent then
-			attachment:Destroy()
-		end
+--		if attachment.Parent then
+--			attachment:Destroy()
+--		end
 
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
+--		root.AssemblyLinearVelocity = Vector3.zero
+--		root.AssemblyAngularVelocity = Vector3.zero
 
-		return root.Parent ~= nil
-	end
+--		return root.Parent ~= nil
+--	end
 
-	-- =========================================================
-	-- ОТПУСТИТЬ ИГРОКА НА УЛЕЕ
-	-- =========================================================
+--	-- =========================================================
+--	-- ОТПУСТИТЬ ИГРОКА НА УЛЕЕ
+--	-- =========================================================
 
-	local function releasePlayer()
-		if not root or not root.Parent then
-			return
-		end
+--	local function releasePlayer()
+--		if not root or not root.Parent then
+--			return
+--		end
 
-		-- ДОСТИГЛИ УЛЬЯ:
-		-- теперь inv выключаем, чтобы улей/персонаж нормально
-		-- взаимодействовали физически.
-		farming.inv(false)
+--		-- ДОСТИГЛИ УЛЬЯ:
+--		-- теперь inv выключаем, чтобы улей/персонаж нормально
+--		-- взаимодействовали физически.
+--		farming.inv(false)
 
-		root.Anchored = false
+--		root.Anchored = false
 
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
+--		root.AssemblyLinearVelocity = Vector3.zero
+--		root.AssemblyAngularVelocity = Vector3.zero
 
-		humanoid.WalkSpeed = 0
-		humanoid.AutoRotate = false
-		humanoid:Move(Vector3.zero)
+--		humanoid.WalkSpeed = 0
+--		humanoid.AutoRotate = false
+--		humanoid:Move(Vector3.zero)
 
-		-- Реально отпускаем персонажа.
-		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+--		-- Реально отпускаем персонажа.
+--		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
 
-		local groundedStart = tick()
-		local grounded = false
+--		local groundedStart = tick()
+--		local grounded = false
 
-		while tick() - groundedStart < 5 do
-			if not root.Parent or not humanoid.Parent then
-				break
-			end
+--		while tick() - groundedStart < 5 do
+--			if not root.Parent or not humanoid.Parent then
+--				break
+--			end
 
-			if humanoid.FloorMaterial ~= Enum.Material.Air then
-				grounded = true
-				break
-			end
+--			if humanoid.FloorMaterial ~= Enum.Material.Air then
+--				grounded = true
+--				break
+--			end
 
-			task.wait(0.1)
-		end
+--			task.wait(0.1)
+--		end
 
-		if grounded then
-			print("[AutoConvert] Игрок приземлился на улей")
-		else
-			warn("[AutoConvert] Не дождались приземления")
-		end
+--		if grounded then
+--			print("[AutoConvert] Игрок приземлился на улей")
+--		else
+--			warn("[AutoConvert] Не дождались приземления")
+--		end
 
-		task.wait(0.4)
-	end
+--		task.wait(0.4)
+--	end
 
-	-- =========================================================
-	-- 1. ИЩЕМ УЛЕЙ
-	-- =========================================================
+--	-- =========================================================
+--	-- 1. ИЩЕМ УЛЕЙ
+--	-- =========================================================
 
-	local hivePos = farming.get_hive_position()
+--	local hivePos = farming.get_hive_position()
 
-	if not hivePos then
-		print("[AutoConvert] Своего улья нет — ищем свободный")
+--	if not hivePos then
+--		print("[AutoConvert] Своего улья нет — ищем свободный")
 
-		local freeHive = farming.find_free_hive()
+--		local freeHive = farming.find_free_hive()
 
-		if not freeHive then
-			warn("[AutoConvert] Свободных ульев нет")
+--		if not freeHive then
+--			warn("[AutoConvert] Свободных ульев нет")
 
-			farming.inv(false)
+--			farming.inv(false)
 
-			root.Anchored = false
-			humanoid.WalkSpeed = savedWalkSpeed
-			humanoid.AutoRotate = savedAutoRotate
-			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+--			root.Anchored = false
+--			humanoid.WalkSpeed = savedWalkSpeed
+--			humanoid.AutoRotate = savedAutoRotate
+--			humanoid:ChangeState(Enum.HumanoidStateType.Running)
 
-			mod.data.actives["move"] = false
+--			mod.data.actives["move"] = false
 
-			return false
-		end
+--			return false
+--		end
 
-		print("[AutoConvert] Найден свободный улей:", freeHive.hive.Name)
+--		print("[AutoConvert] Найден свободный улей:", freeHive.hive.Name)
 
-		local targetPos = freeHive.pos + Vector3.new(0, 3.5, 0)
+--		local targetPos = freeHive.pos + Vector3.new(0, 3.5, 0)
 
-		-- physicalMoveTo сам включает inv
-		local distance = (root.Position - targetPos).Magnitude
-		local speed = mod.data.actives["move_speed"] or 100
-		local timeout = math.max(
-			(distance / math.max(speed, 1)) * 3,
-			10
-		)
+--		-- physicalMoveTo сам включает inv
+--		local distance = (root.Position - targetPos).Magnitude
+--		local speed = mod.data.actives["move_speed"] or 100
+--		local timeout = math.max(
+--			(distance / math.max(speed, 1)) * 3,
+--			10
+--		)
 
-		local ok = physicalMoveTo(
-			targetPos,
-			speed,
-			timeout
-		)
+--		local ok = physicalMoveTo(
+--			targetPos,
+--			speed,
+--			timeout
+--		)
 
-		if not ok then
-			warn("[AutoConvert] Не удалось долететь до свободного улья")
+--		if not ok then
+--			warn("[AutoConvert] Не удалось долететь до свободного улья")
 
-			farming.inv(false)
+--			farming.inv(false)
 
-			root.Anchored = false
-			humanoid.WalkSpeed = savedWalkSpeed
-			humanoid.AutoRotate = savedAutoRotate
-			mod.data.actives["move"] = false
+--			root.Anchored = false
+--			humanoid.WalkSpeed = savedWalkSpeed
+--			humanoid.AutoRotate = savedAutoRotate
+--			mod.data.actives["move"] = false
 
-			return false
-		end
+--			return false
+--		end
 
-		print("[AutoConvert] Долетели до свободного улья")
+--		print("[AutoConvert] Долетели до свободного улья")
 
-		-- Теперь inv выключается и игрок падает.
-		releasePlayer()
+--		-- Теперь inv выключается и игрок падает.
+--		releasePlayer()
 
-		local occupied, newHivePos = farming.press_e_until_hive(5)
+--		local occupied, newHivePos = farming.press_e_until_hive(5)
 
-		if not occupied or not newHivePos then
-			warn("[AutoConvert] Не удалось занять улей")
+--		if not occupied or not newHivePos then
+--			warn("[AutoConvert] Не удалось занять улей")
 
-			farming.inv(false)
+--			farming.inv(false)
 
-			root.Anchored = false
-			humanoid.WalkSpeed = savedWalkSpeed
-			humanoid.AutoRotate = savedAutoRotate
-			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+--			root.Anchored = false
+--			humanoid.WalkSpeed = savedWalkSpeed
+--			humanoid.AutoRotate = savedAutoRotate
+--			humanoid:ChangeState(Enum.HumanoidStateType.Running)
 
-			mod.data.actives["move"] = false
+--			mod.data.actives["move"] = false
 
-			return false
-		end
+--			return false
+--		end
 
-		hivePos = newHivePos
+--		hivePos = newHivePos
 
-		print("[AutoConvert] Улей занят:", tostring(hivePos))
+--		print("[AutoConvert] Улей занят:", tostring(hivePos))
 
-	else
-		print("[AutoConvert] Свой улей найден")
-	end
+--	else
+--		print("[AutoConvert] Свой улей найден")
+--	end
 
-	-- =========================================================
-	-- 2. ТОЧКА ВОЗВРАТА
-	-- =========================================================
+--	-- =========================================================
+--	-- 2. ТОЧКА ВОЗВРАТА
+--	-- =========================================================
 
-	local selectedField = mod.data.actives["selected_field"]
-	local fields = workspace:FindFirstChild("FlowerZones")
-	local field = fields and selectedField and fields:FindFirstChild(selectedField)
+--	local selectedField = mod.data.actives["selected_field"]
+--	local fields = workspace:FindFirstChild("FlowerZones")
+--	local field = fields and selectedField and fields:FindFirstChild(selectedField)
 
-	local returnPos = root.Position
+--	local returnPos = root.Position
 
-	if field and field:IsA("BasePart") then
-		returnPos = field.Position + Vector3.new(0, 3, 0)
-	end
+--	if field and field:IsA("BasePart") then
+--		returnPos = field.Position + Vector3.new(0, 3, 0)
+--	end
 
-	-- =========================================================
-	-- 3. ПОЛЁТ К СВОЕМУ УЛЬЮ
-	-- =========================================================
+--	-- =========================================================
+--	-- 3. ПОЛЁТ К СВОЕМУ УЛЬЮ
+--	-- =========================================================
 
-	if (root.Position - hivePos).Magnitude > 4 then
-		local targetPos = hivePos + Vector3.new(0, 3.5, 0)
+--	if (root.Position - hivePos).Magnitude > 4 then
+--		local targetPos = hivePos + Vector3.new(0, 3.5, 0)
 
-		local distance = (root.Position - targetPos).Magnitude
-		local speed = mod.data.actives["move_speed"] or 100
-		local timeout = math.max(
-			(distance / math.max(speed, 1)) * 3,
-			10
-		)
+--		local distance = (root.Position - targetPos).Magnitude
+--		local speed = mod.data.actives["move_speed"] or 100
+--		local timeout = math.max(
+--			(distance / math.max(speed, 1)) * 3,
+--			10
+--		)
 
-		local ok = physicalMoveTo(
-			targetPos,
-			speed,
-			timeout
-		)
+--		local ok = physicalMoveTo(
+--			targetPos,
+--			speed,
+--			timeout
+--		)
 
-		if not ok then
-			warn("[AutoConvert] Не удалось долететь до улья")
+--		if not ok then
+--			warn("[AutoConvert] Не удалось долететь до улья")
 
-			farming.inv(false)
+--			farming.inv(false)
 
-			root.Anchored = false
-			humanoid.WalkSpeed = savedWalkSpeed
-			humanoid.AutoRotate = savedAutoRotate
-			mod.data.actives["move"] = false
+--			root.Anchored = false
+--			humanoid.WalkSpeed = savedWalkSpeed
+--			humanoid.AutoRotate = savedAutoRotate
+--			mod.data.actives["move"] = false
 
-			return false
-		end
-	end
+--			return false
+--		end
+--	end
 
-	print("[AutoConvert] Долетели до улья")
+--	print("[AutoConvert] Долетели до улья")
 
-	-- =========================================================
-	-- 4. ОТПУСКАЕМ
-	-- =========================================================
+--	-- =========================================================
+--	-- 4. ОТПУСКАЕМ
+--	-- =========================================================
 
-	releasePlayer()
+--	releasePlayer()
 
-	print("[AutoConvert] Игрок отпущен, пытаемся разгружаться")
+--	print("[AutoConvert] Игрок отпущен, пытаемся разгружаться")
 
-	-- =========================================================
-	-- 5. E
-	-- =========================================================
+--	-- =========================================================
+--	-- 5. E
+--	-- =========================================================
 
-	farming.press_e_until_convert(hivePos, 3)
+--	farming.press_e_until_convert(hivePos, 3)
 
-	-- =========================================================
-	-- 6. ЖДЁМ РАЗГРУЗКУ
-	-- =========================================================
+--	-- =========================================================
+--	-- 6. ЖДЁМ РАЗГРУЗКУ
+--	-- =========================================================
 
-	print("[AutoConvert] Ждём завершения конвертации...")
+--	print("[AutoConvert] Ждём завершения конвертации...")
 
-	local startTime = tick()
-	local timeout = 300
+--	local startTime = tick()
+--	local timeout = 300
 
-	local lowCount = 0
-	local requiredLowCount = 4
+--	local lowCount = 0
+--	local requiredLowCount = 4
 
-	while tick() - startTime < timeout do
-		if not root.Parent or not humanoid.Parent then
-			break
-		end
+--	while tick() - startTime < timeout do
+--		if not root.Parent or not humanoid.Parent then
+--			break
+--		end
 
-		root.Anchored = false
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
+--		root.Anchored = false
+--		root.AssemblyLinearVelocity = Vector3.zero
+--		root.AssemblyAngularVelocity = Vector3.zero
 
-		local info = farming.get_pollen_info()
+--		local info = farming.get_pollen_info()
 
-		if info then
-			print(string.format(
-				"[AutoConvert] Pollen: %d/%d (%.1f%%)",
-				info.pollen,
-				info.max,
-				info.percent
-				))
+--		if info then
+--			print(string.format(
+--				"[AutoConvert] Pollen: %d/%d (%.1f%%)",
+--				info.pollen,
+--				info.max,
+--				info.percent
+--				))
 
-			if info.percent <= 5 then
-				lowCount += 1
+--			if info.percent <= 5 then
+--				lowCount += 1
 
-				if lowCount >= requiredLowCount then
-					print("[AutoConvert] Разгрузка завершена")
-					break
-				end
-			else
-				lowCount = 0
-			end
-		end
+--				if lowCount >= requiredLowCount then
+--					print("[AutoConvert] Разгрузка завершена")
+--					break
+--				end
+--			else
+--				lowCount = 0
+--			end
+--		end
 
-		task.wait(0.75)
-	end
+--		task.wait(0.75)
+--	end
 
-	-- =========================================================
-	-- 7. БАЛЛУН
-	-- =========================================================
+--	-- =========================================================
+--	-- 7. БАЛЛУН
+--	-- =========================================================
 
-	if mod.data.actives["balloon"] == true then
-		print("[AutoConvert] Ждём хайв-баллун...")
-		farming.wait_for_balloon(hivePos, 300)
-	end
+--	if mod.data.actives["balloon"] == true then
+--		print("[AutoConvert] Ждём хайв-баллун...")
+--		farming.wait_for_balloon(hivePos, 300)
+--	end
 
-	-- =========================================================
-	-- 8. ОБРАТНЫЙ ПОЛЁТ
-	-- =========================================================
+--	-- =========================================================
+--	-- 8. ОБРАТНЫЙ ПОЛЁТ
+--	-- =========================================================
 
-	print("[AutoConvert] Возвращаемся на поле")
+--	print("[AutoConvert] Возвращаемся на поле")
 
-	-- ВАЖНО:
-	-- physicalMoveTo() снова сам включит inv
-	-- ДО начала обратного полёта.
+--	-- ВАЖНО:
+--	-- physicalMoveTo() снова сам включит inv
+--	-- ДО начала обратного полёта.
 
-	local distanceBack = (root.Position - returnPos).Magnitude
-	local speedBack = mod.data.actives["move_speed"] or 100
+--	local distanceBack = (root.Position - returnPos).Magnitude
+--	local speedBack = mod.data.actives["move_speed"] or 100
 
-	local timeoutBack = math.max(
-		(distanceBack / math.max(speedBack, 1)) * 3,
-		10
-	)
+--	local timeoutBack = math.max(
+--		(distanceBack / math.max(speedBack, 1)) * 3,
+--		10
+--	)
 
-	local okBack = physicalMoveTo(
-		returnPos,
-		speedBack,
-		timeoutBack
-	)
+--	local okBack = physicalMoveTo(
+--		returnPos,
+--		speedBack,
+--		timeoutBack
+--	)
 
-	if not okBack then
-		warn("[AutoConvert] Не удалось вернуться на поле")
-	end
+--	if not okBack then
+--		warn("[AutoConvert] Не удалось вернуться на поле")
+--	end
 
-	print("[AutoConvert] Долетели обратно на поле")
+--	print("[AutoConvert] Долетели обратно на поле")
 
-	-- =========================================================
-	-- 9. ПРИЗЕМЛЯЕМСЯ НА ПОЛЕ
-	-- =========================================================
+--	-- =========================================================
+--	-- 9. ПРИЗЕМЛЯЕМСЯ НА ПОЛЕ
+--	-- =========================================================
 
-	-- inv пока ещё включён.
-	-- Выключать его здесь НЕ нужно: обычный фарм снова
-	-- сам оставит inv включённым.
+--	-- inv пока ещё включён.
+--	-- Выключать его здесь НЕ нужно: обычный фарм снова
+--	-- сам оставит inv включённым.
 
-	root.Anchored = false
-	root.AssemblyLinearVelocity = Vector3.zero
-	root.AssemblyAngularVelocity = Vector3.zero
+--	root.Anchored = false
+--	root.AssemblyLinearVelocity = Vector3.zero
+--	root.AssemblyAngularVelocity = Vector3.zero
 
-	humanoid.AutoRotate = savedAutoRotate
-	humanoid.WalkSpeed = savedWalkSpeed
-	humanoid:Move(Vector3.zero)
-	humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+--	humanoid.AutoRotate = savedAutoRotate
+--	humanoid.WalkSpeed = savedWalkSpeed
+--	humanoid:Move(Vector3.zero)
+--	humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
 
-	task.wait(0.3)
+--	task.wait(0.3)
 
-	humanoid.WalkSpeed = savedWalkSpeed
-	humanoid:ChangeState(Enum.HumanoidStateType.Running)
+--	humanoid.WalkSpeed = savedWalkSpeed
+--	humanoid:ChangeState(Enum.HumanoidStateType.Running)
 
-	mod.data.actives["move"] = false
-	mod.data.actives["__last_convert_time"] = tick()
+--	mod.data.actives["move"] = false
+--	mod.data.actives["__last_convert_time"] = tick()
 
-	print("[AutoConvert] Готово")
+--	print("[AutoConvert] Готово")
 
-	return true
-end
+--	return true
+--end
 
 --function farming.find_free_hive()
 --	local honeycombs = workspace:FindFirstChild("Honeycombs")
@@ -1440,6 +1462,11 @@ local function resetFarmMovement(enabled)
 		atween:Cancel()
 		atween = nil
 	end
+	
+	if aconvert then
+		aconvert:Disconnect()
+		aconvert = nil
+	end
 
 	clearFarmLines()
 
@@ -1458,6 +1485,7 @@ local function resetFarmMovement(enabled)
 
 	mod.data.actives["point"] = false
 	mod.data.actives["move"] = false
+	mod.data.actives["converting"] = false
 
 	farming.cornl(enabled)
 	farming.inv(enabled)
@@ -1637,6 +1665,8 @@ function farming.farm(...)
 
 		local function m(...)
 			local a = {...}
+			
+			--if mod.data.actives["converting"] then return end
 
 			---- НЕ двигаем, если идёт конвертация или игрок анкорен
 			--if mod.data.actives["__converting"] then
@@ -1712,11 +1742,15 @@ function farming.farm(...)
 
 			if atween == tween then atween = nil end
 			if id ~= farmId then return end
+			
+			if mod.data.actives["converting"] then
+				if track and track.IsPlaying then track:Stop(.1) end
+			end
 
-			if track and track.IsPlaying then track:Stop(.1) end
+			--if track and track.IsPlaying then track:Stop(.1) end
 		end
 
-		while id == farmId and mod.data.actives["auto_farm"] == true and #queue["auto_farm"] > 0 and not mod.data.actives["__converting"] do
+		while id == farmId and mod.data.actives["auto_farm"] == true and #queue["auto_farm"] > 0 and not mod.data.actives["converting"] do
 			local a = table.remove(queue["auto_farm"], 1)
 			local c = workspace:FindFirstChild("Collectibles")
 			local f = workspace:FindFirstChild("FlowerZones")
@@ -1827,7 +1861,7 @@ function farming.farm(...)
 			end
 		end
 
-		while id == farmId and mod.data.actives["auto_farm"] == true and #queue["auto_farm"] > 0 and not mod.data.actives["__converting"] do
+		while id == farmId and mod.data.actives["auto_farm"] == true and #queue["auto_farm"] > 0 and not mod.data.actives["converting"] do
 			local a = table.remove(queue["auto_farm"], 1)
 			local c = workspace:FindFirstChild("Collectibles")
 			local f = workspace:FindFirstChild("FlowerZones")
@@ -1861,6 +1895,10 @@ function farming.farm(...)
 				--if mod.data.actives["__converting"] then
 				--	return
 				--end
+				
+				if mod.data.actives["converting"] then
+					return
+				end
 
 				if not find.player.Character:FindFirstChildOfClass("Humanoid") or not find.player.Character:FindFirstChild("HumanoidRootPart") or not a[1] or not a[2] then
 					return
@@ -1891,7 +1929,7 @@ function farming.farm(...)
 					p.ElasticityWeight
 				)
 				find.player.Character:FindFirstChildOfClass("Humanoid").MoveToFinished:Wait()
-				if mod.data.actives["__converting"] then
+				if mod.data.actives["converting"] then
 					return
 				end
 				if id ~= farmId then return end
@@ -1966,6 +2004,7 @@ function farming.farm(...)
 				end
 				
 				if mod.data.actives["auto_farm"] == true then
+					if mod.data.actives["converting"] then return end
 					local info = farming.get_pollen_info()
 					local threshold = mod.data.actives["backpack"] or 80
 					
@@ -1988,16 +2027,13 @@ function farming.farm(...)
 						end
 					end
 					
-					if shouldConvert then
-						mod.data.actives["converting"] = true
-						
+					if shouldConvert and mod.data.actives["move"] == false then
 						local targetPos = farming.getHive()
 						if targetPos then
-							farming.move(
-								"convert",
-								mod.data.actives["move_speed"],
-								targetPos
-							)
+							local ok = farming.move("convert", mod.data.actives["move_speed"], targetPos)
+							if ok then
+								mod.data.actives["converting"] = true
+							end
 						end
 						return
 					end
