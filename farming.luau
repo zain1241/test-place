@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.943")
+print("loaded 0.0.944")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -581,6 +581,11 @@ function farming.forceWalkSpeed(speed)
 	farming.__forcedSpeed = speed
 
 	local function apply()
+		local targetSpeed = mod.data.actives["walkspeed"] or farming.__forcedSpeed
+		if targetSpeed and mod.data.actives["move_speed"] ~= targetSpeed then
+			mod.data.actives["move_speed"] = targetSpeed
+		end
+
 		if mod.data.actives["converting"] then return end
 		if mod.data.actives["move"] == true then return end
 		if mod.data.actives["auto_farm"] == true
@@ -592,8 +597,6 @@ function farming.forceWalkSpeed(speed)
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 		local root = char and char:FindFirstChild("HumanoidRootPart")
 		if not humanoid then return end
-		
-		local targetSpeed = mod.data.actives["walkspeed"] or farming.__forcedSpeed
 
 		if humanoid.WalkSpeed ~= targetSpeed then
 			humanoid.WalkSpeed = targetSpeed
@@ -768,24 +771,48 @@ function farming.convert(...)
 
 							return nil
 						end
+						
+						local balloon = nil
+						local searchStart = tick()
+						while tick() - searchStart < 10 do
+							balloon = findBalloonAt(hivePos)
+							if balloon then break end
+							if not mod.data.actives["auto_farm"] then return end
+							task.wait(1)
+						end
 
-						local balloon = findBalloonAt(hivePos)
-						if balloon then
-							local balloonStart = tick()
+						if mod.data.actives["balloon"] == true then
+							local char = find.player.Character
+							local root = char and char:FindFirstChild("HumanoidRootPart")
+							local playerPos = root and root.Position
 
-							while tick() - balloonStart < 300 do
+							local balloon = nil
+							if playerPos then
+								for _, o in ipairs(workspace:GetDescendants()) do
+									if o.Name == "BalloonBody" and o:IsA("BasePart") then
+										if (o.Position - playerPos).Magnitude <= 25 then
+											balloon = o
+											break
+										end
+									end
+								end
+							end
 
-								if not mod.data.actives["auto_farm"] then
-									return
+							if balloon then
+								--print("balloon found, waiting up to 5 min...")
+								local balloonStart = tick()
+								while balloon.Parent do
+									if not mod.data.actives["auto_farm"] then return end
+									if tick() - balloonStart > 300 then
+										--print("balloon timeout 5 min")
+										break
+									end
+									task.wait(1)
 								end
 								if not balloon.Parent then
 									print("balloon converted")
-									break
 								end
-								task.wait(3)
 							end
-						else
-							print("balloon not found, continue")
 						end
 					else
 						warn("not hive")
