@@ -54,8 +54,8 @@ data.actives = {
 	backpack = 80,
 	auto_convert = 20,
 	mask = "None",
-	__converting = false,
-	__last_convert_time = 0,
+	--__converting = false,
+	--__last_convert_time = 0,
 	
 	--farm settings
 	collect_bubbles = false,
@@ -73,6 +73,7 @@ data.actives = {
 	script_name = "Nectar 0.0.1",
 	position_script = UDim2.new(0.22, 0, 0.5, 0),
 	walkspeed = 40,
+	autohive = true,
 }
 
 return data
