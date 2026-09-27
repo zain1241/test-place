@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.91")
+print("loaded 0.0.92")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -631,17 +631,35 @@ function farming.forceWalkSpeed(speed)
 
 		local char = find.player.Character
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+		local root = char and char:FindFirstChild("HumanoidRootPart")
 		if not humanoid then return end
+		
+		local targetSpeed = mod.data.actives["walkspeed"] or farming.__forcedSpeed
 
-		if humanoid.WalkSpeed ~= farming.__forcedSpeed then
-			humanoid.WalkSpeed = farming.__forcedSpeed
+		if humanoid.WalkSpeed ~= targetSpeed then
+			humanoid.WalkSpeed = targetSpeed
+		end
+
+		if root then
+			root.Massless = false
+
+			local p = root.CurrentPhysicalProperties
+			if p then
+				root.CustomPhysicalProperties = PhysicalProperties.new(
+					20,
+					p.Friction,
+					p.Elasticity,
+					p.FrictionWeight,
+					p.ElasticityWeight
+				)
+			end
 		end
 	end
 
 	farming.__speedConn = find.renderstepped:Connect(function()
 		if farming.__forcedSpeed then apply() end
 	end)
-	
+
 	apply()
 end
 
@@ -654,21 +672,26 @@ function farming.convert(...)
 	if mod.data.actives["honey_mask"] == true then
 		farming.honey_mask()
 	end
-	
-	local initial = farming.get_pollen_info()
-	local initial_pollen = initial and initial.pollen or 0
-
-	task.wait(2)
-
-	local after = farming.get_pollen_info()
-	local after_pollen = after and after.pollen or initial_pollen
 
 	local eSucceeded = false
+	local initial = farming.get_pollen_info()
+	local initial_pollen = initial and initial.pollen
 
-	if after_pollen < initial_pollen then
+	task.wait(3)
+
+	local after = farming.get_pollen_info()
+	local after_pollen = after and after.pollen
+
+	if initial_pollen
+		and after_pollen
+		and initial_pollen > 0
+		and after_pollen < initial_pollen - 50
+	then
 		eSucceeded = true
-		print("[convert] разгрузка уже идёт")
-	else
+		--print("[convert] разгрузка уже идёт:", initial_pollen, "->", after_pollen)
+	end
+
+	if not eSucceeded then
 		local maxEAttempts = 5
 		local eWait = 5
 
@@ -686,14 +709,24 @@ function farming.convert(...)
 
 				local now = farming.get_pollen_info()
 				if now then
-					if now.pollen <= 0 then dropped = true break end
-					if now.pollen < before_pollen then dropped = true break end
+					if now.pollen <= 0 then
+						dropped = true
+						--print("[convert] E #"..attempt..": pollen = 0")
+						break
+					end
+					if before_pollen > 0 and now.pollen < before_pollen - 50 then
+						dropped = true
+						--print("[convert] E #"..attempt..":", before_pollen, "->", now.pollen)
+						break
+					end
 				end
 			end
 
 			if dropped then
 				eSucceeded = true
 				break
+			else
+				print("[convert] E #"..attempt..": нет падения, пробуем ещё")
 			end
 		end
 	end
@@ -745,7 +778,7 @@ function farming.convert(...)
 			if not info then
 				return
 			end
-			
+
 			if info.pollen <= 0 then
 				pollenZeroSince = pollenZeroSince or tick()
 			else
@@ -805,10 +838,9 @@ function farming.convert(...)
 
 							return nil
 						end
-						
+
 						local balloon = findBalloonAt(hivePos)
 						if balloon then
-							--print("balloon found, waiting for conversion...")
 							local balloonStart = tick()
 
 							while tick() - balloonStart < 300 do
@@ -829,7 +861,7 @@ function farming.convert(...)
 						warn("not hive")
 					end
 				end
-				
+
 				local target_mask = mod.data.actives["mask"]
 				if target_mask and target_mask ~= "None" then
 					farming.equip_mask(target_mask)
