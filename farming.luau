@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.71")
+print("loaded 0.0.711")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1679,6 +1679,19 @@ end
 --	return true
 --end
 
+local function stopTweenWalkAnimation()
+	if track then
+		pcall(function()
+			if track.IsPlaying then
+				track:Stop(0.1)
+			end
+		end)
+	end
+
+	track = nil
+	animwalk = nil
+end
+
 local function resetFarmMovement(enabled)
 	if afarm then
 		afarm:Disconnect()
@@ -1895,19 +1908,6 @@ function farming.farm(...)
 				a[2].Attachment:Destroy(); a[2].Beam:Destroy();
 				d(...)
 			end
-		end
-		
-		local function stopTweenWalkAnimation()
-			if track then
-				pcall(function()
-					if track.IsPlaying then
-						track:Stop(0.1)
-					end
-				end)
-			end
-
-			track = nil
-			animwalk = nil
 		end
 		
 		local function m(...)
