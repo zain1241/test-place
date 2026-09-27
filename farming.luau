@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.721")
+print("loaded 0.0.7212")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -612,157 +612,273 @@ local function pressE()
 end
 
 function farming.convert(...)
-	if aconvert then
-		aconvert:Disconnect()
-		aconvert = nil
-	end
+	if aconvert then aconvert:Disconnect() aconvert = nil end
+	
+	pressE()
+	task.wait(1)
 
 	local initial = farming.get_pollen_info()
 	local initial_pollen = initial and initial.pollen or 0
-
-	for i = 1, 3 do
-		pressE()
-		task.wait(5)
-
-		local now = farming.get_pollen_info()
-		if now and now.pollen < initial_pollen then
-			break
-		end
-	end
-
+	--if initial_pollen > 0 then
+	--	local now = farming.get_pollen_info()
+	--	if now and now.pollen >= initial_pollen then
+	--		pressE()
+	--		task.wait(1)
+	--	end
+	--end
+	
 	if mod.data.actives["honey_mask"] == true then
 		farming.honey_mask()
 	end
 
 	local startTime = tick()
-	local pollen_at_start = nil
 	local pollenZeroSince = nil
+	local balloonDone = false
 
 	aconvert = farming.conAF(find.prerender, 4, function(delta)
 		local info = farming.get_pollen_info()
-		if not pollen_at_start and info then
-			pollen_at_start = info.pollen
-		end
-		
-		if info then
-			if info.pollen <= 0 then
-				pollenZeroSince = pollenZeroSince or tick()
-			else
-				pollenZeroSince = nil
-			end
-		end
-		
-		if tick() - startTime > 600 then
-			if aconvert then
-				aconvert:Disconnect()
-				aconvert = nil
-			end
 
+		if tick() - startTime > 600 then
+			if aconvert then aconvert:Disconnect() aconvert = nil end
 			mod.data.actives["last_time_convert"] = tick()
 			mod.data.actives["converting"] = false
 			mod.data.actives["move"] = false
 			task.defer(function()
 				task.wait(1)
-
-				if mod.data.actives["auto_farm"] then
-					farming.farm()
-				end
+				if mod.data.actives["auto_farm"] then farming.farm() end
 			end)
 			return
 		end
 
-		if not info then
-			return
+		if not info then return end
+
+		if info.pollen <= 0 then
+			pollenZeroSince = pollenZeroSince or tick()
+		else
+			pollenZeroSince = nil
 		end
 
-		if info.pollen > 0 then
-			return
-		end
+		if not pollenZeroSince or tick() - pollenZeroSince < 2 then return end
+		if balloonDone then return end
+		balloonDone = true
 
-		if not pollenZeroSince or tick() - pollenZeroSince < 2 then
-			return
-		end
+		if aconvert then aconvert:Disconnect() aconvert = nil end
 		print("completed autoconvert")
-
-		if aconvert then
-			aconvert:Disconnect()
-			aconvert = nil
-		end
-
-		if mod.data.actives["balloon"] == true then
-			local hivePos = farming.getHive()
-			if hivePos then
-				local function findHiveBalloon()
-					for _, obj in ipairs(workspace:GetDescendants()) do
-						if obj.Name == "BalloonBody"
-							and obj:IsA("BasePart")
-						then
-							if (obj.Position - hivePos).Magnitude <= 25 then
-								return obj
+		task.spawn(function()
+			if mod.data.actives["balloon"] == true then
+				local hivePos = farming.getHive()
+				if hivePos then
+					local function findHiveBalloon()
+						for _, obj in ipairs(workspace:GetDescendants()) do
+							if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
+								if (obj.Position - hivePos).Magnitude <= 25 then
+									return obj
+								end
 							end
 						end
+						return nil
 					end
-					return nil
-				end
-				
-				local balloon = findHiveBalloon()
-				if not balloon then
-					local spawnStart = tick()
-					while tick() - spawnStart < 30 do
-						balloon = findHiveBalloon()
-						if balloon then
-							print("balloon appeared")
-							break
+
+					local balloon = findHiveBalloon()
+					if not balloon then
+						local spawnStart = tick()
+						while tick() - spawnStart < 5 do
+							balloon = findHiveBalloon()
+							if balloon then print("balloon appeared") break end
+							task.wait(0.3)
 						end
-						task.wait(0.5)
+					end
+
+					if balloon then
+						local balloonStart = tick()
+						while tick() - balloonStart < 600 do
+							if not balloon.Parent then
+								print("balloon is converted")
+								break
+							end
+							local current = findHiveBalloon()
+							if not current then
+								print("balloon is converted")
+								break
+							end
+							balloon = current
+							task.wait(1)
+						end
+					else
+						print("balloon did not appear")
 					end
 				end
-				
-				if balloon then
-					local balloonStart = tick()
-					local balloonTimeout = 600
-					while tick() - balloonStart < balloonTimeout do
-						if not balloon.Parent then
-							print("balloon is converted")
-							break
-						end
-
-						local current = findHiveBalloon()
-
-						if not current then
-							print("balloon is converted")
-							break
-						end
-
-						balloon = current
-
-						task.wait(1)
-					end
-				else
-					print("balloon did not appear within 30 sec")
-				end
-			else
-				warn("not hive")
 			end
-		end
+			
+			local target_mask = mod.data.actives["mask"]
+			if target_mask and target_mask ~= "None" then
+				farming.equip_mask(target_mask)
+			end
 
-		local target_mask = mod.data.actives["mask"]
-		if target_mask and target_mask ~= "None" then
-			farming.equip_mask(target_mask)
-		end
+			mod.data.actives["last_time_convert"] = tick()
+			--mod.data.actives["converting"] = false
+			--mod.data.actives["move"] = false
 
-		mod.data.actives["last_time_convert"] = tick()
-		mod.data.actives["converting"] = false
-		mod.data.actives["move"] = false
-
-		task.defer(function()
-			task.wait(2)
+			task.wait(3)
 			if mod.data.actives["auto_farm"] then
 				farming.farm()
 			end
 		end)
 	end)
 end
+
+--function farming.convert(...)
+--	if aconvert then
+--		aconvert:Disconnect()
+--		aconvert = nil
+--	end
+
+--	local initial = farming.get_pollen_info()
+--	local initial_pollen = initial and initial.pollen or 0
+
+--	for i = 1, 3 do
+--		pressE()
+--		task.wait(5)
+
+--		local now = farming.get_pollen_info()
+--		if now and now.pollen < initial_pollen then
+--			break
+--		end
+--	end
+
+--	if mod.data.actives["honey_mask"] == true then
+--		farming.honey_mask()
+--	end
+
+--	local startTime = tick()
+--	local pollen_at_start = nil
+--	local pollenZeroSince = nil
+
+--	aconvert = farming.conAF(find.prerender, 4, function(delta)
+--		local info = farming.get_pollen_info()
+--		if not pollen_at_start and info then
+--			pollen_at_start = info.pollen
+--		end
+		
+--		if info then
+--			if info.pollen <= 0 then
+--				pollenZeroSince = pollenZeroSince or tick()
+--			else
+--				pollenZeroSince = nil
+--			end
+--		end
+		
+--		if tick() - startTime > 600 then
+--			if aconvert then
+--				aconvert:Disconnect()
+--				aconvert = nil
+--			end
+
+--			mod.data.actives["last_time_convert"] = tick()
+--			mod.data.actives["converting"] = false
+--			mod.data.actives["move"] = false
+--			task.defer(function()
+--				task.wait(1)
+
+--				if mod.data.actives["auto_farm"] then
+--					farming.farm()
+--				end
+--			end)
+--			return
+--		end
+
+--		if not info then
+--			return
+--		end
+
+--		if info.pollen > 0 then
+--			return
+--		end
+
+--		if not pollenZeroSince or tick() - pollenZeroSince < 2 then
+--			return
+--		end
+--		print("completed autoconvert")
+
+--		if aconvert then
+--			aconvert:Disconnect()
+--			aconvert = nil
+--		end
+
+--		if mod.data.actives["balloon"] == true then
+--			local hivePos = farming.getHive()
+--			if hivePos then
+--				local function findHiveBalloon()
+--					for _, obj in ipairs(workspace:GetDescendants()) do
+--						if obj.Name == "BalloonBody"
+--							and obj:IsA("BasePart")
+--						then
+--							if (obj.Position - hivePos).Magnitude <= 25 then
+--								return obj
+--							end
+--						end
+--					end
+--					return nil
+--				end
+				
+--				local balloon = findHiveBalloon()
+--				if not balloon then
+--					local spawnStart = tick()
+--					while tick() - spawnStart < 30 do
+--						balloon = findHiveBalloon()
+--						if balloon then
+--							print("balloon appeared")
+--							break
+--						end
+--						task.wait(0.5)
+--					end
+--				end
+				
+--				if balloon then
+--					local balloonStart = tick()
+--					local balloonTimeout = 600
+--					while tick() - balloonStart < balloonTimeout do
+--						if not balloon.Parent then
+--							print("balloon is converted")
+--							break
+--						end
+
+--						local current = findHiveBalloon()
+
+--						if not current then
+--							print("balloon is converted")
+--							break
+--						end
+
+--						balloon = current
+
+--						task.wait(1)
+--					end
+--				else
+--					print("balloon did not appear within 30 sec")
+--				end
+--			else
+--				warn("not hive")
+--			end
+--		end
+
+--		local target_mask = mod.data.actives["mask"]
+--		if target_mask and target_mask ~= "None" then
+--			farming.equip_mask(target_mask)
+--		end
+
+--		mod.data.actives["last_time_convert"] = tick()
+--		mod.data.actives["converting"] = false
+--		mod.data.actives["move"] = false
+
+--		task.defer(function()
+--			task.wait(2)
+--			if mod.data.actives["auto_farm"] then
+--				farming.farm()
+--			end
+--		end)
+--	end)
+--end
 
 function farming.get_pollen_from_gui() -- ai
 	local player = find.player
@@ -2331,16 +2447,32 @@ function farming.farm(...)
 					p.FrictionWeight,
 					p.ElasticityWeight
 				)
+				--find.player.Character:FindFirstChildOfClass("Humanoid").MoveToFinished:Wait()
+				--if mod.data.actives["converting"] then
+				--	return
+				--end
+				--if id ~= farmId then return end
+				
 				find.player.Character:FindFirstChildOfClass("Humanoid").MoveToFinished:Wait()
 				if mod.data.actives["converting"] then
+					find.player.Character:FindFirstChildOfClass("Humanoid"):MoveTo(
+						find.player.Character:FindFirstChild("HumanoidRootPart").Position
+					)
+					find.player.Character:FindFirstChildOfClass("Humanoid"):Move(Vector3.zero)
 					return
 				end
-				if id ~= farmId then return end
+				if id ~= farmId then
+					find.player.Character:FindFirstChildOfClass("Humanoid"):MoveTo(
+						find.player.Character:FindFirstChild("HumanoidRootPart").Position
+					)
+					return
+				end
+				
 				--b(false, find.player.Character:FindFirstChild("HumanoidRootPart"), p1)
 			end
 
 			if #queue["tokens"] > 0 then
-				while id == farmId and mod.data.actives["auto_farm"] == true and #queue["tokens"] > 0 do
+				while id == farmId and mod.data.actives["auto_farm"] == true and #queue["tokens"] > 0 and not mod.data.actives["converting"] do
 					if not find.player.Character:FindFirstChild("HumanoidRootPart") then
 						break
 					end
