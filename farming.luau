@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8414")
+print("loaded 0.0.8415")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -620,17 +620,28 @@ function farming.convert(...)
 		farming.honey_mask()
 	end
 
-	task.wait(.2)
+	task.wait(1)
 
-	local initial = farming.get_pollen_info()
-	local initial_pollen = initial and initial.pollen or 0
-	if initial_pollen > 0 then
-		local now = farming.get_pollen_info()
+	--local initial = farming.get_pollen_info()
+	--local initial_pollen = initial and initial.pollen or 0
+	--if initial_pollen > 0 then
+	--	local now = farming.get_pollen_info()
 
-		if now and now.pollen >= initial_pollen then
-			pressE()
-			task.wait(1)
-		end
+	--	if now and now.pollen >= initial_pollen then
+	--		pressE()
+	--		task.wait(1)
+	--	end
+	--end
+
+	--local startTime = tick()
+	--local pollenZeroSince = nil
+	
+	pressE()
+	task.wait(2)
+
+	local after = farming.get_pollen_info()
+	if after and after.pollen > 0 then
+		print("pollen not dropped yet")
 	end
 
 	local startTime = tick()
@@ -1863,16 +1874,20 @@ end
 
 task.spawn(function()
 	task.wait(2)
+
 	if mod.data.actives["auto_dig"] == true then
 		farming.autoDig(true)
-		--print("[auto_dig] autostart")
 	end
-	
+
 	local base = mod.data.actives["walkspeed"] or 16
 	if base > 16 then
 		farming.forceWalkSpeed(base)
 	end
 	
+	if mod.data.actives["auto_farm"] == true then
+		farming.farm()
+	end
+
 	while true do
 		task.wait(10)
 		if mod.data.actives["auto_sprinkler"] == true
