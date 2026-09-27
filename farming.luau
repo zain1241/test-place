@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.9")
+print("loaded 0.0.91")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -109,28 +109,36 @@ local function activateButton(...)
 	end
 
 	local clickX = pos.X + (size.X / 2)
-	local clickY = pos.Y + (size.Y / 2) + inset.Y
+	local clickYNoInset = pos.Y + (size.Y / 2)
+	local clickYInset   = clickYNoInset + inset.Y
+
+	local function tryClick(clickY)
+		pcall(function()
+			find.virtual:SendMouseMoveEvent(clickX, clickY, false, game)
+		end)
+		task.wait(0.05)
+		
+		pcall(function()
+			local VirtualUser = game:GetService("VirtualUser")
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton1(Vector2.new(clickX, clickY))
+		end)
+		task.wait(0.05)
+		
+		pcall(function()
+			find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
+		end)
+		task.wait(0.05)
+		pcall(function()
+			find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
+		end)
+	end
 	
-	pcall(function()
-		find.virtual:SendMouseMoveEvent(clickX, clickY, game)
-	end)
-	task.wait(0.05)
-	
-	pcall(function()
-		local VirtualUser = game:GetService("VirtualUser")
-		VirtualUser:CaptureController()
-		VirtualUser:ClickButton1(Vector2.new(clickX, clickY))
-	end)
-	task.wait(0.05)
-	
-	pcall(function()
-		find.virtual:SendMouseButtonEvent(clickX, clickY, 1, true, game, 1)
-	end)
-	task.wait(0.05)
-	pcall(function()
-		find.virtual:SendMouseButtonEvent(clickX, clickY, 1, false, game, 1)
-	end)
-	
+	tryClick(clickYNoInset)
+	task.wait(0.1)
+	tryClick(clickYInset)
+
+	--print("activateButton: fired at", clickX, clickYNoInset, clickYInset)
 	return true
 end
 
@@ -616,6 +624,10 @@ function farming.forceWalkSpeed(speed)
 	local function apply()
 		if mod.data.actives["converting"] then return end
 		if mod.data.actives["move"] == true then return end
+		if mod.data.actives["auto_farm"] == true
+			and mod.data.actives["style_auto_farm"] == "Walk" then
+			return
+		end
 
 		local char = find.player.Character
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -1578,8 +1590,9 @@ function farming.farm(...)
 			local startTime = tick()
 			local lastPos = root.Position
 			local stuckCount = 0
+			local flatTarget = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
 
-			while tick() - startTime < 15 do
+			while tick() - startTime < 10 do
 				if id ~= farmId
 					or mod.data.actives["auto_farm"] ~= true
 					or mod.data.actives["converting"]
@@ -1598,25 +1611,19 @@ function farming.farm(...)
 					return
 				end
 
-				local direction = Vector3.new(
-					targetPos.X - root.Position.X,
-					0,
-					targetPos.Z - root.Position.Z
-				)
-				local distance = direction.Magnitude
-
-				if distance <= 2.5 then
+				local dx = targetPos.X - root.Position.X
+				local dz = targetPos.Z - root.Position.Z
+				local distance = math.sqrt(dx * dx + dz * dz)
+				
+				if distance <= 1.5 then
 					hum:Move(Vector3.zero, false)
 					return
 				end
 
 				hum.WalkSpeed = speed
-				hum:MoveTo(Vector3.new(targetPos.X, root.Position.Y, targetPos.Z))
-				if distance > 0.001 then
-					hum:Move(direction.Unit, false)
-				end
+				flatTarget = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
+				hum:MoveTo(flatTarget)
 
-				-- Детект застревания — прыгаем, если долго не двигаемся
 				if (root.Position - lastPos).Magnitude < 0.1 then
 					stuckCount += 1
 					if stuckCount > 45 then
@@ -1664,7 +1671,7 @@ function farming.farm(...)
 					for _, v in ipairs(c:GetChildren()) do
 						if v:IsA("BasePart")
 							and isTokenInField(v, field)
-							and (root.Position - v.Position).Magnitude > 4
+							and (root.Position - v.Position).Magnitude > 2
 						then
 							table.insert(queue["tokens"], v)
 						end
