@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.2")
+print("loaded 0.0.3")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -567,7 +567,11 @@ function farming.getHive(...)
 	local pos = nil
 
 	for _, hive in ipairs(honeycombs:GetChildren()) do
-		local name = hive:FindFirstChild("Display"):FindFirstChild("Gui"):FindFirstChild("Frame"):FindFirstChild("OwnerName")
+		local display = hive:FindFirstChild("Display")
+		local gui = display and display:FindFirstChild("Gui")
+		local frame = gui and gui:FindFirstChild("Frame")
+		local name = frame and frame:FindFirstChild("OwnerName")
+
 		if name and name:IsA("TextLabel") then
 			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
 			if string.lower(trimmed) == string.lower(find.player.Name) then
@@ -581,6 +585,8 @@ function farming.getHive(...)
 			end
 		end
 	end
+
+	return pos
 end
 
 function farming.autoHive(...)
@@ -1385,6 +1391,9 @@ function farming.farm(...)
 		farming.autoHive()
 		return
 	end
+	
+	local pos = hivePos
+	print(pos)
 
 	---- ===== ПРОВЕРКА УЛЬЯ =====
 	--local hivePos = farming.get_hive_position()
