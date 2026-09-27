@@ -9,9 +9,9 @@ else
 	data = require(script.Parent:WaitForChild("data"))
 end
 
-print("1312")
-
 local farming = {}
+
+print("loaded 0.0.1")
 
 local mod = {
 	data = data,
@@ -98,80 +98,36 @@ function farming.cornl(...)
 	end
 end
 
---function farming.inv(...)
---	local a = {...}
---	local b = workspace:FindFirstChild(find.player.Name)
-
---	if a[1] == true then
---		if invc then
---			return
---		end
-
---		invc = farming.conAF(
---			find.prerender, 4,
---			function(delta)
---				for _, v in ipairs(b:GetChildren()) do
---					if v:IsA("MeshPart") then
---						if v.Name ~= "HumanoidRootPart"then
---							v.Transparency = 0.6
---						end
---						v.CanCollide = false
---						v.CanTouch = false
---						v.CanQuery = false
---					end
---				end
---			end
---		)
---	else
---		if invc then
---			invc:Disconnect()
---			invc = nil
---		end
-
---		for _, v in ipairs(b:GetChildren()) do
---			if v:IsA("MeshPart") then
---				if v.Name ~= "HumanoidRootPart" then
---					v.Transparency = 0
---				end
---				v.CanCollide = false
---				v.CanTouch = true
---				v.CanQuery = true
---			end
---		end
---	end
---end
-
 function farming.inv(...)
 	local a = {...}
+	local b = workspace:FindFirstChild(find.player.Name)
 
-	local character = find.player.Character
-	local b = character or workspace:FindFirstChild(find.player.Name)
-
-	if not b then
-		return
-	end
-
-	local function applyInvisible()
-		if not b or not b.Parent then
+	if a[1] == true then
+		if invc then
 			return
 		end
 
-		for _, v in ipairs(b:GetChildren()) do
-			if v:IsA("MeshPart") then
-				if v.Name ~= "HumanoidRootPart" then
-					v.Transparency = 0.6
+		invc = farming.conAF(
+			find.prerender, 4,
+			function(delta)
+				--print(delta)
+				for _, v in ipairs(b:GetChildren()) do
+					if v:IsA("MeshPart") then
+						if v.Name ~= "HumanoidRootPart"then
+							v.Transparency = 0.6
+						end
+						--print(v.Name)
+						v.CanCollide = false
+						v.CanTouch = false
+						v.CanQuery = false
+					end
 				end
-
-				v.CanCollide = false
-				v.CanTouch = false
-				v.CanQuery = false
 			end
-		end
-	end
-
-	local function applyVisible()
-		if not b or not b.Parent then
-			return
+		)
+	else
+		if invc then
+			invc:Disconnect()
+			invc = nil
 		end
 
 		for _, v in ipairs(b:GetChildren()) do
@@ -179,40 +135,13 @@ function farming.inv(...)
 				if v.Name ~= "HumanoidRootPart" then
 					v.Transparency = 0
 				end
-
 				v.CanCollide = false
 				v.CanTouch = true
 				v.CanQuery = true
 			end
 		end
 	end
-
-	if a[1] == true then
-		-- Включаем СРАЗУ.
-		applyInvisible()
-
-		if invc then
-			return
-		end
-
-		invc = farming.conAF(
-			find.prerender,
-			4,
-			function()
-				applyInvisible()
-			end
-		)
-
-	else
-		if invc then
-			invc:Disconnect()
-			invc = nil
-		end
-
-		applyVisible()
-	end
 end
-
 
 function farming.move(...)
 	local a = {...}
@@ -286,7 +215,10 @@ function farming.move(...)
 
 	local function b(...)
 		local a = {...}
+		--print(a[1],a[2],a[3])
+
 		local p = r(a[3])
+		--print(p)
 
 		if a[1] == true then
 			local m = Instance.new("Attachment"); m.Name = "Attachment"; m.Parent = a[2];
@@ -298,14 +230,17 @@ function farming.move(...)
 		end
 	end
 
+	--print(a[1])
+
 	if a[1] == "flowerzones" then
 		mod.data.actives["move"] = true
-
+		--print(actives["move"])
 		for _, v in ipairs(workspace:FindFirstChild("FlowerZones"):GetChildren()) do
 			if v.Name == a[3] then
 				if mod.data.actives["auto_farm"] == false then
 					return
 				end
+				local c = v.Position -- p f
 				local s = Instance.new("SelectionBox")
 				s.Parent = v; s.Adornee = v; s.Color3 = Color3.new(255, 255, 255); s.SurfaceColor3 = Color3.new(255, 255, 255); s.LineThickness = .04; s.SurfaceTransparency = .9
 
@@ -319,51 +254,75 @@ function farming.move(...)
 				end
 
 				local root = find.player.Character:FindFirstChild("HumanoidRootPart")
-				local target = v.CFrame:PointToWorldSpace(Vector3.new(0, v.Size.Y / 2 + 4, 0))
+				local target = v.CFrame:PointToWorldSpace(
+					Vector3.new(
+						0,
+						v.Size.Y / 2 + 4,
+						0
+					)
+				)
 
-				local d1 = (root.Position - target).Magnitude / math.max(a[2], .001)
+				local d1 = (root.Position - target).Magnitude
+					/ math.max(a[2], .001)
 
 				root.Anchored = true
 
 				local root = find.player.Character:FindFirstChild("HumanoidRootPart")
 				local currentFarmId = farmId
 
-				local t = TweenInfo.new(d1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+				local t = TweenInfo.new(
+					d1,
+					Enum.EasingStyle.Linear,
+					Enum.EasingDirection.Out
+				)
 
-				local currentTween = find.tweenservice:Create(root, t, {CFrame = CFrame.new(target)})
+				local currentTween = find.tweenservice:Create(
+					root,
+					t,
+					{
+						CFrame = CFrame.new(target)
+					}
+				)
 
 				tween = currentTween
 
 				currentTween:Play()
 				farming.inv(true)
 				j(true)
-				b(true, root, v)
+				--b(false, root, v)
 
 				currentTween.Completed:Once(function(state)
 					if tween == currentTween then
 						tween = nil
 					end
 
-					if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+					if state == Enum.PlaybackState.Cancelled
+						or currentFarmId ~= farmId
+					then
 						if s.Parent then
 							s:Destroy()
 						end
+
 						return
 					end
 
 					j(false)
 
-					pcall(function()
-						b(false, root, v)
-					end)
+					--pcall(function()
+					--	b(false, root, v)
+					--end)
 
 					if s.Parent then
 						s:Destroy()
 					end
-
-					farming.inv(true)
-
-					if currentFarmId ~= farmId or mod.data.actives["auto_farm"] == false then
+					
+					farming.inv(false)
+					farming.autosprinkler()
+					task.wait(.2)
+					
+					if currentFarmId ~= farmId
+						or mod.data.actives["auto_farm"] == false
+					then
 						return
 					end
 
@@ -374,10 +333,81 @@ function farming.move(...)
 				return currentTween
 			end
 		end
+	elseif a[1] == "hive" then -- ai 50/50
+		mod.data.actives["move"] = true
+		--print(actives["move"])
+		
+		if mod.data.actives["autohive"] == false then
+			return
+		end
+		
+		local target = a[3]
+		print(target)
+		if typeof(target) ~= "Vector3" then return end
+		if tween then tween:Cancel() tween = nil end
+		if not workspace:FindFirstChild(find.player.Name) then return end
+
+		local character = find.player.Character
+		if not character then return end
+
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+		local currentFarmId = farmId
+
+		local d1 = (root.Position - target).Magnitude
+			/ math.max(a[2], .001)
+
+		root.Anchored = true
+
+		local t = TweenInfo.new(
+			d1,
+			Enum.EasingStyle.Linear,
+			Enum.EasingDirection.Out
+		)
+
+		local currentTween = find.tweenservice:Create(
+			root,
+			t,
+			{
+				CFrame = CFrame.new(target)
+			}
+		)
+
+		tween = currentTween
+
+		currentTween:Play()
+		farming.inv(true)
+		j(true)
+		
+		currentTween.Completed:Once(function(state)
+			if tween == currentTween then
+				tween = nil
+			end
+
+			if state == Enum.PlaybackState.Cancelled
+				or currentFarmId ~= farmId
+			then
+				return
+			end
+
+			j(false)
+			farming.inv(false)
+
+			if currentFarmId ~= farmId then
+				return
+			end
+
+			root.Anchored = false
+			mod.data.actives["move"] = false
+			mod.data.actives["auto_farm"] = false
+			task.wait(.1)
+			mod.data.actives["auto_farm"] = true
+		end)
+		return currentTween
 	end
 end
 
-function farming.get_pollen_from_gui()
+function farming.get_pollen_from_gui() -- ai
 	local player = find.player
 	local pg = player:FindFirstChild("PlayerGui")
 	if not pg then return nil end
@@ -413,62 +443,21 @@ function farming.get_pollen_from_gui()
 end
 
 function farming.autosprinkler()
-	if mod.data.actives["auto_sprinkler"] ~= true then
-		return
-	end
-
-	if mod.data.actives["move"] == true or mod.data.actives["__converting"] == true then
-		return
-	end
-
-	if mod.data.actives["__last_sprinkler_time"] then
-		local elapsed = tick() - mod.data.actives["__last_sprinkler_time"]
-		if elapsed < 10 then
-			return
-		end
-	end
+	if mod.data.actives["auto_sprinkler"] == "" or nil then return end
+	if mod.data.actives["move"] == true then return end
 
 	local character = find.player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
-	if not root or not humanoid then return end
-
-	local groundCount = 0
-	for i = 1, 3 do
-		if humanoid.FloorMaterial ~= Enum.Material.Air then
-			if root.AssemblyLinearVelocity.Magnitude < 8 then
-				groundCount = groundCount + 1
-			end
-		end
-		task.wait(0.15)
-	end
-
-	if groundCount < 3 then
-		return
-	end
-
-	local hivePos = farming.get_hive_position()
-	if hivePos and (root.Position - hivePos).Magnitude < 30 then
-		return
-	end
-
 	local events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
 	if not events then return end
 
 	local pac = events:FindFirstChild("PlayerActivesCommand")
-	if not pac or not pac:IsA("RemoteEvent") then
-		return
-	end
+	if not pac or not pac:IsA("RemoteEvent") then return end
 
-	local ok = pcall(function()
-		pac:FireServer({Name = "Sprinkler Builder"})
-	end)
-
-	if ok then
-		mod.data.actives["__last_sprinkler_time"] = tick()
-		print("[AutoSprinkler] placed (grounded)")
-	end
+	pac:FireServer({Name = "Sprinkler Builder"})
+	print("autosprinkler point")
 end
 
 local function getStats()
@@ -490,13 +479,15 @@ function farming.honey_mask()
 	local stats = getStats()
 	if not stats then return false end
 
-	local mask = stats.EquippedMask
+	local mask = stats.Accessories
+	if not mask then return end
 	if type(mask) ~= "string" then return false end
-
-	return mask == "Honey Mask"
+	if mask == "Honey Mask" then
+		
+	end
 end
 
-function farming.get_pollen_info()
+function farming.get_pollen_info() -- ai
 	local player = find.player
 	local pg = player:FindFirstChild("PlayerGui")
 	if not pg then return nil end
@@ -531,45 +522,119 @@ function farming.get_pollen_info()
 	}
 end
 
-function farming.get_hive_position()
-	local honeycombs = workspace:FindFirstChild("Honeycombs")
-	if not honeycombs then
-		return nil
-	end
+--function farming.get_hive_position() -- ai
+--	local honeycombs = workspace:FindFirstChild("Honeycombs")
+--	if not honeycombs then
+--		return nil
+--	end
 
-	local myName = string.lower(find.player.Name)
+--	local myName = string.lower(find.player.Name)
+
+--	for _, hive in ipairs(honeycombs:GetChildren()) do
+--		local display = hive:FindFirstChild("Display")
+--		local gui = display and display:FindFirstChild("Gui")
+--		local frame = gui and gui:FindFirstChild("Frame")
+--		local ownerName = frame and frame:FindFirstChild("OwnerName")
+
+--		if ownerName and ownerName:IsA("TextLabel") then
+--			local text = ownerName.Text or ""
+--			local trimmed = string.match(text, "^%s*(.-)%s*$") or ""
+
+--			if string.lower(trimmed) == myName then
+--				local spawnPos = hive:FindFirstChild("SpawnPos")
+--				if spawnPos then
+--					if spawnPos:IsA("BasePart") then
+--						return spawnPos.Position
+--					elseif spawnPos:IsA("CFrameValue") then
+--						return spawnPos.Value.Position
+--					elseif spawnPos:IsA("Attachment") then
+--						return spawnPos.WorldPosition
+--					elseif spawnPos:IsA("Vector3Value") then
+--						return spawnPos.Value
+--					end
+--				end
+--			end
+--		end
+--	end
+
+--	return nil
+--end
+
+function farming.getHive(...)
+	local honeycombs = workspace:FindFirstChild("Honeycombs")
+	if not honeycombs then return end
+
+	local pos = nil
 
 	for _, hive in ipairs(honeycombs:GetChildren()) do
-		local display = hive:FindFirstChild("Display")
-		local gui = display and display:FindFirstChild("Gui")
-		local frame = gui and gui:FindFirstChild("Frame")
-		local ownerName = frame and frame:FindFirstChild("OwnerName")
-
-		if ownerName and ownerName:IsA("TextLabel") then
-			local text = ownerName.Text or ""
-			local trimmed = string.match(text, "^%s*(.-)%s*$") or ""
-
-			if string.lower(trimmed) == myName then
+		local name = hive:FindFirstChild("Display"):FindFirstChild("Gui"):FindFirstChild("Frame"):FindFirstChild("OwnerName")
+		if name and name:IsA("TextLabel") then
+			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
+			if string.lower(trimmed) == string.lower(find.player.Name) then
 				local spawnPos = hive:FindFirstChild("SpawnPos")
 				if spawnPos then
-					if spawnPos:IsA("BasePart") then
-						return spawnPos.Position
-					elseif spawnPos:IsA("CFrameValue") then
-						return spawnPos.Value.Position
-					elseif spawnPos:IsA("Attachment") then
-						return spawnPos.WorldPosition
-					elseif spawnPos:IsA("Vector3Value") then
-						return spawnPos.Value
-					end
+					if spawnPos:IsA("BasePart") then pos = spawnPos.Position
+					elseif spawnPos:IsA("CFrameValue") then pos = spawnPos.Value.Position
+					elseif spawnPos:IsA("Attachment") then pos = spawnPos.WorldPosition
+					elseif spawnPos:IsA("Vector3Value") then pos = spawnPos.Value end
 				end
 			end
 		end
 	end
-
-	return nil
 end
 
-function farming.wait_for_balloon(hivePos, timeout)
+function farming.autoHive(...)
+	print("test")
+	local honeycombs = workspace:FindFirstChild("Honeycombs")
+	if not honeycombs then return end
+	if mod.data.actives.autohive == false then return end
+	
+	print(1)
+	
+	local pos = nil
+	local isFree = false
+	local activeNames = {}
+	
+	for _, p in ipairs(find.players:GetPlayers()) do
+		activeNames[string.lower(p.Name)] = true
+	end
+	
+	for _, hive in ipairs(honeycombs:GetChildren()) do
+		print(2)
+		local name = hive:FindFirstChild("Display"):FindFirstChild("Gui"):FindFirstChild("Frame"):FindFirstChild("OwnerName")
+		if name and name:IsA("TextLabel") then
+			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
+			if string.lower(trimmed) == string.lower(find.player.Name) then
+				local spawnPos = hive:FindFirstChild("SpawnPos")
+				if spawnPos then
+					if spawnPos:IsA("BasePart") then pos = spawnPos.Position
+					elseif spawnPos:IsA("CFrameValue") then pos = spawnPos.Value.Position
+					elseif spawnPos:IsA("Attachment") then pos = spawnPos.WorldPosition
+					elseif spawnPos:IsA("Vector3Value") then pos = spawnPos.Value end
+				end
+			end
+
+			if trimmed == "" then
+				isFree = true
+			else
+				local lower = string.lower(trimmed)
+				if not activeNames[lower] then
+					isFree = true
+				end
+			end
+			
+			if isFree == true then
+				farming.move(
+					"hive",
+					mod.data.actives["move_speed"],
+					pos
+				)
+			end
+		end
+	end
+end
+
+function farming.wait_for_balloon(hivePos, timeout) -- ai
 	timeout = timeout or 300
 
 	if not hivePos then
@@ -587,41 +652,29 @@ function farming.wait_for_balloon(hivePos, timeout)
 
 		return nil
 	end
-
-	-- Если баллуна вообще нет, не зависаем на несколько минут
 	local balloon = findHiveBalloon()
 
 	if not balloon then
 		task.wait(1)
 		return true
 	end
-
-	print("[AutoConvert] Хайв-баллун найден — ждём его исчезновения")
-
+	
 	local startTime = tick()
-
 	while tick() - startTime < timeout do
 		if not balloon.Parent then
-			print("[AutoConvert] Хайв-баллун исчез")
-			task.wait(1)
+			task.wait(2)
 			return true
 		end
-
-		-- Дополнительная проверка: вдруг старый объект удалили и появился новый
+		
 		local currentBalloon = findHiveBalloon()
-
 		if not currentBalloon then
-			print("[AutoConvert] Хайв-баллун исчез")
 			task.wait(1)
 			return true
 		end
 
 		balloon = currentBalloon
-
 		task.wait(1)
 	end
-
-	warn("[AutoConvert] Таймаут ожидания баллуна")
 	return false
 end
 
@@ -1148,76 +1201,76 @@ function farming.go_to_hive_and_convert()
 	return true
 end
 
-function farming.find_free_hive()
-	local honeycombs = workspace:FindFirstChild("Honeycombs")
-	if not honeycombs then return nil end
+--function farming.find_free_hive()
+--	local honeycombs = workspace:FindFirstChild("Honeycombs")
+--	if not honeycombs then return nil end
 
-	local Players = game:GetService("Players")
+--	local Players = game:GetService("Players")
 
-	local activeNames = {}
-	for _, p in ipairs(Players:GetPlayers()) do
-		activeNames[string.lower(p.Name)] = true
-	end
+--	local activeNames = {}
+--	for _, p in ipairs(Players:GetPlayers()) do
+--		activeNames[string.lower(p.Name)] = true
+--	end
 
-	local root = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
-	local myPos = root and root.Position
+--	local root = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
+--	local myPos = root and root.Position
 
-	local bestHive = nil
-	local bestDist = math.huge
+--	local bestHive = nil
+--	local bestDist = math.huge
 
-	for _, hive in ipairs(honeycombs:GetChildren()) do
-		local display = hive:FindFirstChild("Display")
-		local gui = display and display:FindFirstChild("Gui")
-		local frame = gui and gui:FindFirstChild("Frame")
-		local ownerName = frame and frame:FindFirstChild("OwnerName")
+--	for _, hive in ipairs(honeycombs:GetChildren()) do
+--		local display = hive:FindFirstChild("Display")
+--		local gui = display and display:FindFirstChild("Gui")
+--		local frame = gui and gui:FindFirstChild("Frame")
+--		local ownerName = frame and frame:FindFirstChild("OwnerName")
 
-		if ownerName and ownerName:IsA("TextLabel") then
-			local text = ownerName.Text or ""
-			local trimmed = string.match(text, "^%s*(.-)%s*$") or ""
+--		if ownerName and ownerName:IsA("TextLabel") then
+--			local text = ownerName.Text or ""
+--			local trimmed = string.match(text, "^%s*(.-)%s*$") or ""
 
-			local isFree = false
+--			local isFree = false
 
-			if trimmed == "" then
-				isFree = true
-			else
-				local lower = string.lower(trimmed)
-				if not activeNames[lower] then
-					isFree = true
-				end
-			end
+--			if trimmed == "" then
+--				isFree = true
+--			else
+--				local lower = string.lower(trimmed)
+--				if not activeNames[lower] then
+--					isFree = true
+--				end
+--			end
 
-			if isFree then
-				local spawnPos = hive:FindFirstChild("SpawnPos")
-				if spawnPos then
-					local pos = nil
-					if spawnPos:IsA("BasePart") then
-						pos = spawnPos.Position
-					elseif spawnPos:IsA("CFrameValue") then
-						pos = spawnPos.Value.Position
-					elseif spawnPos:IsA("Attachment") then
-						pos = spawnPos.WorldPosition
-					elseif spawnPos:IsA("Vector3Value") then
-						pos = spawnPos.Value
-					end
+--			if isFree then
+--				local spawnPos = hive:FindFirstChild("SpawnPos")
+--				if spawnPos then
+--					local pos = nil
+--					if spawnPos:IsA("BasePart") then
+--						pos = spawnPos.Position
+--					elseif spawnPos:IsA("CFrameValue") then
+--						pos = spawnPos.Value.Position
+--					elseif spawnPos:IsA("Attachment") then
+--						pos = spawnPos.WorldPosition
+--					elseif spawnPos:IsA("Vector3Value") then
+--						pos = spawnPos.Value
+--					end
 
-					if pos then
-						local dist = myPos and (myPos - pos).Magnitude or 0
-						if dist < bestDist then
-							bestDist = dist
-							bestHive = {
-								hive = hive,
-								pos = pos,
-								ownerText = trimmed,
-							}
-						end
-					end
-				end
-			end
-		end
-	end
+--					if pos then
+--						local dist = myPos and (myPos - pos).Magnitude or 0
+--						if dist < bestDist then
+--							bestDist = dist
+--							bestHive = {
+--								hive = hive,
+--								pos = pos,
+--								ownerText = trimmed,
+--							}
+--						end
+--					end
+--				end
+--			end
+--		end
+--	end
 
-	return bestHive
-end
+--	return bestHive
+--end
 
 function farming.emulate_e(times)
 	times = times or 3
@@ -1281,25 +1334,32 @@ local autoDigId = 0
 function farming.autoDig(enabled)
 	autoDigId += 1
 	local id = autoDigId
-
-	if enabled ~= true then
-		return
-	end
+	if enabled ~= true then return end
 
 	local events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
 	local collect = events and events:FindFirstChild("ToolCollect")
-
-	if not collect or not collect:IsA("RemoteEvent") then
-		warn("ToolCollect не найден")
-		return
-	end
-
-	task.spawn(function()
-		while mod.data.actives["auto_dig"] == true and autoDigId == id do
-			collect:FireServer()
-			task.wait(.1)
+	if not collect or not collect:IsA("RemoteEvent") then warn("tool is not find") return end
+	
+	afarm = farming.conAF(
+		find.prerender, 4,
+		function(delta)
+			if mod.data.actives["auto_dig"] == true and autoDigId == id then
+				collect:FireServer()
+			else
+				if afarm then
+					afarm:Disconnect()
+					afarm = nil
+				end
+			end
 		end
-	end)
+	)
+
+	--task.spawn(function()
+	--	while mod.data.actives["auto_dig"] == true and autoDigId == id do
+	--		collect:FireServer()
+	--		task.wait(.2)
+	--	end
+	--end)
 end
 
 function farming.farm(...)
@@ -1310,63 +1370,71 @@ function farming.farm(...)
 	resetFarmMovement(enabled)
 
 	if not enabled then return end
-
-	-- ===== ПРОВЕРКА УЛЬЯ =====
-	local hivePos = farming.get_hive_position()
-
+	
+	local hivePos = farming.getHive()
 	if not hivePos then
-		print("[Farm] Своего улья нет — ищем свободный")
-
-		local freeHive = farming.find_free_hive()
-		if not freeHive then
-			warn("[Farm] Свободных ульев нет — стоп автофарм")
-			mod.data.actives["auto_farm"] = false
-			resetFarmMovement(false)
-			return
-		end
-
-		print("[Farm] Найден свободный улей:", freeHive.hive.Name)
-
-		local character = find.player.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if not root then
-			mod.data.actives["auto_farm"] = false
-			resetFarmMovement(false)
-			return
-		end
-
-		mod.data.actives["move"] = true
-		local dist = (root.Position - freeHive.pos).Magnitude
-		local speed = mod.data.actives["move_speed"] or 100
-		local tweenTime = dist / math.max(speed, 1)
-
-		root.Anchored = true
-		local tw = find.tweenservice:Create(
-			root,
-			TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
-			{CFrame = CFrame.new(freeHive.pos)}
-		)
-		tw:Play()
-		tw.Completed:Wait()
-		task.wait(1.5)
-
-		local occupied, newHivePos = farming.press_e_until_hive(5)
-
-		if not occupied or not newHivePos then
-			warn("[Farm] Не удалось занять улей — стоп автофарм")
-			root.Anchored = false
-			mod.data.actives["move"] = false
-			mod.data.actives["auto_farm"] = false
-			resetFarmMovement(false)
-			return
-		end
-
-		hivePos = newHivePos
-		print("[Farm] Улей занят, начинаем фарм")
-		root.Anchored = false
-		mod.data.actives["move"] = false
-		task.wait(0.5)
+		mod.data.actives["auto_farm"] = false
+		resetFarmMovement(false)
+		farming.autoHive()
+		return
 	end
+
+	---- ===== ПРОВЕРКА УЛЬЯ =====
+	--local hivePos = farming.get_hive_position()
+
+	--if not hivePos then
+	--	print("[Farm] Своего улья нет — ищем свободный")
+
+	--	local freeHive = farming.find_free_hive()
+	--	if not freeHive then
+	--		warn("[Farm] Свободных ульев нет — стоп автофарм")
+	--		mod.data.actives["auto_farm"] = false
+	--		resetFarmMovement(false)
+	--		return
+	--	end
+
+	--	print("[Farm] Найден свободный улей:", freeHive.hive.Name)
+
+	--	local character = find.player.Character
+	--	local root = character and character:FindFirstChild("HumanoidRootPart")
+	--	if not root then
+	--		mod.data.actives["auto_farm"] = false
+	--		resetFarmMovement(false)
+	--		return
+	--	end
+
+	--	mod.data.actives["move"] = true
+	--	local dist = (root.Position - freeHive.pos).Magnitude
+	--	local speed = mod.data.actives["move_speed"] or 100
+	--	local tweenTime = dist / math.max(speed, 1)
+
+	--	root.Anchored = true
+	--	local tw = find.tweenservice:Create(
+	--		root,
+	--		TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
+	--		{CFrame = CFrame.new(freeHive.pos)}
+	--	)
+	--	tw:Play()
+	--	tw.Completed:Wait()
+	--	task.wait(1.5)
+
+	--	local occupied, newHivePos = farming.press_e_until_hive(5)
+
+	--	if not occupied or not newHivePos then
+	--		warn("[Farm] Не удалось занять улей — стоп автофарм")
+	--		root.Anchored = false
+	--		mod.data.actives["move"] = false
+	--		mod.data.actives["auto_farm"] = false
+	--		resetFarmMovement(false)
+	--		return
+	--	end
+
+	--	hivePos = newHivePos
+	--	print("[Farm] Улей занят, начинаем фарм")
+	--	root.Anchored = false
+	--	mod.data.actives["move"] = false
+	--	task.wait(0.5)
+	--end
 
 	local selected = mod.data.actives["selected_field"]
 	local fields = workspace:FindFirstChild("FlowerZones")
@@ -1390,7 +1458,7 @@ function farming.farm(...)
 		selected
 	)
 
-	mod.data.actives["__last_convert_time"] = tick()
+	--mod.data.actives["__last_convert_time"] = tick()
 
 	if mod.data.actives["selected_field"] == "" then
 		mod.data.actives["auto_farm"] = false
@@ -1491,10 +1559,10 @@ function farming.farm(...)
 		local function m(...)
 			local a = {...}
 
-			-- НЕ двигаем, если идёт конвертация или игрок анкорен
-			if mod.data.actives["__converting"] then
-				return
-			end
+			---- НЕ двигаем, если идёт конвертация или игрок анкорен
+			--if mod.data.actives["__converting"] then
+			--	return
+			--end
 
 			if mod.data.actives["auto_farm"] == false then
 				return
@@ -1537,10 +1605,10 @@ function farming.farm(...)
 			tween:Play()
 			tween.Completed:Wait()
 
-			if mod.data.actives["__converting"] then
-				if track and track.IsPlaying then track:Stop(0) end
-				return
-			end
+			--if mod.data.actives["__converting"] then
+			--	if track and track.IsPlaying then track:Stop(0) end
+			--	return
+			--end
 
 			if atween == tween then
 				atween = nil
@@ -1551,9 +1619,9 @@ function farming.farm(...)
 			end
 			if mod.data.actives["lines"] == true then
 				tween:Play()
-				b(true, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
+				--b(true, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
 				tween.Completed:Wait()
-				b(false, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
+				--b(false, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
 				if track and track.IsPlaying then track:Stop(.1) end
 			elseif mod.data.actives["lines"] == false then
 				tween:Play()
@@ -1703,10 +1771,10 @@ function farming.farm(...)
 			local function m(...)
 				local a = {...}
 
-				-- НЕ двигаем, если идёт конвертация
-				if mod.data.actives["__converting"] then
-					return
-				end
+				---- НЕ двигаем, если идёт конвертация
+				--if mod.data.actives["__converting"] then
+				--	return
+				--end
 
 				if not find.player.Character:FindFirstChildOfClass("Humanoid") or not find.player.Character:FindFirstChild("HumanoidRootPart") or not a[1] or not a[2] then
 					return
@@ -1724,7 +1792,7 @@ function farming.farm(...)
 				find.player.Character:FindFirstChild("HumanoidRootPart").Anchored = false
 				find.player.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = a[2]
 				find.player.Character:FindFirstChildOfClass("Humanoid"):MoveTo(p1)
-				b(true, find.player.Character:FindFirstChild("HumanoidRootPart"), p1)
+				--b(true, find.player.Character:FindFirstChild("HumanoidRootPart"), p1)
 				local r = find.player.Character:FindFirstChild("HumanoidRootPart")
 				local p = r.CurrentPhysicalProperties
 
@@ -1741,7 +1809,7 @@ function farming.farm(...)
 					return
 				end
 				if id ~= farmId then return end
-				b(false, find.player.Character:FindFirstChild("HumanoidRootPart"), p1)
+				--b(false, find.player.Character:FindFirstChild("HumanoidRootPart"), p1)
 			end
 
 			if #queue["tokens"] > 0 then
@@ -1811,69 +1879,67 @@ function farming.farm(...)
 					return
 				end
 
-				if mod.data.actives["__converting"] then
-					return
-				end
+				--if mod.data.actives["__converting"] then
+				--	return
+				--end
 
-				-- ===== AUTO CONVERT CHECK =====
-				if mod.data.actives["auto_farm"] == true
-					and mod.data.actives["move"] == false
-				then
-					local shouldConvert = false
-					local reason = ""
+				---- ===== AUTO CONVERT CHECK =====
+				--if mod.data.actives["auto_farm"] == true and mod.data.actives["move"] == false then
+				--	local shouldConvert = false
+				--	local reason = ""
 
-					local info = farming.get_pollen_info()
-					local threshold = mod.data.actives["backpack"] or 80
+				--	local info = farming.get_pollen_info()
+				--	local threshold = mod.data.actives["backpack"] or 80
 
-					if info and info.percent >= threshold then
-						shouldConvert = true
-						reason = "backpack " .. math.floor(info.percent) .. "% >= " .. threshold .. "%"
-					end
+				--	if info and info.percent >= threshold then
+				--		shouldConvert = true
+				--		reason = "backpack " .. math.floor(info.percent) .. "% >= " .. threshold .. "%"
+				--	end
 
-					if not shouldConvert then
-						local autoMin = mod.data.actives["auto_convert"] or 20
-						local lastTime = mod.data.actives["__last_convert_time"] or tick()
-						local elapsed = (tick() - lastTime) / 60
+				--	if not shouldConvert then
+				--		local autoMin = mod.data.actives["auto_convert"] or 20
+				--		local lastTime = mod.data.actives["__last_convert_time"] or tick()
+				--		local elapsed = (tick() - lastTime) / 60
 
-						if elapsed >= autoMin then
-							shouldConvert = true
-							reason = "timer " .. math.floor(elapsed) .. "m >= " .. autoMin .. "m"
-						end
-					end
+				--		if elapsed >= autoMin then
+				--			shouldConvert = true
+				--			reason = "timer " .. math.floor(elapsed) .. "m >= " .. autoMin .. "m"
+				--		end
+				--	end
 
-					if shouldConvert then
-						print("[AutoConvert] Запуск:", reason)
-						mod.data.actives["__converting"] = true
+				--	if shouldConvert then
+				--		print("[AutoConvert] Запуск:", reason)
+				--		mod.data.actives["__converting"] = true
 
-						task.spawn(function()
-							local ok, err = pcall(farming.go_to_hive_and_convert)
-							if not ok then
-								warn("[AutoConvert] Ошибка:", err)
-							end
-							mod.data.actives["__converting"] = false
-							mod.data.actives["move"] = false
+				--		task.spawn(function()
+				--			local ok, err = pcall(farming.go_to_hive_and_convert)
+				--			if not ok then
+				--				warn("[AutoConvert] Ошибка:", err)
+				--			end
+				--			mod.data.actives["__converting"] = false
+				--			mod.data.actives["move"] = false
 
-							local char = find.player.Character
-							local rt = char and char:FindFirstChild("HumanoidRootPart")
-							local hm = char and char:FindFirstChildOfClass("Humanoid")
-							if rt then rt.Anchored = false end
-							if hm then
-								hm.WalkSpeed = mod.data.actives["walkspeed"] or 16
-								hm:ChangeState(Enum.HumanoidStateType.Running)
-							end
-						end)
+				--			local char = find.player.Character
+				--			local rt = char and char:FindFirstChild("HumanoidRootPart")
+				--			local hm = char and char:FindFirstChildOfClass("Humanoid")
+				--			if rt then rt.Anchored = false end
+				--			if hm then
+				--				hm.WalkSpeed = mod.data.actives["walkspeed"] or 16
+				--				hm:ChangeState(Enum.HumanoidStateType.Running)
+				--			end
+				--		end)
 
-						return
-					end
-				end
-				-- =============================
+				--		return
+				--	end
+				--end
+				---- =============================
 
 				if mod.data.actives["move"] == false then
-					farming.inv(true)
+					farming.inv(false)
 
-					if mod.data.actives["auto_sprinkler"] == true then
-						farming.autosprinkler()
-					end
+					--if mod.data.actives["auto_sprinkler"] == true then
+					--	farming.autosprinkler()
+					--end
 
 					if mod.data.actives["style_auto_farm"] == "Walk" then
 						farming.cornl(true)
