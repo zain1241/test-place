@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.62")
+print("loaded 0.0.64")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -35,7 +35,7 @@ local queue = {
 	tokens = {},
 }
 
-local invc, tween, afarm, atween, track, animwalk, p, p1; local farmId = 0
+local invc, tween, afarm, adig, aconvert, atween, track, animwalk, p, p1; local farmId = 0
 
 local function clearFarmLines()
 	local lines = workspace:FindFirstChild("Lines_Cub")
@@ -343,9 +343,9 @@ function farming.move(...)
 					end
 
 					root.Anchored = false
-					mod.data.actives["move"] = false
-					task.wait(.2)
 					farming.autosprinkler()
+					task.wait(.4)
+					mod.data.actives["move"] = false
 				end)
 
 				return currentTween
@@ -398,35 +398,125 @@ function farming.move(...)
 		j(true)
 		
 		currentTween.Completed:Once(function(state)
-			if tween == currentTween then
-				tween = nil
-			end
-
-			if state == Enum.PlaybackState.Cancelled
-				or currentFarmId ~= farmId
-			then
+			if tween == currentTween then tween = nil end
+			if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
 				return
 			end
 
 			j(false)
 			farming.inv(false)
+			root.Anchored = false
+			task.wait(1)
 
-			if currentFarmId ~= farmId then
+			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
+				mod.data.actives["move"] = false
+				return
+			end
+			
+			local ok, err = pcall(activateButton)
+			if not ok then warn("activateButton failed:", err) end
+
+			task.wait(1)
+			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
+				mod.data.actives["move"] = false
 				return
 			end
 
-			root.Anchored = false
 			mod.data.actives["move"] = false
-			task.wait(1)
-			print("completed")
-			activateButton()
-			task.wait(2)
-			if mod.data.actives["auto_farm"] == true then
-				farming.farm()
+			pcall(farming.farm)
+		end)
+		return currentTween
+	elseif a[1] == "convert" then
+		mod.data.actives["move"] = true
+		--print(actives["move"])
+
+		if mod.data.actives["autohive"] == false then
+			return
+		end
+
+		local target = a[3]
+		print(target)
+		if typeof(target) ~= "Vector3" then return end
+		if tween then tween:Cancel() tween = nil end
+		if not workspace:FindFirstChild(find.player.Name) then return end
+
+		local character = find.player.Character
+		if not character then return end
+
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+		local currentFarmId = farmId
+
+		local d1 = (root.Position - target).Magnitude
+			/ math.max(a[2], .001)
+
+		root.Anchored = true
+
+		local t = TweenInfo.new(
+			d1,
+			Enum.EasingStyle.Linear,
+			Enum.EasingDirection.Out
+		)
+
+		local currentTween = find.tweenservice:Create(
+			root,
+			t,
+			{
+				CFrame = CFrame.new(target)
+			}
+		)
+
+		tween = currentTween
+
+		currentTween:Play()
+		farming.inv(true)
+		j(true)
+
+		currentTween.Completed:Once(function(state)
+			if tween == currentTween then tween = nil end
+			if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+				return
 			end
+
+			j(false)
+			farming.inv(false)
+			root.Anchored = false
+			task.wait(1)
+
+			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
+				mod.data.actives["move"] = false
+				return
+			end
+			
+			farming.convert()
+
+			mod.data.actives["move"] = false
 		end)
 		return currentTween
 	end
+end
+
+function farming.convert(...)
+	local ok, err = pcall(activateButton)
+	if not ok then warn("activateButton failed:", err) end
+	task.wait(1)
+	
+	aconvert = farming.conAF(
+		find.prerender, 4,
+		function(delta)
+			local info = farming.get_pollen_info()
+			
+			if info then
+				if info.pollen == 0 then
+					print("completed autoconvert")
+					aconvert:Disconnect()
+					aconvert = nil
+					task.wait(1)
+					farming.farm()
+				end
+			end
+		end
+	)
 end
 
 function farming.get_pollen_from_gui() -- ai
@@ -776,35 +866,35 @@ function farming.press_e_until_convert(hivePos, maxAttempts)
 	return false
 end
 
-function farming.press_e_until_hive(maxAttempts)
-	maxAttempts = maxAttempts or 5
+--function farming.press_e_until_hive(maxAttempts)
+--	maxAttempts = maxAttempts or 5
 
-	local VirtualInputManager = game:GetService("VirtualInputManager")
+--	local VirtualInputManager = game:GetService("VirtualInputManager")
 
-	for attempt = 1, maxAttempts do
-		print("[Farm] Попытка занять улей " .. attempt .. ": жмём E")
+--	for attempt = 1, maxAttempts do
+--		print("[Farm] Попытка занять улей " .. attempt .. ": жмём E")
 
-		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-		task.wait(0.05)
-		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+--		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+--		task.wait(0.05)
+--		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 
-		local startTime = tick()
-		while tick() - startTime < 10 do
-			task.wait(1)
+--		local startTime = tick()
+--		while tick() - startTime < 10 do
+--			task.wait(1)
 
-			local hivePos = farming.get_hive_position()
-			if hivePos then
-				print("[Farm] Улей занят!")
-				return true, hivePos
-			end
-		end
+--			local hivePos = farming.get_hive_position()
+--			if hivePos then
+--				print("[Farm] Улей занят!")
+--				return true, hivePos
+--			end
+--		end
 
-		print("[Farm] Улей не занялся за 10 сек — жмём E ещё раз")
-	end
+--		print("[Farm] Улей не занялся за 10 сек — жмём E ещё раз")
+--	end
 
-	warn("[Farm] Не удалось занять улей")
-	return false, nil
-end
+--	warn("[Farm] Не удалось занять улей")
+--	return false, nil
+--end
 
 function farming.go_to_hive_and_convert()
 	print("[AutoConvert] Начинаем...")
@@ -1315,25 +1405,25 @@ end
 --	return bestHive
 --end
 
-function farming.emulate_e(times)
-	times = times or 3
+--function farming.emulate_e(times)
+--	times = times or 3
 
-	local VirtualInputManager = game:GetService("VirtualInputManager")
-	if not VirtualInputManager then
-		warn("[emulate_e] VirtualInputManager недоступен")
-		return false
-	end
+--	local VirtualInputManager = game:GetService("VirtualInputManager")
+--	if not VirtualInputManager then
+--		warn("[emulate_e] VirtualInputManager недоступен")
+--		return false
+--	end
 
-	for i = 1, times do
-		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-		task.wait(0.05)
-		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-		task.wait(0.2)
-	end
+--	for i = 1, times do
+--		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+--		task.wait(0.05)
+--		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+--		task.wait(0.2)
+--	end
 
-	print("[emulate_e] Нажал E x" .. times)
-	return true
-end
+--	print("[emulate_e] Нажал E x" .. times)
+--	return true
+--end
 
 local function resetFarmMovement(enabled)
 	if afarm then
@@ -1383,15 +1473,15 @@ function farming.autoDig(enabled)
 	local collect = events and events:FindFirstChild("ToolCollect")
 	if not collect or not collect:IsA("RemoteEvent") then warn("tool is not find") return end
 	
-	afarm = farming.conAF(
+	adig = farming.conAF(
 		find.prerender, 4,
 		function(delta)
 			if mod.data.actives["auto_dig"] == true and autoDigId == id then
 				collect:FireServer()
 			else
-				if afarm then
-					afarm:Disconnect()
-					afarm = nil
+				if adig then
+					adig:Disconnect()
+					adig = nil
 				end
 			end
 		end
@@ -1424,63 +1514,6 @@ function farming.farm(...)
 	
 	local pos = hivePos
 	print(pos)
-
-	---- ===== ПРОВЕРКА УЛЬЯ =====
-	--local hivePos = farming.get_hive_position()
-
-	--if not hivePos then
-	--	print("[Farm] Своего улья нет — ищем свободный")
-
-	--	local freeHive = farming.find_free_hive()
-	--	if not freeHive then
-	--		warn("[Farm] Свободных ульев нет — стоп автофарм")
-	--		mod.data.actives["auto_farm"] = false
-	--		resetFarmMovement(false)
-	--		return
-	--	end
-
-	--	print("[Farm] Найден свободный улей:", freeHive.hive.Name)
-
-	--	local character = find.player.Character
-	--	local root = character and character:FindFirstChild("HumanoidRootPart")
-	--	if not root then
-	--		mod.data.actives["auto_farm"] = false
-	--		resetFarmMovement(false)
-	--		return
-	--	end
-
-	--	mod.data.actives["move"] = true
-	--	local dist = (root.Position - freeHive.pos).Magnitude
-	--	local speed = mod.data.actives["move_speed"] or 100
-	--	local tweenTime = dist / math.max(speed, 1)
-
-	--	root.Anchored = true
-	--	local tw = find.tweenservice:Create(
-	--		root,
-	--		TweenInfo.new(tweenTime, Enum.EasingStyle.Linear),
-	--		{CFrame = CFrame.new(freeHive.pos)}
-	--	)
-	--	tw:Play()
-	--	tw.Completed:Wait()
-	--	task.wait(1.5)
-
-	--	local occupied, newHivePos = farming.press_e_until_hive(5)
-
-	--	if not occupied or not newHivePos then
-	--		warn("[Farm] Не удалось занять улей — стоп автофарм")
-	--		root.Anchored = false
-	--		mod.data.actives["move"] = false
-	--		mod.data.actives["auto_farm"] = false
-	--		resetFarmMovement(false)
-	--		return
-	--	end
-
-	--	hivePos = newHivePos
-	--	print("[Farm] Улей занят, начинаем фарм")
-	--	root.Anchored = false
-	--	mod.data.actives["move"] = false
-	--	task.wait(0.5)
-	--end
 
 	local selected = mod.data.actives["selected_field"]
 	local fields = workspace:FindFirstChild("FlowerZones")
@@ -1623,7 +1656,9 @@ function farming.farm(...)
 				p = a[1].Position
 			elseif typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
 				local lp = a[3].CFrame:PointToObjectSpace(a[1].Position)
-				p = a[3].CFrame:PointToWorldSpace(Vector3.new(lp.X, a[3].Size.Y / 2, lp.Z ))
+				--p = a[3].CFrame:PointToWorldSpace(Vector3.new(lp.X, a[3].Size.Y / 2, lp.Z ))
+				local hip = find.player.Character:FindFirstChildOfClass("Humanoid").HipHeight
+				p = a[3].CFrame:PointToWorldSpace(Vector3.new(lp.X, a[3].Size.Y / 2 + hip, lp.Z))
 			else
 				return
 			end
@@ -1656,24 +1691,29 @@ function farming.farm(...)
 			--	return
 			--end
 
-			if atween == tween then
-				atween = nil
-			end
+			--if atween == tween then
+			--	atween = nil
+			--end
 
-			if id ~= farmId then
-				return
-			end
-			if mod.data.actives["lines"] == true then
-				tween:Play()
-				--b(true, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
-				tween.Completed:Wait()
-				--b(false, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
-				if track and track.IsPlaying then track:Stop(.1) end
-			elseif mod.data.actives["lines"] == false then
-				tween:Play()
-				tween.Completed:Wait()
-				if track and track.IsPlaying then track:Stop(.1) end
-			end
+			--if id ~= farmId then
+			--	return
+			--end
+			--if mod.data.actives["lines"] == true then
+			--	tween:Play()
+			--	--b(true, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
+			--	tween.Completed:Wait()
+			--	--b(false, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
+			--	if track and track.IsPlaying then track:Stop(.1) end
+			--elseif mod.data.actives["lines"] == false then
+			--	tween:Play()
+			--	tween.Completed:Wait()
+			--	if track and track.IsPlaying then track:Stop(.1) end
+			--end
+
+			if atween == tween then atween = nil end
+			if id ~= farmId then return end
+
+			if track and track.IsPlaying then track:Stop(.1) end
 		end
 
 		while id == farmId and mod.data.actives["auto_farm"] == true and #queue["auto_farm"] > 0 and not mod.data.actives["__converting"] do
@@ -1923,6 +1963,44 @@ function farming.farm(...)
 					farming.inv(false)
 					mod.data.actives["move"] = false
 					return
+				end
+				
+				if mod.data.actives["auto_farm"] == true then
+					local info = farming.get_pollen_info()
+					local threshold = mod.data.actives["backpack"] or 80
+					
+					local shouldConvert = false
+					local reason = ""
+					
+					if info and info.percent >= threshold then
+						shouldConvert = true
+						reason = "backpack " .. math.floor(info.percent) .. "% >= " .. threshold .. "%"
+					end
+					
+					if not shouldConvert then
+						local autoMin = mod.data.actives["auto_convert"] or 20
+						local lastTime = mod.data.actives["last_time_convert"] or tick()
+						local elapsed = (tick() - lastTime) / 60
+
+						if elapsed >= autoMin then
+							shouldConvert = true
+							reason = "timer " .. math.floor(elapsed) .. "m >= " .. autoMin .. "m"
+						end
+					end
+					
+					if shouldConvert then
+						mod.data.actives["converting"] = true
+						
+						local targetPos = farming.getHive()
+						if targetPos then
+							farming.move(
+								"convert",
+								mod.data.actives["move_speed"],
+								targetPos
+							)
+						end
+						return
+					end
 				end
 
 				--if mod.data.actives["__converting"] then
