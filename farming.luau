@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8")
+print("loaded 0.0.81")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -643,8 +643,6 @@ function farming.convert(...)
 		function(delta)
 
 			local info = farming.get_pollen_info()
-
-			-- Таймаут всей разгрузки
 			if tick() - startTime > 600 then
 				if aconvert then
 					aconvert:Disconnect()
@@ -694,69 +692,63 @@ function farming.convert(...)
 				if mod.data.actives["balloon"] == true then
 					local hivePos = farming.getHive()
 					if hivePos then
-
 						local function findHiveBalloon()
 							for _, obj in ipairs(workspace:GetDescendants()) do
-								if obj.Name == "BalloonBody"
-									and obj:IsA("BasePart")
-								then
-
+								if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
 									if (obj.Position - hivePos).Magnitude <= 25 then
 										return obj
 									end
 								end
 							end
-
 							return nil
 						end
 						
 						local balloon = findHiveBalloon()
-
+						if not balloon then
+							local spawnStart = tick()
+							while tick() - spawnStart < 5 do
+								balloon = findHiveBalloon()
+								if balloon then
+									print("balloon appeared")
+									break
+								end
+								task.wait(0.5)
+							end
+						end
+						
 						if balloon then
-							print("balloon found, waiting...")
-
 							local balloonStart = tick()
-							while tick() - balloonStart < 600 do
-
-								if not mod.data.actives["auto_farm"] then
-									return
-								end
-								
+							while tick() - balloonStart < 300 do
 								if not balloon.Parent then
-									print("balloon is converted")
+									print("balloon converted")
 									break
 								end
-								
 								local current = findHiveBalloon()
-
 								if not current then
-									print("balloon is converted")
+									print("balloon converted")
 									break
 								end
-
 								balloon = current
-
 								task.wait(1)
 							end
-
 						else
-							print("balloon not found, continue")
+							print("balloon did not appear in 30 sec")
 						end
-
 					else
 						warn("not hive")
 					end
 				end
-
+				
 				local target_mask = mod.data.actives["mask"]
-
 				if target_mask and target_mask ~= "None" then
 					farming.equip_mask(target_mask)
+					task.wait(0.5)
 				end
 
 				mod.data.actives["last_time_convert"] = tick()
 				mod.data.actives["converting"] = false
 				mod.data.actives["move"] = false
+
 				task.wait(3)
 
 				if mod.data.actives["auto_farm"] then
@@ -1022,16 +1014,17 @@ function farming.equip_mask(name)
 
 	local ItemPackageEvent = Events:FindFirstChild("ItemPackageEvent")
 	if not ItemPackageEvent then return false end
-
-	local ok = pcall(function()
-		ItemPackageEvent:InvokeServer("Equip", {
-			Mute = false,
-			Type = name,
-			Category = "Accessory"
-		})
+	pcall(function()
+		task.spawn(function()
+			ItemPackageEvent:InvokeServer("Equip", {
+				Mute = false,
+				Type = name,
+				Category = "Accessory"
+			})
+		end)
 	end)
 
-	return ok
+	return true
 end
 
 -- обратная совместимость
