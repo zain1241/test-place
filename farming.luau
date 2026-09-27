@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.7111")
+print("loaded 0.0.72")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -990,13 +990,18 @@ function farming.autoHive(...)
 	if mod.data.actives.autohive == false then return end
 
 	local activeNames = {}
-
 	for _, p in ipairs(find.players:GetPlayers()) do
 		activeNames[string.lower(p.Name)] = true
 	end
 
+	local myName = string.lower(find.player.Name)
 	local myHivePos = nil
 	local freeHivePos = nil
+
+	local EMPTY = {
+		[""] = true, [" "] = true, ["-"] = true, ["--"] = true, ["—"] = true,
+		["none"] = true, ["empty"] = true, ["free"] = true, ["n/a"] = true,
+	}
 
 	for _, hive in ipairs(honeycombs:GetChildren()) do
 		local display = hive:FindFirstChild("Display")
@@ -1008,7 +1013,7 @@ function farming.autoHive(...)
 			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
 			local lower = string.lower(trimmed)
 
-			if lower == string.lower(find.player.Name) then
+			if lower == myName then
 				local spawnPos = hive:FindFirstChild("SpawnPos")
 				if spawnPos then
 					if spawnPos:IsA("BasePart") then myHivePos = spawnPos.Position
@@ -1019,12 +1024,7 @@ function farming.autoHive(...)
 				if myHivePos then break end
 			else
 				if not freeHivePos then
-					local isFree = false
-					if trimmed == "" then
-						isFree = true
-					elseif not activeNames[lower] then
-						isFree = true
-					end
+					local isFree = EMPTY[lower] == true or not activeNames[lower]
 
 					if isFree then
 						local spawnPos = hive:FindFirstChild("SpawnPos")
@@ -1041,14 +1041,83 @@ function farming.autoHive(...)
 	end
 
 	local targetPos = myHivePos or freeHivePos
+
 	if targetPos then
 		farming.move(
 			"hive",
 			mod.data.actives["move_speed"],
 			targetPos
 		)
+	else
+		--warn("[autoHive] не нашёл ни свой, ни свободный улей")
 	end
 end
+
+--function farming.autoHive(...)
+--	local honeycombs = workspace:FindFirstChild("Honeycombs")
+--	if not honeycombs then return end
+--	if mod.data.actives.autohive == false then return end
+
+--	local activeNames = {}
+
+--	for _, p in ipairs(find.players:GetPlayers()) do
+--		activeNames[string.lower(p.Name)] = true
+--	end
+
+--	local myHivePos = nil
+--	local freeHivePos = nil
+
+--	for _, hive in ipairs(honeycombs:GetChildren()) do
+--		local display = hive:FindFirstChild("Display")
+--		local gui = display and display:FindFirstChild("Gui")
+--		local frame = gui and gui:FindFirstChild("Frame")
+--		local name = frame and frame:FindFirstChild("OwnerName")
+
+--		if name and name:IsA("TextLabel") then
+--			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
+--			local lower = string.lower(trimmed)
+
+--			if lower == string.lower(find.player.Name) then
+--				local spawnPos = hive:FindFirstChild("SpawnPos")
+--				if spawnPos then
+--					if spawnPos:IsA("BasePart") then myHivePos = spawnPos.Position
+--					elseif spawnPos:IsA("CFrameValue") then myHivePos = spawnPos.Value.Position
+--					elseif spawnPos:IsA("Attachment") then myHivePos = spawnPos.WorldPosition
+--					elseif spawnPos:IsA("Vector3Value") then myHivePos = spawnPos.Value end
+--				end
+--				if myHivePos then break end
+--			else
+--				if not freeHivePos then
+--					local isFree = false
+--					if trimmed == "" then
+--						isFree = true
+--					elseif not activeNames[lower] then
+--						isFree = true
+--					end
+
+--					if isFree then
+--						local spawnPos = hive:FindFirstChild("SpawnPos")
+--						if spawnPos then
+--							if spawnPos:IsA("BasePart") then freeHivePos = spawnPos.Position
+--							elseif spawnPos:IsA("CFrameValue") then freeHivePos = spawnPos.Value.Position
+--							elseif spawnPos:IsA("Attachment") then freeHivePos = spawnPos.WorldPosition
+--							elseif spawnPos:IsA("Vector3Value") then freeHivePos = spawnPos.Value end
+--						end
+--					end
+--				end
+--			end
+--		end
+--	end
+
+--	local targetPos = myHivePos or freeHivePos
+--	if targetPos then
+--		farming.move(
+--			"hive",
+--			mod.data.actives["move_speed"],
+--			targetPos
+--		)
+--	end
+--end
 
 --function farming.wait_for_balloon(hivePos, timeout) -- ai
 --	timeout = timeout or 300
