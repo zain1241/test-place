@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.5")
+print("loaded 0.0.6")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -401,8 +401,10 @@ function farming.move(...)
 
 			root.Anchored = false
 			mod.data.actives["move"] = false
+			task.wait(.2)
+			print("completed")
 			farming.activateButton()
-			task.wait(1)
+			task.wait(.4)
 			if mod.data.actives["auto_farm"] == true then
 				farming.farm()
 			end
