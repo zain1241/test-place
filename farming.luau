@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.87")
+print("loaded 0.0.9")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -110,15 +110,27 @@ local function activateButton(...)
 
 	local clickX = pos.X + (size.X / 2)
 	local clickY = pos.Y + (size.Y / 2) + inset.Y
-	local vec = Vector2.new(clickX, clickY)
 	
-	local VirtualUser = game:GetService("VirtualUser")
 	pcall(function()
-		VirtualUser:CaptureController()
-		VirtualUser:ClickButton1(vec)
+		find.virtual:SendMouseMoveEvent(clickX, clickY, game)
 	end)
-
-	--print("activateButton: fired")
+	task.wait(0.05)
+	
+	pcall(function()
+		local VirtualUser = game:GetService("VirtualUser")
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton1(Vector2.new(clickX, clickY))
+	end)
+	task.wait(0.05)
+	
+	pcall(function()
+		find.virtual:SendMouseButtonEvent(clickX, clickY, 1, true, game, 1)
+	end)
+	task.wait(0.05)
+	pcall(function()
+		find.virtual:SendMouseButtonEvent(clickX, clickY, 1, false, game, 1)
+	end)
+	
 	return true
 end
 
@@ -1564,6 +1576,8 @@ function farming.farm(...)
 			hum.WalkSpeed = speed
 
 			local startTime = tick()
+			local lastPos = root.Position
+			local stuckCount = 0
 
 			while tick() - startTime < 15 do
 				if id ~= farmId
@@ -1589,7 +1603,6 @@ function farming.farm(...)
 					0,
 					targetPos.Z - root.Position.Z
 				)
-
 				local distance = direction.Magnitude
 
 				if distance <= 2.5 then
@@ -1597,9 +1610,25 @@ function farming.farm(...)
 					return
 				end
 
+				hum.WalkSpeed = speed
+				hum:MoveTo(Vector3.new(targetPos.X, root.Position.Y, targetPos.Z))
 				if distance > 0.001 then
 					hum:Move(direction.Unit, false)
 				end
+
+				-- Детект застревания — прыгаем, если долго не двигаемся
+				if (root.Position - lastPos).Magnitude < 0.1 then
+					stuckCount += 1
+					if stuckCount > 45 then
+						hum.Jump = true
+						task.wait(0.1)
+						hum.Jump = false
+						stuckCount = 0
+					end
+				else
+					stuckCount = 0
+				end
+				lastPos = root.Position
 
 				task.wait()
 			end
@@ -1648,15 +1677,21 @@ function farming.farm(...)
 					and mod.data.actives["auto_farm"] == true
 					and #queue["tokens"] > 0
 				do
+					local root = find.player.Character
+						and find.player.Character:FindFirstChild("HumanoidRootPart")
+					if not root then break end
+
 					table.sort(queue["tokens"], function(a, b)
-						return (find.player.Character:FindFirstChild("HumanoidRootPart").Position - a.Position).Magnitude
-							< (find.player.Character:FindFirstChild("HumanoidRootPart").Position - b.Position).Magnitude
+						return (root.Position - a.Position).Magnitude
+							< (root.Position - b.Position).Magnitude
 					end)
 
 					local v = table.remove(queue["tokens"], 1)
 					if v and v.Parent and a.Speed then
 						walkTo(v.Position, a.Speed)
 					end
+
+					task.wait()
 				end
 			else
 				if a.TargetPosition and a.Speed then
