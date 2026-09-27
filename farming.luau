@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.66667")
+print("loaded 0.0.7")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -606,7 +606,21 @@ function farming.convert(...)
 		aconvert = nil
 	end
 	
-	pressE()
+	local initial = farming.get_pollen_info()
+	local initial_pollen = initial and initial.pollen or 0
+
+	for i = 1, 5 do
+		pressE()
+		task.wait(2)
+
+		local now = farming.get_pollen_info()
+		if now and now.pollen < initial_pollen then
+			--print("[convert] E сработало, разгрузка началась")
+			break
+		end
+
+		--print("[convert] E не сработало, попытка", i)
+	end
 
 	if mod.data.actives["honey_mask"] == true then
 		farming.honey_mask()
@@ -621,9 +635,10 @@ function farming.convert(...)
 			pollen_at_start = info.pollen
 		end
 		
-		if tick() - startTime > 600 then
+		if tick() - startTime > 120 then
 			--warn("[convert] timeout, выходим")
 			if aconvert then aconvert:Disconnect() aconvert = nil end
+			mod.data.actives["last_time_convert"] = tick()
 			mod.data.actives["converting"] = false
 			mod.data.actives["move"] = false
 			
@@ -683,11 +698,19 @@ function farming.convert(...)
 			end
 		end
 		
+		--local target_mask = mod.data.actives["mask"]
+		--if target_mask and target_mask ~= "None" then
+		--	farming.equip_mask(target_mask)
+		--end
+		
 		local target_mask = mod.data.actives["mask"]
 		if target_mask and target_mask ~= "None" then
-			farming.equip_mask(target_mask)
+			task.spawn(function()
+				farming.equip_mask(target_mask)
+			end)
 		end
-
+		
+		mod.data.actives["last_time_convert"] = tick() 
 		mod.data.actives["converting"] = false
 		mod.data.actives["move"] = false
 
@@ -797,33 +820,47 @@ function farming.equip_mask(name)
 		return false
 	end
 
-	local stats = getStats()
-	if not stats then return false end
-
-	local current = stats.Accessories
-	if type(current) ~= "string" then return false end
-	if current == name then
-		return true  -- уже надета
-	end
-
 	local Events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
-	if not Events then return false end
+	if not Events then
+		warn("[equip_mask] Events not found")
+		return false
+	end
 
 	local ItemPackageEvent = Events:FindFirstChild("ItemPackageEvent")
-	if not ItemPackageEvent then return false end
-
-	local ok = pcall(function()
-		ItemPackageEvent:InvokeServer("Equip", {
-			Mute = false,
-			Type = name,
-			Category = "Accessory"
-		})
-	end)
-
-	if ok then
-		-- print("equipped:", name)
+	if not ItemPackageEvent then
+		warn("[equip_mask] ItemPackageEvent not found")
+		return false
 	end
-	return ok
+	
+	local formats = {
+		{"Equip", {Mute = false, Type = name, Category = "Accessory", Slot = "Hat"}},
+		{"Equip", {Mute = false, Type = name, Category = "Accessory"}},
+		{"Equip", {Type = name, Category = "Accessory", Slot = "Hat"}},
+		{"Equip", name, "Accessory"},
+		{"Equip", name},
+	}
+
+	for i, args in ipairs(formats) do
+		local ok, err = pcall(function()
+			ItemPackageEvent:InvokeServer(table.unpack(args))
+		end)
+		--print("[equip_mask] формат", i, ok and "OK" or ("ERR: " .. tostring(err)))
+		task.wait(1.5)
+		
+		local stats = getStats()
+		if stats then
+			local eq = stats.EquippedAccessories
+			local hat = eq and eq["Hat"]
+			--print("[equip_mask] теперь Hat =", hat)
+			if hat == name then
+				--print("[equip_mask] УСПЕХ формат", i)
+				return true
+			end
+		end
+	end
+
+	--warn("[equip_mask] ни один формат не сработал для", name)
+	return false
 end
 
 -- обратная совместимость
@@ -1650,12 +1687,19 @@ local autoDigId = 0
 function farming.autoDig(enabled)
 	autoDigId += 1
 	local id = autoDigId
-	if enabled ~= true then return end
+	if adig then
+		adig:Disconnect()
+		adig = nil
+	end
 
+	if enabled ~= true then return end
 	local events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
 	local collect = events and events:FindFirstChild("ToolCollect")
-	if not collect or not collect:IsA("RemoteEvent") then warn("tool is not find") return end
-	
+	if not collect or not collect:IsA("RemoteEvent") then
+		warn("tool is not find")
+		return
+	end
+
 	adig = farming.conAF(
 		find.prerender, 4,
 		function(delta)
@@ -1669,13 +1713,6 @@ function farming.autoDig(enabled)
 			end
 		end
 	)
-
-	--task.spawn(function()
-	--	while mod.data.actives["auto_dig"] == true and autoDigId == id do
-	--		collect:FireServer()
-	--		task.wait(.2)
-	--	end
-	--end)
 end
 
 function farming.farm(...)
