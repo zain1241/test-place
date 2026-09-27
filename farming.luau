@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.941")
+print("loaded 0.0.942")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -647,19 +647,45 @@ function farming.convert(...)
 		and after_pollen < initial_pollen - 50
 	then
 		eSucceeded = true
-		--print("[convert] разгрузка уже идёт:", initial_pollen, "->", after_pollen)
 	end
 
 	if not eSucceeded then
-		local maxEAttempts = 5
+		local maxEAttempts = 8
 		local eWait = 5
-		local hivePos = farming.getHive()
+		
+		task.wait(1.5)
 
 		for attempt = 1, maxEAttempts do
 			local before = farming.get_pollen_info()
 			local before_pollen = before and before.pollen or 0
 
+			-- ждём появления СВЕЖЕЙ кнопки
+			local btn = nil
+			local btnStart = tick()
+			while tick() - btnStart < 2 do
+				btn = findActivateButton()
+				if btn and btn.Visible and btn.AbsoluteSize.X > 0 then
+					break
+				end
+				btn = nil
+				task.wait(0.1)
+			end
+			
 			activateButton()
+			task.wait(0.4)
+			
+			local now1 = farming.get_pollen_info()
+			if now1 and before_pollen > 0
+				and (now1.pollen <= 0 or now1.pollen < before_pollen - 50)
+			then
+				eSucceeded = true
+				break
+			end
+			
+			btn = findActivateButton()
+			if btn and btn.Visible and btn.AbsoluteSize.X > 0 then
+				activateButton()
+			end
 
 			local checkStart = tick()
 			local dropped = false
@@ -671,12 +697,10 @@ function farming.convert(...)
 				if now then
 					if now.pollen <= 0 then
 						dropped = true
-						--print("[convert] E #"..attempt..": pollen = 0")
 						break
 					end
 					if before_pollen > 0 and now.pollen < before_pollen - 50 then
 						dropped = true
-						--print("[convert] E #"..attempt..":", before_pollen, "->", now.pollen)
 						break
 					end
 				end
@@ -685,8 +709,6 @@ function farming.convert(...)
 			if dropped then
 				eSucceeded = true
 				break
-			else
-				--print("[convert] E #"..attempt..": нет падения, пробуем ещё")
 			end
 		end
 	end
