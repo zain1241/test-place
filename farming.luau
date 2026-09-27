@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.841")
+print("loaded 0.0.8412")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -747,22 +747,36 @@ function farming.get_pollen_from_gui() -- ai
 	}
 end
 
+--function farming.autosprinkler()
+--	if mod.data.actives["auto_sprinkler"] ~= true then return end
+--	if mod.data.actives["move"] == true then return end
+
+--	local character = find.player.Character
+--	local root = character and character:FindFirstChild("HumanoidRootPart")
+--	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+--	local events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
+--	if not events then return end
+
+--	local pac = events:FindFirstChild("PlayerActivesCommand")
+--	if not pac or not pac:IsA("RemoteEvent") then return end
+
+--	pac:FireServer({Name = "Sprinkler Builder"})
+--	print("autosprinkler point")
+--end
+
 function farming.autosprinkler()
 	if mod.data.actives["auto_sprinkler"] ~= true then return end
 	if mod.data.actives["move"] == true then return end
 
-	local character = find.player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local Events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
+	if not Events then return end
 
-	local events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
-	if not events then return end
-
-	local pac = events:FindFirstChild("PlayerActivesCommand")
+	local pac = Events:FindFirstChild("PlayerActivesCommand")
 	if not pac or not pac:IsA("RemoteEvent") then return end
 
 	pac:FireServer({Name = "Sprinkler Builder"})
-	print("autosprinkler point")
+	--print("autosprinkler fired")
 end
 
 local function getStats()
@@ -1733,5 +1747,24 @@ function farming.farm(...)
 		farming.inv(false)
 	end
 end
+
+task.spawn(function()
+	task.wait(2)
+	if mod.data.actives["auto_dig"] == true then
+		farming.autoDig(true)
+		--print("[auto_dig] autostart")
+	end
+	
+	while true do
+		task.wait(10)
+		if mod.data.actives["auto_sprinkler"] == true
+			and mod.data.actives["auto_farm"] == true
+			and mod.data.actives["move"] == false
+			and mod.data.actives["converting"] ~= true
+		then
+			farming.autosprinkler()
+		end
+	end
+end)
 
 return farming
