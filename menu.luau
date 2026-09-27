@@ -1477,15 +1477,15 @@ function menu.dop_create()
 
 							callback = function(value)
 								local character = find.player.Character
-								local humanoid = character
-									and character:FindFirstChildOfClass("Humanoid")
+								local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+								if humanoid then humanoid.WalkSpeed = value end
 
+								if mod.farming.forceWalkSpeed then
+									mod.farming.forceWalkSpeed(value)
+								end
+								
 								local root = character
 									and character:FindFirstChild("HumanoidRootPart")
-
-								if humanoid then
-									humanoid.WalkSpeed = value
-								end
 
 								if root then
 									local p = root.CurrentPhysicalProperties
