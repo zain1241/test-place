@@ -54,8 +54,8 @@ data.actives = {
 	backpack = 80,
 	auto_convert = 20,
 	mask = "None",
-	--__converting = false,
-	--__last_convert_time = 0,
+	converting = false,
+	last_time_convert = 0,
 	
 	--farm settings
 	collect_bubbles = false,
