@@ -74,6 +74,7 @@ data.actives = {
 	position_script = UDim2.new(0.22, 0, 0.5, 0),
 	walkspeed = 40,
 	autohive = true,
+	anti_afk = true,
 }
 
 return data
