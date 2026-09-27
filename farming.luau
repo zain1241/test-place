@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.843")
+print("loaded 0.0.8431")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -91,7 +91,7 @@ local function activateButton(...)
 		warn("ActivateButton not found")
 		return false
 	end
-	
+
 	local waitStart = tick()
 	while tick() - waitStart < 2 do
 		if button.Visible and button.AbsoluteSize.X > 0 then
@@ -111,48 +111,37 @@ local function activateButton(...)
 	local clickX = pos.X + (size.X / 2)
 	local clickY = pos.Y + (size.Y / 2) + inset.Y
 	local vec = Vector2.new(clickX, clickY)
-
-	local VirtualUser = game:GetService("VirtualUser")
-	local VIM = find.virtual
 	
+	local before = farming.get_pollen_info()
+	local before_pollen = before and before.pollen or -1
+	
+	local VirtualUser = game:GetService("VirtualUser")
 	pcall(function()
 		VirtualUser:CaptureController()
 		VirtualUser:ClickButton1(vec)
 	end)
-	task.wait(1)
+
+	local checkStart = tick()
+	while tick() - checkStart < 10 do
+		task.wait(0.2)
+
+		local now = farming.get_pollen_info()
+		if now and before_pollen >= 0 then
+			if now.pollen < before_pollen or now.pollen <= 0 then
+				--print("activateButton: fired (first click ok)")
+				return true
+			end
+		end
+	end
 	
 	pcall(function()
+		local VIM = find.virtual
 		VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
 		task.wait(0.05)
 		VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
 	end)
-	task.wait(1)
-	
-	pcall(function()
-		VIM:SendMouseButtonEvent(clickX, clickY, 0, true, button, 1)
-		task.wait(0.05)
-		VIM:SendMouseButtonEvent(clickX, clickY, 0, false, button, 1)
-	end)
-	task.wait(1)
-	
-	pcall(function()
-		if button.Activated then button.Activated:Fire() end
-	end)
-	pcall(function()
-		if button.MouseButton1Click then button.MouseButton1Click:Fire() end
-	end)
-	pcall(function()
-		if button.MouseButton1Down then button.MouseButton1Down:Fire() end
-		if button.MouseButton1Up then button.MouseButton1Up:Fire() end
-	end)
-	pcall(function()
-		if button.MouseEnter then button.MouseEnter:Fire() end
-		if button.InputBegan then
-			--
-		end
-	end)
 
-	print("activateButton: fired all methods")
+	--print("activateButton: fired (fallback)")
 	return true
 end
 
@@ -481,11 +470,16 @@ function farming.move(...)
 			local occupied = false
 
 			while tries < maxTries and not occupied do
+				if farming.getHive() then
+					occupied = true
+					break
+				end
+
 				tries += 1
 				pcall(activateButton)
-				local checkStart = tick()
 
-				while tick() - checkStart < 1.5 do
+				local checkStart = tick()
+				while tick() - checkStart < 1.2 do
 					if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
 						mod.data.actives["move"] = false
 						mod.data.actives["converting"] = false
@@ -497,7 +491,7 @@ function farming.move(...)
 						break
 					end
 
-					task.wait(0.3)
+					task.wait(0.15)
 				end
 
 				if occupied then
@@ -652,52 +646,51 @@ function farming.convert(...)
 	if mod.data.actives["honey_mask"] == true then
 		farming.honey_mask()
 	end
-
-	task.wait(1)
 	
-	local maxEAttempts = 5
-	local eWait = 5
+	local initial = farming.get_pollen_info()
+	local initial_pollen = initial and initial.pollen or 0
+
+	task.wait(2)
+
+	local after = farming.get_pollen_info()
+	local after_pollen = after and after.pollen or initial_pollen
+
 	local eSucceeded = false
 
-	for attempt = 1, maxEAttempts do
-		local before = farming.get_pollen_info()
-		local before_pollen = before and before.pollen or 0
+	if after_pollen < initial_pollen then
+		eSucceeded = true
+		print("[convert] разгрузка уже идёт")
+	else
+		local maxEAttempts = 5
+		local eWait = 5
 
-		pressE()
-		--print("[convert] E попытка " .. attempt .. ", pollen до: " .. before_pollen)
+		for attempt = 1, maxEAttempts do
+			local before = farming.get_pollen_info()
+			local before_pollen = before and before.pollen or 0
 
-		local checkStart = tick()
-		local dropped = false
+			pressE()
 
-		while tick() - checkStart < eWait do
-			task.wait(1)
+			local checkStart = tick()
+			local dropped = false
 
-			local now = farming.get_pollen_info()
-			if now then
-				if now.pollen <= 0 then
-					dropped = true
-					--print("[convert] E сработало, pollen = 0")
-					break
-				end
-				if now.pollen < before_pollen then
-					dropped = true
-					--print("[convert] E сработало, pollen упал до " .. now.pollen)
-					break
+			while tick() - checkStart < eWait do
+				task.wait(1)
+
+				local now = farming.get_pollen_info()
+				if now then
+					if now.pollen <= 0 then dropped = true break end
+					if now.pollen < before_pollen then dropped = true break end
 				end
 			end
-		end
 
-		if dropped then
-			eSucceeded = true
-			break
+			if dropped then
+				eSucceeded = true
+				break
+			end
 		end
-
-		--print("[convert] E не дало эффекта за " .. eWait .. " сек")
 	end
 
 	if not eSucceeded then
-		--warn("[convert] E не сработало за " .. maxEAttempts .. " попыток, перезапуск")
-
 		if aconvert then aconvert:Disconnect() aconvert = nil end
 		mod.data.actives["converting"] = false
 		mod.data.actives["move"] = false
@@ -1570,7 +1563,7 @@ function farming.farm(...)
 			local speed =
 				a and a.Speed
 				or mod.data.actives["move_speed"]
-				or 50
+				or 80
 
 			local target = nil
 			local targetIsToken = false
@@ -1594,7 +1587,7 @@ function farming.farm(...)
 					break
 				end
 
-				if root.Anchored then
+				if root.Anchored or mod.data.actives["move"] == true then
 					hum:Move(Vector3.zero, false)
 					RunService.Heartbeat:Wait()
 					continue
@@ -1653,9 +1646,9 @@ function farming.farm(...)
 				
 				if targetIsToken and distance <= 0.5 then
 					hum:Move(Vector3.zero, false)
-					break
+					RunService.Heartbeat:Wait()
+					continue
 				end
-
 				--if direction.Magnitude > 0.001 then
 				--	hum.WalkSpeed = speed
 				--	hum:Move(direction.Unit, false)
