@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8417")
+print("loaded 0.0.8418")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -734,17 +734,42 @@ function farming.convert(...)
 					local hivePos = farming.getHive()
 
 					if hivePos then
-						local balloon = nil
+						local function findBalloonAt(hivePos)
+							if not hivePos then return nil end
 
-						for _, obj in ipairs(workspace:GetDescendants()) do
-							if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
-								if (obj.Position - hivePos).Magnitude <= 25 then
-									balloon = obj
-									break
+							local candidates = {
+								workspace,
+								workspace:FindFirstChild("Balloons"),
+								workspace:FindFirstChild("Effects"),
+								workspace:FindFirstChild("FX"),
+								workspace:FindFirstChild("Balloon"),
+							}
+
+							for _, container in ipairs(candidates) do
+								if container then
+									for _, obj in ipairs(container:GetChildren()) do
+										if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
+											if (obj.Position - hivePos).Magnitude <= 25 then
+												return obj
+											end
+										end
+									end
+									for _, child in ipairs(container:GetChildren()) do
+										for _, obj in ipairs(child:GetChildren()) do
+											if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
+												if (obj.Position - hivePos).Magnitude <= 25 then
+													return obj
+												end
+											end
+										end
+									end
 								end
 							end
-						end
 
+							return nil
+						end
+						
+						local balloon = findBalloonAt(hivePos)
 						if balloon then
 							--print("balloon found, waiting for conversion...")
 							local balloonStart = tick()
@@ -1584,7 +1609,7 @@ function farming.farm(...)
 				)
 
 				local distance = direction.Magnitude
-				if targetIsToken and distance <= 1.5 then
+				if targetIsToken and distance <= 5 then
 					target = nil
 					targetIsToken = false
 					continue
@@ -1595,9 +1620,18 @@ function farming.farm(...)
 					break
 				end
 
+				--if direction.Magnitude > 0.001 then
+				--	hum.WalkSpeed = speed
+				--	hum:Move(direction.Unit, false)
+				--end
+				
 				if direction.Magnitude > 0.001 then
 					hum.WalkSpeed = speed
-					hum:Move(direction.Unit, false)
+					hum:MoveTo(Vector3.new(
+						targetPosition.X,
+						root.Position.Y,
+						targetPosition.Z
+						))
 				end
 
 				RunService.Heartbeat:Wait()
