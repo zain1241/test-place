@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.667")
+print("loaded 0.0.6667")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -675,7 +675,9 @@ function farming.convert(...)
 
 		task.defer(function()
 			task.wait(2)
-			farming.farm()
+			if mod.data.actives["auto_farm"] then
+				farming.farm()
+			end
 		end)
 	end)
 end
