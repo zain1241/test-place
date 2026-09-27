@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8412")
+print("loaded 0.0.8413")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -574,6 +574,39 @@ local function pressE()
 		task.wait(0.05)
 		find.virtual:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 	end)
+end
+
+function farming.forceWalkSpeed(speed)
+	if farming.__speedConn then
+		farming.__speedConn:Disconnect()
+		farming.__speedConn = nil
+	end
+
+	if type(speed) ~= "number" or speed <= 0 then
+		farming.__forcedSpeed = nil
+		return
+	end
+
+	farming.__forcedSpeed = speed
+
+	local function apply()
+		if mod.data.actives["converting"] then return end
+		if mod.data.actives["move"] == true then return end
+
+		local char = find.player.Character
+		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+		if not humanoid then return end
+
+		if humanoid.WalkSpeed ~= farming.__forcedSpeed then
+			humanoid.WalkSpeed = farming.__forcedSpeed
+		end
+	end
+
+	farming.__speedConn = find.renderstepped:Connect(function()
+		if farming.__forcedSpeed then apply() end
+	end)
+	
+	apply()
 end
 
 function farming.convert(...)
@@ -1753,6 +1786,11 @@ task.spawn(function()
 	if mod.data.actives["auto_dig"] == true then
 		farming.autoDig(true)
 		--print("[auto_dig] autostart")
+	end
+	
+	local base = mod.data.actives["walkspeed"] or 16
+	if base > 16 then
+		farming.forceWalkSpeed(base)
 	end
 	
 	while true do
