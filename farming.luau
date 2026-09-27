@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.711")
+print("loaded 0.0.7111")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -406,8 +406,8 @@ function farming.move(...)
 						return
 					end
 
-					farming.autosprinkler()
-					task.wait(2)
+					--farming.autosprinkler()
+					--task.wait(2)
 
 					if currentFarmId ~= farmId
 						or mod.data.actives["auto_farm"] == false
@@ -418,6 +418,8 @@ function farming.move(...)
 
 					root.Anchored = false
 					mod.data.actives["move"] = false
+					farming.autosprinkler()
+					task.wait(1)
 				end)
 
 				return currentTween
@@ -617,9 +619,9 @@ function farming.convert(...)
 	local initial = farming.get_pollen_info()
 	local initial_pollen = initial and initial.pollen or 0
 
-	for i = 1, 5 do
+	for i = 1, 3 do
 		pressE()
-		task.wait(10)
+		task.wait(5)
 
 		local now = farming.get_pollen_info()
 		if now and now.pollen < initial_pollen then
@@ -745,17 +747,15 @@ function farming.convert(...)
 
 		local target_mask = mod.data.actives["mask"]
 		if target_mask and target_mask ~= "None" then
-			task.spawn(function()
-				farming.equip_mask(target_mask)
-			end)
+			farming.equip_mask(target_mask)
 		end
 
 		mod.data.actives["last_time_convert"] = tick()
 		mod.data.actives["converting"] = false
 		mod.data.actives["move"] = false
+
 		task.defer(function()
 			task.wait(2)
-
 			if mod.data.actives["auto_farm"] then
 				farming.farm()
 			end
@@ -861,46 +861,20 @@ function farming.equip_mask(name)
 	end
 
 	local Events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
-	if not Events then
-		warn("[equip_mask] Events not found")
-		return false
-	end
+	if not Events then return false end
 
 	local ItemPackageEvent = Events:FindFirstChild("ItemPackageEvent")
-	if not ItemPackageEvent then
-		warn("[equip_mask] ItemPackageEvent not found")
-		return false
-	end
-	
-	local formats = {
-		{"Equip", {Mute = false, Type = name, Category = "Accessory", Slot = "Hat"}},
-		{"Equip", {Mute = false, Type = name, Category = "Accessory"}},
-		{"Equip", {Type = name, Category = "Accessory", Slot = "Hat"}},
-		{"Equip", name, "Accessory"},
-		{"Equip", name},
-	}
+	if not ItemPackageEvent then return false end
 
-	for i, args in ipairs(formats) do
-		local ok, err = pcall(function()
-			ItemPackageEvent:InvokeServer(table.unpack(args))
-		end)
-		--print("[equip_mask] формат", i, ok and "OK" or ("ERR: " .. tostring(err)))
-		task.wait(1.5)
-		
-		local stats = getStats()
-		if stats then
-			local eq = stats.EquippedAccessories
-			local hat = eq and eq["Hat"]
-			--print("[equip_mask] теперь Hat =", hat)
-			if hat == name then
-				--print("[equip_mask] УСПЕХ формат", i)
-				return true
-			end
-		end
-	end
+	local ok = pcall(function()
+		ItemPackageEvent:InvokeServer("Equip", {
+			Mute = false,
+			Type = name,
+			Category = "Accessory"
+		})
+	end)
 
-	--warn("[equip_mask] ни один формат не сработал для", name)
-	return false
+	return ok
 end
 
 -- обратная совместимость
@@ -1912,210 +1886,108 @@ function farming.farm(...)
 		
 		local function m(...)
 			local a = {...}
-
-			if mod.data.actives["auto_farm"] == false then
-				stopTweenWalkAnimation()
-				return false
-			end
+			if not find.player.Character:FindFirstChild("HumanoidRootPart") then return false end
+			if mod.data.actives["converting"] then return false end
 
 			local character = find.player.Character
-			local root = character and character:FindFirstChild("HumanoidRootPart")
-			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-
-			if not root or not humanoid then
-				stopTweenWalkAnimation()
-				return false
-			end
-
-			if root.Anchored then
-				stopTweenWalkAnimation()
-				return false
-			end
+			local root = character:FindFirstChild("HumanoidRootPart")
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if not root or not humanoid then return false end
+			if root.Anchored then return false end
 
 			local targetInstance = nil
+			local p
 
 			if typeof(a[1]) == "CFrame" then
 				p = a[1].Position
-
 			elseif typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
 				targetInstance = a[1]
-
-				if not targetInstance.Parent then
-					return true
-				end
+				if not targetInstance.Parent then return true end
 
 				local fieldPart = a[3]
-				if not fieldPart or not fieldPart.Parent then
-					return false
-				end
+				if not fieldPart or not fieldPart.Parent then return false end
 
 				local lp = fieldPart.CFrame:PointToObjectSpace(targetInstance.Position)
-				local hip = humanoid.HipHeight
-
 				p = fieldPart.CFrame:PointToWorldSpace(
-					Vector3.new(
-						lp.X,
-						fieldPart.Size.Y / 2 + hip,
-						lp.Z
-					)
+					Vector3.new(lp.X, fieldPart.Size.Y / 2, lp.Z)
 				)
 			else
 				return false
 			end
 
-			-- Сначала подготавливаем анимацию
+			local horizontal = Vector3.new(p.X - root.Position.X, 0, p.Z - root.Position.Z)
+			local distance = horizontal.Magnitude
+			if distance <= 3.5 then return true end
+			
+			local targetPos = Vector3.new(p.X, root.Position.Y, p.Z)
+			local targetCF
+			if distance > 0.001 then
+				targetCF = CFrame.lookAt(targetPos, targetPos + horizontal.Unit)
+			else
+				targetCF = CFrame.new(targetPos) * root.CFrame.Rotation
+			end
+			
 			local animate = character:FindFirstChild("Animate")
-			local runAnimation = animate
-				and animate:FindFirstChild("run")
+			local runAnimation = animate and animate:FindFirstChild("run")
 				and animate.run:FindFirstChildWhichIsA("Animation")
-
 			if runAnimation then
 				local animator = humanoid:FindFirstChildOfClass("Animator")
-
 				if animator then
 					if not track or animwalk ~= animator then
-						stopTweenWalkAnimation()
-
+						if track then track:Destroy() end
 						animwalk = animator
 						track = animator:LoadAnimation(runAnimation)
 						track.Looped = true
 					end
-
-					if not track.IsPlaying then
-						track:Play(0.1)
-					end
-
+					if not track.IsPlaying then track:Play(0.1) end
 					track:AdjustSpeed(math.clamp(a[2] / 16, 0.25, 3))
 				end
 			end
 
-			-- Для токена делаем несколько попыток,
-			-- если tween был сорван или токен немного сместился.
-			for attempt = 1, 3 do
-				if mod.data.actives["auto_farm"] == false then
-					stopTweenWalkAnimation()
-					return false
-				end
+			local duration = distance / math.max(a[2], 0.001)
+			root.Anchored = true
 
-				if id ~= farmId then
-					stopTweenWalkAnimation()
-					return false
-				end
+			local currentTween = find.tweenservice:Create(
+				root,
+				TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+				{CFrame = targetCF}
+			)
+			atween = currentTween
+			currentTween:Play()
 
-				if targetInstance then
-					if not targetInstance.Parent then
-						-- Токен уже исчез/собран.
-						return true
-					end
-
-					local fieldPart = a[3]
-					if not fieldPart or not fieldPart.Parent then
-						return false
-					end
-
-					local lp = fieldPart.CFrame:PointToObjectSpace(targetInstance.Position)
-					local hip = humanoid.HipHeight
-
-					p = fieldPart.CFrame:PointToWorldSpace(
-						Vector3.new(
-							lp.X,
-							fieldPart.Size.Y / 2 + hip,
-							lp.Z
-						)
-					)
-				end
-
-				local horizontal = Vector3.new(
-					p.X - root.Position.X,
-					0,
-					p.Z - root.Position.Z
-				)
-
-				local distance = horizontal.Magnitude
-
-				if distance <= 3.5 then
-					return true
-				end
-
-				local targetCF
-
-				if distance > 0.001 then
-					targetCF = CFrame.lookAt(p, p + horizontal.Unit)
-				else
-					targetCF = CFrame.new(p) * root.CFrame.Rotation
-				end
-
-				local duration = distance / math.max(a[2], 0.001)
-
-				local currentTween = find.tweenservice:Create(
-					root,
-					TweenInfo.new(
-						duration,
-						Enum.EasingStyle.Linear,
-						Enum.EasingDirection.Out
-					),
-					{
-						CFrame = targetCF
-					}
-				)
-
-				atween = currentTween
-				currentTween:Play()
-
-				local state = currentTween.Completed:Wait()
-
-				if atween == currentTween then
-					atween = nil
-				end
-
-				if state == Enum.PlaybackState.Cancelled then
-					task.wait(0.05)
-					continue
-				end
-
-				if id ~= farmId then
-					stopTweenWalkAnimation()
-					return false
-				end
-
-				if targetInstance then
-					if not targetInstance.Parent then
-						return true
-					end
-
-					local remaining = (
-						Vector3.new(
-							root.Position.X,
-							0,
-							root.Position.Z
-						)
-						-
-							Vector3.new(
-								targetInstance.Position.X,
-								0,
-								targetInstance.Position.Z
-							)
-					).Magnitude
-
-					-- Реально дошли до токена.
-					if remaining <= 4 then
-						return true
-					end
-				else
-					local remaining = (
-						Vector3.new(root.Position.X, 0, root.Position.Z)
-						-
-							Vector3.new(p.X, 0, p.Z)
-					).Magnitude
-
-					if remaining <= 4 then
-						return true
-					end
-				end
-
-				task.wait(0.05)
+			local state = currentTween.Completed:Wait()
+			if atween == currentTween then atween = nil end
+			if mod.data.actives["converting"] then
+				currentTween:Cancel()
+				atween = nil
+				root.Anchored = false
+				return false
 			end
 
+			if id ~= farmId then
+				root.Anchored = false
+				return false
+			end
+
+			root.Anchored = false
+
+			if state == Enum.PlaybackState.Cancelled then
+				return false
+			end
+			
+			if targetInstance then
+				if not targetInstance.Parent then return true end
+				local rem = (
+					Vector3.new(root.Position.X, 0, root.Position.Z)
+					- Vector3.new(targetInstance.Position.X, 0, targetInstance.Position.Z)
+				).Magnitude
+				if rem <= 4 then
+					if track and track.IsPlaying then track:Stop(0.1) end
+					return true
+				end
+			end
+
+			if track and track.IsPlaying then track:Stop(0.1) end
 			return false
 		end
 
@@ -2352,32 +2224,31 @@ function farming.farm(...)
 			end
 
 			humanoid:MoveTo(targetPosition)
-			local reached = humanoid.MoveToFinished:Wait()
 
-			if mod.data.actives["converting"] then
-				return false
-			end
+			local startMove = tick()
+			while tick() - startMove < 3 do
+				if mod.data.actives["converting"] then
+					return false
+				end
+				if id ~= farmId then
+					return false
+				end
 
-			if id ~= farmId then
-				return false
-			end
-			
-			if typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
-				if not a[1].Parent then
+				if typeof(a[1]) == "Instance" and not a[1].Parent then
+					return true  -- токен собран/исчез
+				end
+
+				local dist = (
+					Vector3.new(root.Position.X, 0, root.Position.Z)
+					- Vector3.new(targetPosition.X, 0, targetPosition.Z)
+				).Magnitude
+
+				if dist <= 4 then
 					return true
 				end
-			end
 
-			local distance = (
-				Vector3.new(root.Position.X, 0, root.Position.Z)
-				-
-					Vector3.new(targetPosition.X, 0, targetPosition.Z)
-			).Magnitude
-
-			if reached or distance <= 4 then
-				return true
+				task.wait(0.05)
 			end
-			task.wait(0.1)
 		end
 
 		return false
