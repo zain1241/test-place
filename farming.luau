@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.3")
+print("loaded 0.0.4")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -317,8 +317,6 @@ function farming.move(...)
 					end
 					
 					farming.inv(false)
-					farming.autosprinkler()
-					task.wait(.2)
 					
 					if currentFarmId ~= farmId
 						or mod.data.actives["auto_farm"] == false
@@ -328,6 +326,8 @@ function farming.move(...)
 
 					root.Anchored = false
 					mod.data.actives["move"] = false
+					task.wait(.2)
+					farming.autosprinkler()
 				end)
 
 				return currentTween
@@ -399,9 +399,9 @@ function farming.move(...)
 
 			root.Anchored = false
 			mod.data.actives["move"] = false
-			mod.data.actives["auto_farm"] = false
-			task.wait(.1)
-			mod.data.actives["auto_farm"] = true
+			if mod.data.actives["auto_farm"] == true then
+				farming.farm()
+			end
 		end)
 		return currentTween
 	end
@@ -590,12 +590,9 @@ function farming.getHive(...)
 end
 
 function farming.autoHive(...)
-	print("test")
 	local honeycombs = workspace:FindFirstChild("Honeycombs")
 	if not honeycombs then return end
 	if mod.data.actives.autohive == false then return end
-
-	print(1)
 
 	local activeNames = {}
 
@@ -603,8 +600,10 @@ function farming.autoHive(...)
 		activeNames[string.lower(p.Name)] = true
 	end
 
+	local myHivePos = nil
+	local freeHivePos = nil
+
 	for _, hive in ipairs(honeycombs:GetChildren()) do
-		print(2)
 		local display = hive:FindFirstChild("Display")
 		local gui = display and display:FindFirstChild("Gui")
 		local frame = gui and gui:FindFirstChild("Frame")
@@ -612,38 +611,47 @@ function farming.autoHive(...)
 
 		if name and name:IsA("TextLabel") then
 			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
-			local isFree = false
+			local lower = string.lower(trimmed)
 
-			if trimmed == "" then
-				isFree = true
-			else
-				local lower = string.lower(trimmed)
-				if not activeNames[lower] then
-					isFree = true
-				end
-			end
-
-			if isFree then
-				local pos = nil
+			if lower == string.lower(find.player.Name) then
 				local spawnPos = hive:FindFirstChild("SpawnPos")
-
 				if spawnPos then
-					if spawnPos:IsA("BasePart") then pos = spawnPos.Position
-					elseif spawnPos:IsA("CFrameValue") then pos = spawnPos.Value.Position
-					elseif spawnPos:IsA("Attachment") then pos = spawnPos.WorldPosition
-					elseif spawnPos:IsA("Vector3Value") then pos = spawnPos.Value end
+					if spawnPos:IsA("BasePart") then myHivePos = spawnPos.Position
+					elseif spawnPos:IsA("CFrameValue") then myHivePos = spawnPos.Value.Position
+					elseif spawnPos:IsA("Attachment") then myHivePos = spawnPos.WorldPosition
+					elseif spawnPos:IsA("Vector3Value") then myHivePos = spawnPos.Value end
 				end
+				if myHivePos then break end
+			else
+				if not freeHivePos then
+					local isFree = false
+					if trimmed == "" then
+						isFree = true
+					elseif not activeNames[lower] then
+						isFree = true
+					end
 
-				if pos then
-					farming.move(
-						"hive",
-						mod.data.actives["move_speed"],
-						pos
-					)
-					break
+					if isFree then
+						local spawnPos = hive:FindFirstChild("SpawnPos")
+						if spawnPos then
+							if spawnPos:IsA("BasePart") then freeHivePos = spawnPos.Position
+							elseif spawnPos:IsA("CFrameValue") then freeHivePos = spawnPos.Value.Position
+							elseif spawnPos:IsA("Attachment") then freeHivePos = spawnPos.WorldPosition
+							elseif spawnPos:IsA("Vector3Value") then freeHivePos = spawnPos.Value end
+						end
+					end
 				end
 			end
 		end
+	end
+
+	local targetPos = myHivePos or freeHivePos
+	if targetPos then
+		farming.move(
+			"hive",
+			mod.data.actives["move_speed"],
+			targetPos
+		)
 	end
 end
 
