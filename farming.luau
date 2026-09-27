@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8413")
+print("loaded 0.0.8414")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -35,7 +35,8 @@ local queue = {
 	tokens = {},
 }
 
-local invc, tween, afarm, adig, aconvert, atween, track, animwalk, p, p1; local farmId = 0
+local invc, tween, afarm, adig, aconvert, atween, track, animwalk, humanoid_walk_speed, p, p1;
+local farmId = 0
 
 local function clearFarmLines()
 	local lines = workspace:FindFirstChild("Lines_Cub")
@@ -1508,9 +1509,13 @@ function farming.farm(...)
 					local dist = (Vector3.new(root.Position.X, 0, root.Position.Z)
 						- Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
 
-					if dist <= 4 then
-						humanoid:MoveTo(root.Position)
-						humanoid:Move(Vector3.zero)
+					--if dist <= 4 then
+					--	humanoid:MoveTo(root.Position)
+					--	humanoid:Move(Vector3.zero)
+					--	return true
+					--end
+					
+					if dist <= 5 then
 						return true
 					end
 					
@@ -1525,8 +1530,7 @@ function farming.farm(...)
 						stuckCount = 0
 					end
 					lastPos = root.Position
-
-					task.wait(0.05)
+					--task.wait(0.05)
 				end
 
 				humanoid:MoveTo(root.Position)
@@ -1597,35 +1601,98 @@ function farming.farm(...)
 			--	--b(false, find.player.Character:FindFirstChild("HumanoidRootPart"), p1)
 			--end
 
-			if #queue["tokens"] > 0 then
-				while id == farmId and mod.data.actives["auto_farm"] == true and #queue["tokens"] > 0 and not mod.data.actives["converting"] do
-					if not find.player.Character:FindFirstChild("HumanoidRootPart") then
-						break
+			if #queue["tokens"] > 0 or (a and a.TargetPosition) then
+				humanoid_walk_speed = a and a.Speed or mod.data.actives["move_speed"] or 50
+
+				local startMove = tick()
+				local lastPos = find.player.Character:FindFirstChild("HumanoidRootPart").Position
+				local stuckCount = 0
+
+				while id == farmId 
+					and mod.data.actives["auto_farm"] == true 
+					and not mod.data.actives["converting"] 
+				do
+					local char = find.player.Character
+					local hum = char and char:FindFirstChildOfClass("Humanoid")
+					local rt = char and char:FindFirstChild("HumanoidRootPart")
+					if not hum or not rt then break end
+					if rt.Anchored then task.wait() continue end
+					
+					table.clear(queue["auto_farm"])
+
+					if c and field then
+						table.clear(queue["tokens"])
+						for _, v in ipairs(c:GetChildren()) do
+							if v:IsA("BasePart")
+								and i(v, field)
+								and (rt.Position - v.Position).Magnitude > 4
+							then
+								table.insert(queue["tokens"], v)
+							end
+						end
 					end
 
-					table.sort(queue["tokens"], function(a, b)
-						return (find.player.Character:FindFirstChild("HumanoidRootPart").Position - a.Position).Magnitude < (find.player.Character:FindFirstChild("HumanoidRootPart").Position - b.Position).Magnitude
-					end)
+					local target = nil
+					local bestDist = math.huge
+					for _, v in ipairs(queue["tokens"]) do
+						if v and v.Parent then
+							local d = (rt.Position - v.Position).Magnitude
+							if d < bestDist then
+								bestDist = d
+								target = v
+							end
+						end
+					end
 
+					if not target then
+						if a and a.TargetPosition then
+							target = { Position = a.TargetPosition, Parent = true }
+						else
+							hum:MoveTo(rt.Position)
+							hum:Move(Vector3.zero)
+							break
+						end
+					end
+
+					hum.WalkSpeed = humanoid_walk_speed
+					hum:MoveTo(Vector3.new(target.Position.X, rt.Position.Y, target.Position.Z))
+
+					if (rt.Position - lastPos).Magnitude < 0.1 then
+						stuckCount += 1
+						if stuckCount > 30 then
+							local rnd = Vector3.new(
+								math.random(-3, 3), 0, math.random(-3, 3)
+							)
+							hum:MoveTo(rt.Position + rnd)
+							stuckCount = 0
+						end
+					else
+						stuckCount = 0
+					end
+					lastPos = rt.Position
+
+					task.wait()
+					
+					
 					--local v = table.remove(queue["tokens"], 1)
 
 					--if v and v.Parent and a.Speed then
 					--	m(v, a.Speed)
 					--end
-					
+
 					--task.wait()
-					
-					local v = table.remove(queue["tokens"], 1)
 
-					if v and v.Parent and a.Speed then
-						local reached = m(v, a.Speed)
-						if not reached and v.Parent then
-							table.insert(queue["tokens"], v)
-						end
-					end
+					--local v = table.remove(queue["tokens"], 1)
 
-					task.wait()
-					
+					--if v and v.Parent and a.Speed then
+					--	local reached = m(v, a.Speed)
+					--	if not reached and v.Parent then
+					--		table.insert(queue["tokens"], v)
+					--	end
+					--end
+
+					--task.wait()
+
 					--local v = table.remove(queue["tokens"], 1)
 
 					--if v and v.Parent and a.Speed then
@@ -1636,9 +1703,22 @@ function farming.farm(...)
 					--	end
 					--end
 				end
+				
+				local char = find.player.Character
+				local hum = char and char:FindFirstChildOfClass("Humanoid")
+				local rt = char and char:FindFirstChild("HumanoidRootPart")
+				if hum and rt then
+					hum:MoveTo(rt.Position)
+					hum:Move(Vector3.zero)
+				end
 			else
-				if a.TargetPosition and a.Speed then
-					m(a.TargetPosition, a.Speed)
+				if a and a.TargetPosition and a.Speed then
+					local char = find.player.Character
+					local hum = char and char:FindFirstChildOfClass("Humanoid")
+					if hum then
+						hum.WalkSpeed = a.Speed
+						hum:MoveTo(a.TargetPosition)
+					end
 				end
 			end
 			
