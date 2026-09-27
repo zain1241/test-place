@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8418")
+print("loaded 0.0.8419")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -653,27 +653,27 @@ function farming.convert(...)
 
 	task.wait(1)
 
-	--local initial = farming.get_pollen_info()
-	--local initial_pollen = initial and initial.pollen or 0
-	--if initial_pollen > 0 then
-	--	local now = farming.get_pollen_info()
+	local initial = farming.get_pollen_info()
+	local initial_pollen = initial and initial.pollen or 0
+	if initial_pollen > 0 then
+		local now = farming.get_pollen_info()
 
-	--	if now and now.pollen >= initial_pollen then
-	--		pressE()
-	--		task.wait(1)
-	--	end
-	--end
-
-	--local startTime = tick()
-	--local pollenZeroSince = nil
-	
-	pressE()
-	task.wait(2)
-
-	local after = farming.get_pollen_info()
-	if after and after.pollen > 0 then
-		print("pollen not dropped yet")
+		if now and now.pollen >= initial_pollen then
+			pressE()
+			task.wait(1)
+		end
 	end
+
+	local startTime = tick()
+	local pollenZeroSince = nil
+	
+	--pressE()
+	--task.wait(2)
+
+	--local after = farming.get_pollen_info()
+	--if after and after.pollen > 0 then
+	--	print("pollen not dropped yet")
+	--end
 
 	local startTime = tick()
 	local pollenZeroSince = nil
