@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.81")
+print("loaded 0.0.82")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -493,33 +493,46 @@ function farming.move(...)
 			end
 			
 			local tries = 0
-			local maxTries = 12
+			local maxTries = 8
 			local occupied = false
-
-			task.wait(1)  -- дать кнопке появиться
 
 			while tries < maxTries and not occupied do
 				tries += 1
-				--print("[hive] попытка", tries)
+				pcall(activateButton)
+				local checkStart = tick()
 
-				local ok, res = pcall(activateButton)
-				if not ok or res ~= true then
-					warn("activateButton failed:", ok, res)
+				while tick() - checkStart < 1.5 do
+					if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
+						mod.data.actives["move"] = false
+						mod.data.actives["converting"] = false
+						return
+					end
+
+					if farming.getHive() then
+						occupied = true
+						break
+					end
+
+					task.wait(0.3)
 				end
 
-				task.wait(1.2)
-
-				if farming.getHive() then
-					occupied = true
-					--print("[hive] улей занят с", tries, "попытки")
+				if occupied then
 					break
 				end
 			end
-			
+
 			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
 				mod.data.actives["move"] = false
 				mod.data.actives["converting"] = false
 				return
+			end
+
+			if occupied then
+				farming.convert()
+			else
+				mod.data.actives["move"] = false
+				mod.data.actives["converting"] = false
+				--warn("[hive] не удалось занять улей")
 			end
 
 			--mod.data.actives["move"] = false
@@ -530,7 +543,7 @@ function farming.move(...)
 			--	mod.data.actives["converting"] = false
 			--end
 			
-			farming.convert()
+			--farming.convert()
 		end)
 		return currentTween
 	elseif a[1] == "convert" then
@@ -691,48 +704,36 @@ function farming.convert(...)
 			task.spawn(function()
 				if mod.data.actives["balloon"] == true then
 					local hivePos = farming.getHive()
+
 					if hivePos then
-						local function findHiveBalloon()
-							for _, obj in ipairs(workspace:GetDescendants()) do
-								if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
-									if (obj.Position - hivePos).Magnitude <= 25 then
-										return obj
-									end
-								end
-							end
-							return nil
-						end
-						
-						local balloon = findHiveBalloon()
-						if not balloon then
-							local spawnStart = tick()
-							while tick() - spawnStart < 5 do
-								balloon = findHiveBalloon()
-								if balloon then
-									print("balloon appeared")
+						local balloon = nil
+
+						for _, obj in ipairs(workspace:GetDescendants()) do
+							if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
+								if (obj.Position - hivePos).Magnitude <= 25 then
+									balloon = obj
 									break
 								end
-								task.wait(0.5)
 							end
 						end
-						
+
 						if balloon then
+							print("balloon found, waiting for conversion...")
 							local balloonStart = tick()
+
 							while tick() - balloonStart < 300 do
+
+								if not mod.data.actives["auto_farm"] then
+									return
+								end
 								if not balloon.Parent then
 									print("balloon converted")
 									break
 								end
-								local current = findHiveBalloon()
-								if not current then
-									print("balloon converted")
-									break
-								end
-								balloon = current
-								task.wait(1)
+								task.wait(3)
 							end
 						else
-							print("balloon did not appear in 30 sec")
+							print("balloon not found, continue")
 						end
 					else
 						warn("not hive")
