@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.67")
+print("loaded 0.0.667")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -96,22 +96,19 @@ local function activateButton(...)
 	local size = button.AbsoluteSize
 	local clickX = pos.X + (size.X / 2)
 	local clickY = pos.Y + (size.Y / 2) + inset.Y
-
-	-- способ 1: VirtualUser
+	
 	pcall(function()
 		game:GetService("VirtualUser"):ClickButton1(Vector2.new(clickX, clickY))
 	end)
 	task.wait(0.08)
-
-	-- способ 2: VirtualInputManager с явным target
+	
 	pcall(function()
 		find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, button, 1)
 		task.wait(0.05)
 		find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, button, 1)
 	end)
 	task.wait(0.08)
-
-	-- способ 3: прямой Fire сигналов (если клики не работают)
+	
 	pcall(function()
 		if button.Activated then button.Activated:Fire() end
 	end)
@@ -490,8 +487,6 @@ function farming.move(...)
 
 			while tries < maxTries and not occupied do
 				tries += 1
-				--print("[hive] попытка занять улей:", tries)
-
 				local ok, res = pcall(activateButton)
 				if not ok or res ~= true then
 					warn("activateButton failed:", ok, res)
@@ -501,7 +496,6 @@ function farming.move(...)
 
 				if farming.getHive() then
 					occupied = true
-					--print("[hive] улей занят")
 					break
 				end
 			end
@@ -511,9 +505,10 @@ function farming.move(...)
 			if occupied then
 				pcall(farming.farm)
 			else
-				--warn("[hive] не удалось занять улей за " .. maxTries .. " попыток")
 				mod.data.actives["converting"] = false
 			end
+			
+			farming.convert()
 		end)
 		return currentTween
 	elseif a[1] == "convert" then
