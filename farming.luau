@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.6667")
+print("loaded 0.0.66667")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -482,11 +482,15 @@ function farming.move(...)
 			end
 			
 			local tries = 0
-			local maxTries = 5
+			local maxTries = 12
 			local occupied = false
+
+			task.wait(1)  -- дать кнопке появиться
 
 			while tries < maxTries and not occupied do
 				tries += 1
+				--print("[hive] попытка", tries)
+
 				local ok, res = pcall(activateButton)
 				if not ok or res ~= true then
 					warn("activateButton failed:", ok, res)
@@ -496,6 +500,7 @@ function farming.move(...)
 
 				if farming.getHive() then
 					occupied = true
+					--print("[hive] улей занят с", tries, "попытки")
 					break
 				end
 			end
@@ -587,34 +592,47 @@ function farming.move(...)
 	return false
 end
 
+local function pressE()
+	pcall(function()
+		find.virtual:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+		task.wait(0.05)
+		find.virtual:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+	end)
+end
+
 function farming.convert(...)
 	if aconvert then
 		aconvert:Disconnect()
 		aconvert = nil
 	end
-
-	local ok, result = pcall(activateButton)
-	if not ok or result ~= true then
-		warn("activateButton failed:", ok, result)
-		mod.data.actives["converting"] = false
-		mod.data.actives["move"] = false
-		return
-	end
 	
+	pressE()
+
 	if mod.data.actives["honey_mask"] == true then
 		farming.honey_mask()
 	end
-	
-	task.wait(1)
+
 	local startTime = tick()
-	
+	local pollen_at_start = nil
+
 	aconvert = farming.conAF(find.prerender, 4, function(delta)
 		local info = farming.get_pollen_info()
-
+		if not pollen_at_start and info then
+			pollen_at_start = info.pollen
+		end
+		
 		if tick() - startTime > 600 then
+			--warn("[convert] timeout, выходим")
 			if aconvert then aconvert:Disconnect() aconvert = nil end
 			mod.data.actives["converting"] = false
 			mod.data.actives["move"] = false
+			
+			task.defer(function()
+				task.wait(1)
+				if mod.data.actives["auto_farm"] then
+					farming.farm()
+				end
+			end)
 			return
 		end
 
