@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.82")
+print("loaded 0.0.84")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -123,29 +123,6 @@ local function activateButton(...)
 	print("activateButton: fired all methods")
 	return true
 end
-
---local function activateButton(...)
---	local screenGui = find.player.PlayerGui:WaitForChild("ScreenGui", 5)
---	if not screenGui then warn("ScreenGui not found") return false end
---	local button = screenGui:WaitForChild("ActivateButton", 5)
---	if not button then warn("ActivateButton not found") return false end
-
---	local inset = find.guiservice:GetGuiInset()
---	local pos = button.AbsolutePosition
---	local size = button.AbsoluteSize
---	local clickX = pos.X + (size.X / 2)
---	local clickY = pos.Y + (size.Y / 2) + inset.Y
-
---	-- вариант 1: VirtualUser (надёжнее)
---	game:GetService("VirtualUser"):ClickButton1(Vector2.new(clickX, clickY))
-
---	-- вариант 2: явно target-кнопка
---	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, button, 1)
---	task.wait(0.05)
---	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, button, 1)
---	print("activated")
---	return true
---end
 
 function farming.conAF(...)
 	local a = {...}
@@ -600,13 +577,13 @@ function farming.move(...)
 			j(false)
 			farming.inv(false)
 			root.Anchored = false
-			task.wait(1)
+			task.wait(.2)
 
-			if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
-				mod.data.actives["move"] = false
-				mod.data.actives["converting"] = false
-				return
-			end
+			--if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
+			--	mod.data.actives["move"] = false
+			--	mod.data.actives["converting"] = false
+			--	return
+			--end
 			
 			--mod.data.actives["move"] = false
 			farming.convert()
@@ -634,7 +611,7 @@ function farming.convert(...)
 		farming.honey_mask()
 	end
 
-	task.wait(1)
+	task.wait(.2)
 
 	local initial = farming.get_pollen_info()
 	local initial_pollen = initial and initial.pollen or 0
@@ -718,7 +695,7 @@ function farming.convert(...)
 						end
 
 						if balloon then
-							print("balloon found, waiting for conversion...")
+							--print("balloon found, waiting for conversion...")
 							local balloonStart = tick()
 
 							while tick() - balloonStart < 300 do
@@ -743,7 +720,7 @@ function farming.convert(...)
 				local target_mask = mod.data.actives["mask"]
 				if target_mask and target_mask ~= "None" then
 					farming.equip_mask(target_mask)
-					task.wait(0.5)
+					task.wait(0.4)
 				end
 
 				mod.data.actives["last_time_convert"] = tick()
@@ -759,159 +736,6 @@ function farming.convert(...)
 		end
 	)
 end
-
---function farming.convert(...)
---	if aconvert then
---		aconvert:Disconnect()
---		aconvert = nil
---	end
-
---	local initial = farming.get_pollen_info()
---	local initial_pollen = initial and initial.pollen or 0
-
---	for i = 1, 3 do
---		pressE()
---		task.wait(5)
-
---		local now = farming.get_pollen_info()
---		if now and now.pollen < initial_pollen then
---			break
---		end
---	end
-
---	if mod.data.actives["honey_mask"] == true then
---		farming.honey_mask()
---	end
-
---	local startTime = tick()
---	local pollen_at_start = nil
---	local pollenZeroSince = nil
-
---	aconvert = farming.conAF(find.prerender, 4, function(delta)
---		local info = farming.get_pollen_info()
---		if not pollen_at_start and info then
---			pollen_at_start = info.pollen
---		end
-		
---		if info then
---			if info.pollen <= 0 then
---				pollenZeroSince = pollenZeroSince or tick()
---			else
---				pollenZeroSince = nil
---			end
---		end
-		
---		if tick() - startTime > 600 then
---			if aconvert then
---				aconvert:Disconnect()
---				aconvert = nil
---			end
-
---			mod.data.actives["last_time_convert"] = tick()
---			mod.data.actives["converting"] = false
---			mod.data.actives["move"] = false
---			task.defer(function()
---				task.wait(1)
-
---				if mod.data.actives["auto_farm"] then
---					farming.farm()
---				end
---			end)
---			return
---		end
-
---		if not info then
---			return
---		end
-
---		if info.pollen > 0 then
---			return
---		end
-
---		if not pollenZeroSince or tick() - pollenZeroSince < 2 then
---			return
---		end
---		print("completed autoconvert")
-
---		if aconvert then
---			aconvert:Disconnect()
---			aconvert = nil
---		end
-
---		if mod.data.actives["balloon"] == true then
---			local hivePos = farming.getHive()
---			if hivePos then
---				local function findHiveBalloon()
---					for _, obj in ipairs(workspace:GetDescendants()) do
---						if obj.Name == "BalloonBody"
---							and obj:IsA("BasePart")
---						then
---							if (obj.Position - hivePos).Magnitude <= 25 then
---								return obj
---							end
---						end
---					end
---					return nil
---				end
-				
---				local balloon = findHiveBalloon()
---				if not balloon then
---					local spawnStart = tick()
---					while tick() - spawnStart < 30 do
---						balloon = findHiveBalloon()
---						if balloon then
---							print("balloon appeared")
---							break
---						end
---						task.wait(0.5)
---					end
---				end
-				
---				if balloon then
---					local balloonStart = tick()
---					local balloonTimeout = 600
---					while tick() - balloonStart < balloonTimeout do
---						if not balloon.Parent then
---							print("balloon is converted")
---							break
---						end
-
---						local current = findHiveBalloon()
-
---						if not current then
---							print("balloon is converted")
---							break
---						end
-
---						balloon = current
-
---						task.wait(1)
---					end
---				else
---					print("balloon did not appear within 30 sec")
---				end
---			else
---				warn("not hive")
---			end
---		end
-
---		local target_mask = mod.data.actives["mask"]
---		if target_mask and target_mask ~= "None" then
---			farming.equip_mask(target_mask)
---		end
-
---		mod.data.actives["last_time_convert"] = tick()
---		mod.data.actives["converting"] = false
---		mod.data.actives["move"] = false
-
---		task.defer(function()
---			task.wait(2)
---			if mod.data.actives["auto_farm"] then
---				farming.farm()
---			end
---		end)
---	end)
---end
 
 function farming.get_pollen_from_gui() -- ai
 	local player = find.player
@@ -981,30 +805,6 @@ local function getStats()
 	return nil
 end
 
---function farming.honey_mask()
---	local stats = getStats()
---	if not stats then return false end
-
---	local mask = stats.Accessories
---	if type(mask) ~= "string" then return false end
---	if mask == "Honey Mask" then return true end
-	
---	local Events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
---	if not Events then return false end
-
---	local ItemPackageEvent = Events:FindFirstChild("ItemPackageEvent")
---	if not ItemPackageEvent then return false end
-
---	ItemPackageEvent:InvokeServer("Equip", {
---		Mute = false,
---		Type = "Honey Mask",
---		Category = "Accessory"
---	})
-
---	--print("honey mask equipped")
---	return true
---end
-
 function farming.equip_mask(name)
 	if type(name) ~= "string" or name == "" or name == "None" then
 		return false
@@ -1028,8 +828,7 @@ function farming.equip_mask(name)
 	return true
 end
 
--- обратная совместимость
-function farming.honey_mask()
+function farming.honey_mask()	
 	return farming.equip_mask("Honey Mask")
 end
 
@@ -1067,44 +866,6 @@ function farming.get_pollen_info() -- ai
 		percent = (current / max) * 100,
 	}
 end
-
---function farming.get_hive_position() -- ai
---	local honeycombs = workspace:FindFirstChild("Honeycombs")
---	if not honeycombs then
---		return nil
---	end
-
---	local myName = string.lower(find.player.Name)
-
---	for _, hive in ipairs(honeycombs:GetChildren()) do
---		local display = hive:FindFirstChild("Display")
---		local gui = display and display:FindFirstChild("Gui")
---		local frame = gui and gui:FindFirstChild("Frame")
---		local ownerName = frame and frame:FindFirstChild("OwnerName")
-
---		if ownerName and ownerName:IsA("TextLabel") then
---			local text = ownerName.Text or ""
---			local trimmed = string.match(text, "^%s*(.-)%s*$") or ""
-
---			if string.lower(trimmed) == myName then
---				local spawnPos = hive:FindFirstChild("SpawnPos")
---				if spawnPos then
---					if spawnPos:IsA("BasePart") then
---						return spawnPos.Position
---					elseif spawnPos:IsA("CFrameValue") then
---						return spawnPos.Value.Position
---					elseif spawnPos:IsA("Attachment") then
---						return spawnPos.WorldPosition
---					elseif spawnPos:IsA("Vector3Value") then
---						return spawnPos.Value
---					end
---				end
---			end
---		end
---	end
-
---	return nil
---end
 
 function farming.getHive(...)
 	local honeycombs = workspace:FindFirstChild("Honeycombs")
@@ -1203,675 +964,6 @@ function farming.autoHive(...)
 		--warn("[autoHive] не нашёл ни свой, ни свободный улей")
 	end
 end
-
---function farming.autoHive(...)
---	local honeycombs = workspace:FindFirstChild("Honeycombs")
---	if not honeycombs then return end
---	if mod.data.actives.autohive == false then return end
-
---	local activeNames = {}
-
---	for _, p in ipairs(find.players:GetPlayers()) do
---		activeNames[string.lower(p.Name)] = true
---	end
-
---	local myHivePos = nil
---	local freeHivePos = nil
-
---	for _, hive in ipairs(honeycombs:GetChildren()) do
---		local display = hive:FindFirstChild("Display")
---		local gui = display and display:FindFirstChild("Gui")
---		local frame = gui and gui:FindFirstChild("Frame")
---		local name = frame and frame:FindFirstChild("OwnerName")
-
---		if name and name:IsA("TextLabel") then
---			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
---			local lower = string.lower(trimmed)
-
---			if lower == string.lower(find.player.Name) then
---				local spawnPos = hive:FindFirstChild("SpawnPos")
---				if spawnPos then
---					if spawnPos:IsA("BasePart") then myHivePos = spawnPos.Position
---					elseif spawnPos:IsA("CFrameValue") then myHivePos = spawnPos.Value.Position
---					elseif spawnPos:IsA("Attachment") then myHivePos = spawnPos.WorldPosition
---					elseif spawnPos:IsA("Vector3Value") then myHivePos = spawnPos.Value end
---				end
---				if myHivePos then break end
---			else
---				if not freeHivePos then
---					local isFree = false
---					if trimmed == "" then
---						isFree = true
---					elseif not activeNames[lower] then
---						isFree = true
---					end
-
---					if isFree then
---						local spawnPos = hive:FindFirstChild("SpawnPos")
---						if spawnPos then
---							if spawnPos:IsA("BasePart") then freeHivePos = spawnPos.Position
---							elseif spawnPos:IsA("CFrameValue") then freeHivePos = spawnPos.Value.Position
---							elseif spawnPos:IsA("Attachment") then freeHivePos = spawnPos.WorldPosition
---							elseif spawnPos:IsA("Vector3Value") then freeHivePos = spawnPos.Value end
---						end
---					end
---				end
---			end
---		end
---	end
-
---	local targetPos = myHivePos or freeHivePos
---	if targetPos then
---		farming.move(
---			"hive",
---			mod.data.actives["move_speed"],
---			targetPos
---		)
---	end
---end
-
---function farming.wait_for_balloon(hivePos, timeout) -- ai
---	timeout = timeout or 300
-
---	if not hivePos then
---		return true
---	end
-
---	local function findHiveBalloon()
---		for _, obj in ipairs(workspace:GetDescendants()) do
---			if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
---				if (obj.Position - hivePos).Magnitude <= 25 then
---					return obj
---				end
---			end
---		end
-
---		return nil
---	end
---	local balloon = findHiveBalloon()
-
---	if not balloon then
---		task.wait(1)
---		return true
---	end
-	
---	local startTime = tick()
---	while tick() - startTime < timeout do
---		if not balloon.Parent then
---			task.wait(2)
---			return true
---		end
-		
---		local currentBalloon = findHiveBalloon()
---		if not currentBalloon then
---			task.wait(1)
---			return true
---		end
-
---		balloon = currentBalloon
---		task.wait(1)
---	end
---	return false
---end
-
---function farming.press_e_until_hive(maxAttempts)
---	maxAttempts = maxAttempts or 5
-
---	local VirtualInputManager = game:GetService("VirtualInputManager")
-
---	for attempt = 1, maxAttempts do
---		print("[Farm] Попытка занять улей " .. attempt .. ": жмём E")
-
---		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
---		task.wait(0.05)
---		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-
---		local startTime = tick()
---		while tick() - startTime < 10 do
---			task.wait(1)
-
---			local hivePos = farming.get_hive_position()
---			if hivePos then
---				print("[Farm] Улей занят!")
---				return true, hivePos
---			end
---		end
-
---		print("[Farm] Улей не занялся за 10 сек — жмём E ещё раз")
---	end
-
---	warn("[Farm] Не удалось занять улей")
---	return false, nil
---end
-
---function farming.go_to_hive_and_convert()
---	print("[AutoConvert] Начинаем...")
-
---	mod.data.actives["move"] = true
---	mod.data.actives["point"] = false
-
---	table.clear(queue["auto_farm"])
---	table.clear(queue["tokens"])
-
---	if tween then
---		tween:Cancel()
---		tween = nil
---	end
-
---	if atween then
---		atween:Cancel()
---		atween = nil
---	end
-
---	if track and track.IsPlaying then
---		track:Stop(0)
---	end
-
---	local character = find.player.Character
---	local root = character and character:FindFirstChild("HumanoidRootPart")
---	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-
---	if not root or not humanoid then
---		mod.data.actives["move"] = false
---		return false
---	end
-
---	local savedWalkSpeed = mod.data.actives["walkspeed"] or 16
---	local savedAutoRotate = humanoid.AutoRotate
-
---	-- =========================================================
---	-- ФИЗИЧЕСКИЙ ПОЛЁТ
---	-- inv автоматически включён НА ВСЁМ ПУТИ
---	-- =========================================================
-
---	local function physicalMoveTo(targetPosition, speed, timeout)
---		speed = speed or mod.data.actives["move_speed"] or 100
---		timeout = timeout or 30
-
---		if not root or not root.Parent then
---			return false
---		end
-
---		-- ВОТ ЗДЕСЬ ВКЛЮЧАЕМ INV ДО НАЧАЛА ПОЛЁТА
---		farming.inv(true)
-
---		root.Anchored = false
-
---		humanoid.WalkSpeed = 0
---		humanoid.AutoRotate = false
---		humanoid:Move(Vector3.zero)
---		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-
---		-- Удаляем старые силы
---		for _, object in ipairs(root:GetChildren()) do
---			if object.Name == "__AutoConvertVelocity"
---				or object.Name == "__AutoConvertAttachment"
---			then
---				object:Destroy()
---			end
---		end
-
---		local attachment = Instance.new("Attachment")
---		attachment.Name = "__AutoConvertAttachment"
---		attachment.Parent = root
-
---		local linearVelocity = Instance.new("LinearVelocity")
---		linearVelocity.Name = "__AutoConvertVelocity"
---		linearVelocity.Attachment0 = attachment
---		linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
---		linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
---		linearVelocity.ForceLimitsEnabled = false
---		linearVelocity.VectorVelocity = Vector3.zero
---		linearVelocity.Parent = root
-
---		local startTime = tick()
-
---		while root.Parent and tick() - startTime < timeout do
---			local offset = targetPosition - root.Position
---			local distance = offset.Magnitude
-
---			if distance <= 2.5 then
---				break
---			end
-
---			local direction = offset.Unit
-
---			linearVelocity.VectorVelocity = direction * speed
-
---			-- Пока летим — inv гарантированно остаётся включён.
---			if not invc then
---				farming.inv(true)
---			end
-
---			game:GetService("RunService").Heartbeat:Wait()
---		end
-
---		-- Полностью останавливаем движение
---		linearVelocity.VectorVelocity = Vector3.zero
-
---		task.wait(0.08)
-
---		if linearVelocity.Parent then
---			linearVelocity:Destroy()
---		end
-
---		if attachment.Parent then
---			attachment:Destroy()
---		end
-
---		root.AssemblyLinearVelocity = Vector3.zero
---		root.AssemblyAngularVelocity = Vector3.zero
-
---		return root.Parent ~= nil
---	end
-
---	-- =========================================================
---	-- ОТПУСТИТЬ ИГРОКА НА УЛЕЕ
---	-- =========================================================
-
---	local function releasePlayer()
---		if not root or not root.Parent then
---			return
---		end
-
---		-- ДОСТИГЛИ УЛЬЯ:
---		-- теперь inv выключаем, чтобы улей/персонаж нормально
---		-- взаимодействовали физически.
---		farming.inv(false)
-
---		root.Anchored = false
-
---		root.AssemblyLinearVelocity = Vector3.zero
---		root.AssemblyAngularVelocity = Vector3.zero
-
---		humanoid.WalkSpeed = 0
---		humanoid.AutoRotate = false
---		humanoid:Move(Vector3.zero)
-
---		-- Реально отпускаем персонажа.
---		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-
---		local groundedStart = tick()
---		local grounded = false
-
---		while tick() - groundedStart < 5 do
---			if not root.Parent or not humanoid.Parent then
---				break
---			end
-
---			if humanoid.FloorMaterial ~= Enum.Material.Air then
---				grounded = true
---				break
---			end
-
---			task.wait(0.1)
---		end
-
---		if grounded then
---			print("[AutoConvert] Игрок приземлился на улей")
---		else
---			warn("[AutoConvert] Не дождались приземления")
---		end
-
---		task.wait(0.4)
---	end
-
---	-- =========================================================
---	-- 1. ИЩЕМ УЛЕЙ
---	-- =========================================================
-
---	local hivePos = farming.get_hive_position()
-
---	if not hivePos then
---		print("[AutoConvert] Своего улья нет — ищем свободный")
-
---		local freeHive = farming.find_free_hive()
-
---		if not freeHive then
---			warn("[AutoConvert] Свободных ульев нет")
-
---			farming.inv(false)
-
---			root.Anchored = false
---			humanoid.WalkSpeed = savedWalkSpeed
---			humanoid.AutoRotate = savedAutoRotate
---			humanoid:ChangeState(Enum.HumanoidStateType.Running)
-
---			mod.data.actives["move"] = false
-
---			return false
---		end
-
---		print("[AutoConvert] Найден свободный улей:", freeHive.hive.Name)
-
---		local targetPos = freeHive.pos + Vector3.new(0, 3.5, 0)
-
---		-- physicalMoveTo сам включает inv
---		local distance = (root.Position - targetPos).Magnitude
---		local speed = mod.data.actives["move_speed"] or 100
---		local timeout = math.max(
---			(distance / math.max(speed, 1)) * 3,
---			10
---		)
-
---		local ok = physicalMoveTo(
---			targetPos,
---			speed,
---			timeout
---		)
-
---		if not ok then
---			warn("[AutoConvert] Не удалось долететь до свободного улья")
-
---			farming.inv(false)
-
---			root.Anchored = false
---			humanoid.WalkSpeed = savedWalkSpeed
---			humanoid.AutoRotate = savedAutoRotate
---			mod.data.actives["move"] = false
-
---			return false
---		end
-
---		print("[AutoConvert] Долетели до свободного улья")
-
---		-- Теперь inv выключается и игрок падает.
---		releasePlayer()
-
---		local occupied, newHivePos = farming.press_e_until_hive(5)
-
---		if not occupied or not newHivePos then
---			warn("[AutoConvert] Не удалось занять улей")
-
---			farming.inv(false)
-
---			root.Anchored = false
---			humanoid.WalkSpeed = savedWalkSpeed
---			humanoid.AutoRotate = savedAutoRotate
---			humanoid:ChangeState(Enum.HumanoidStateType.Running)
-
---			mod.data.actives["move"] = false
-
---			return false
---		end
-
---		hivePos = newHivePos
-
---		print("[AutoConvert] Улей занят:", tostring(hivePos))
-
---	else
---		print("[AutoConvert] Свой улей найден")
---	end
-
---	-- =========================================================
---	-- 2. ТОЧКА ВОЗВРАТА
---	-- =========================================================
-
---	local selectedField = mod.data.actives["selected_field"]
---	local fields = workspace:FindFirstChild("FlowerZones")
---	local field = fields and selectedField and fields:FindFirstChild(selectedField)
-
---	local returnPos = root.Position
-
---	if field and field:IsA("BasePart") then
---		returnPos = field.Position + Vector3.new(0, 3, 0)
---	end
-
---	-- =========================================================
---	-- 3. ПОЛЁТ К СВОЕМУ УЛЬЮ
---	-- =========================================================
-
---	if (root.Position - hivePos).Magnitude > 4 then
---		local targetPos = hivePos + Vector3.new(0, 3.5, 0)
-
---		local distance = (root.Position - targetPos).Magnitude
---		local speed = mod.data.actives["move_speed"] or 100
---		local timeout = math.max(
---			(distance / math.max(speed, 1)) * 3,
---			10
---		)
-
---		local ok = physicalMoveTo(
---			targetPos,
---			speed,
---			timeout
---		)
-
---		if not ok then
---			warn("[AutoConvert] Не удалось долететь до улья")
-
---			farming.inv(false)
-
---			root.Anchored = false
---			humanoid.WalkSpeed = savedWalkSpeed
---			humanoid.AutoRotate = savedAutoRotate
---			mod.data.actives["move"] = false
-
---			return false
---		end
---	end
-
---	print("[AutoConvert] Долетели до улья")
-
---	-- =========================================================
---	-- 4. ОТПУСКАЕМ
---	-- =========================================================
-
---	releasePlayer()
-
---	print("[AutoConvert] Игрок отпущен, пытаемся разгружаться")
-
---	-- =========================================================
---	-- 5. E
---	-- =========================================================
-
---	farming.press_e_until_convert(hivePos, 3)
-
---	-- =========================================================
---	-- 6. ЖДЁМ РАЗГРУЗКУ
---	-- =========================================================
-
---	print("[AutoConvert] Ждём завершения конвертации...")
-
---	local startTime = tick()
---	local timeout = 300
-
---	local lowCount = 0
---	local requiredLowCount = 4
-
---	while tick() - startTime < timeout do
---		if not root.Parent or not humanoid.Parent then
---			break
---		end
-
---		root.Anchored = false
---		root.AssemblyLinearVelocity = Vector3.zero
---		root.AssemblyAngularVelocity = Vector3.zero
-
---		local info = farming.get_pollen_info()
-
---		if info then
---			print(string.format(
---				"[AutoConvert] Pollen: %d/%d (%.1f%%)",
---				info.pollen,
---				info.max,
---				info.percent
---				))
-
---			if info.percent <= 5 then
---				lowCount += 1
-
---				if lowCount >= requiredLowCount then
---					print("[AutoConvert] Разгрузка завершена")
---					break
---				end
---			else
---				lowCount = 0
---			end
---		end
-
---		task.wait(0.75)
---	end
-
---	-- =========================================================
---	-- 7. БАЛЛУН
---	-- =========================================================
-
---	if mod.data.actives["balloon"] == true then
---		print("[AutoConvert] Ждём хайв-баллун...")
---		farming.wait_for_balloon(hivePos, 300)
---	end
-
---	-- =========================================================
---	-- 8. ОБРАТНЫЙ ПОЛЁТ
---	-- =========================================================
-
---	print("[AutoConvert] Возвращаемся на поле")
-
---	-- ВАЖНО:
---	-- physicalMoveTo() снова сам включит inv
---	-- ДО начала обратного полёта.
-
---	local distanceBack = (root.Position - returnPos).Magnitude
---	local speedBack = mod.data.actives["move_speed"] or 100
-
---	local timeoutBack = math.max(
---		(distanceBack / math.max(speedBack, 1)) * 3,
---		10
---	)
-
---	local okBack = physicalMoveTo(
---		returnPos,
---		speedBack,
---		timeoutBack
---	)
-
---	if not okBack then
---		warn("[AutoConvert] Не удалось вернуться на поле")
---	end
-
---	print("[AutoConvert] Долетели обратно на поле")
-
---	-- =========================================================
---	-- 9. ПРИЗЕМЛЯЕМСЯ НА ПОЛЕ
---	-- =========================================================
-
---	-- inv пока ещё включён.
---	-- Выключать его здесь НЕ нужно: обычный фарм снова
---	-- сам оставит inv включённым.
-
---	root.Anchored = false
---	root.AssemblyLinearVelocity = Vector3.zero
---	root.AssemblyAngularVelocity = Vector3.zero
-
---	humanoid.AutoRotate = savedAutoRotate
---	humanoid.WalkSpeed = savedWalkSpeed
---	humanoid:Move(Vector3.zero)
---	humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-
---	task.wait(0.3)
-
---	humanoid.WalkSpeed = savedWalkSpeed
---	humanoid:ChangeState(Enum.HumanoidStateType.Running)
-
---	mod.data.actives["move"] = false
---	mod.data.actives["__last_convert_time"] = tick()
-
---	print("[AutoConvert] Готово")
-
---	return true
---end
-
---function farming.find_free_hive()
---	local honeycombs = workspace:FindFirstChild("Honeycombs")
---	if not honeycombs then return nil end
-
---	local Players = game:GetService("Players")
-
---	local activeNames = {}
---	for _, p in ipairs(Players:GetPlayers()) do
---		activeNames[string.lower(p.Name)] = true
---	end
-
---	local root = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
---	local myPos = root and root.Position
-
---	local bestHive = nil
---	local bestDist = math.huge
-
---	for _, hive in ipairs(honeycombs:GetChildren()) do
---		local display = hive:FindFirstChild("Display")
---		local gui = display and display:FindFirstChild("Gui")
---		local frame = gui and gui:FindFirstChild("Frame")
---		local ownerName = frame and frame:FindFirstChild("OwnerName")
-
---		if ownerName and ownerName:IsA("TextLabel") then
---			local text = ownerName.Text or ""
---			local trimmed = string.match(text, "^%s*(.-)%s*$") or ""
-
---			local isFree = false
-
---			if trimmed == "" then
---				isFree = true
---			else
---				local lower = string.lower(trimmed)
---				if not activeNames[lower] then
---					isFree = true
---				end
---			end
-
---			if isFree then
---				local spawnPos = hive:FindFirstChild("SpawnPos")
---				if spawnPos then
---					local pos = nil
---					if spawnPos:IsA("BasePart") then
---						pos = spawnPos.Position
---					elseif spawnPos:IsA("CFrameValue") then
---						pos = spawnPos.Value.Position
---					elseif spawnPos:IsA("Attachment") then
---						pos = spawnPos.WorldPosition
---					elseif spawnPos:IsA("Vector3Value") then
---						pos = spawnPos.Value
---					end
-
---					if pos then
---						local dist = myPos and (myPos - pos).Magnitude or 0
---						if dist < bestDist then
---							bestDist = dist
---							bestHive = {
---								hive = hive,
---								pos = pos,
---								ownerText = trimmed,
---							}
---						end
---					end
---				end
---			end
---		end
---	end
-
---	return bestHive
---end
-
---function farming.emulate_e(times)
---	times = times or 3
-
---	local VirtualInputManager = game:GetService("VirtualInputManager")
---	if not VirtualInputManager then
---		warn("[emulate_e] VirtualInputManager недоступен")
---		return false
---	end
-
---	for i = 1, times do
---		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
---		task.wait(0.05)
---		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
---		task.wait(0.2)
---	end
-
---	print("[emulate_e] Нажал E x" .. times)
---	return true
---end
 
 local function stopTweenWalkAnimation()
 	if track then
@@ -2236,12 +1328,16 @@ function farming.farm(...)
 					--		table.insert(queue["tokens"], v)
 					--	end
 					--end
+					
+					task.wait()
 				end
 			else
 				if a.TargetCFrame and a.Speed then
 					m(a.TargetCFrame, a.Speed, field)
 				end
 			end
+			
+			task.wait()
 		end
 
 		mod.data.actives["point"] = false
@@ -2263,110 +1359,6 @@ function farming.farm(...)
 		end
 	end
 	
-	--local function m(...)
-	--	local a = {...}
-
-	--	if mod.data.actives["converting"] then
-	--		return false
-	--	end
-
-	--	local character = find.player.Character
-	--	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	--	local root = character and character:FindFirstChild("HumanoidRootPart")
-
-	--	if not humanoid or not root or not a[1] or not a[2] then
-	--		return false
-	--	end
-
-	--	if root.Anchored then
-	--		return false
-	--	end
-
-	--	local targetPosition
-
-	--	if typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
-	--		local token = a[1]
-
-	--		if not token.Parent then
-	--			return true
-	--		end
-
-	--		targetPosition = Vector3.new(
-	--			token.Position.X,
-	--			root.Position.Y,
-	--			token.Position.Z
-	--		)
-	--	else
-	--		targetPosition = Vector3.new(
-	--			a[1].X,
-	--			root.Position.Y,
-	--			a[1].Z
-	--		)
-	--	end
-
-	--	humanoid.WalkSpeed = a[2]
-		
-	--	for attempt = 1, 3 do
-	--		if mod.data.actives["converting"] then
-	--			return false
-	--		end
-
-	--		if id ~= farmId then
-	--			return false
-	--		end
-			
-	--		if typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
-	--			if not a[1].Parent then
-	--				return true
-	--			end
-
-	--			targetPosition = Vector3.new(
-	--				a[1].Position.X,
-	--				root.Position.Y,
-	--				a[1].Position.Z
-	--			)
-	--		end
-			
-	--		if (
-	--			Vector3.new(root.Position.X, 0, root.Position.Z)
-	--			-
-	--				Vector3.new(targetPosition.X, 0, targetPosition.Z)
-	--			).Magnitude <= 4
-	--		then
-	--			return true
-	--		end
-
-	--		humanoid:MoveTo(targetPosition)
-
-	--		local startMove = tick()
-	--		while tick() - startMove < 3 do
-	--			if mod.data.actives["converting"] then
-	--				return false
-	--			end
-	--			if id ~= farmId then
-	--				return false
-	--			end
-
-	--			if typeof(a[1]) == "Instance" and not a[1].Parent then
-	--				return true  -- токен собран/исчез
-	--			end
-
-	--			local dist = (
-	--				Vector3.new(root.Position.X, 0, root.Position.Z)
-	--				- Vector3.new(targetPosition.X, 0, targetPosition.Z)
-	--			).Magnitude
-
-	--			if dist <= 4 then
-	--				return true
-	--			end
-
-	--			task.wait(0.05)
-	--		end
-	--	end
-
-	--	return false
-	--end
-
 	local function q1(...)
 		if mod.data.actives["point"] then
 			return
@@ -2521,6 +1513,8 @@ function farming.farm(...)
 						m(v, a.Speed)
 					end
 					
+					task.wait()
+					
 					--local v = table.remove(queue["tokens"], 1)
 
 					--if v and v.Parent and a.Speed then
@@ -2536,6 +1530,8 @@ function farming.farm(...)
 					m(a.TargetPosition, a.Speed)
 				end
 			end
+			
+			task.wait()
 		end
 
 		mod.data.actives["point"] = false
@@ -2618,68 +1614,8 @@ function farming.farm(...)
 					end
 				end
 
-				--if mod.data.actives["__converting"] then
-				--	return
-				--end
-
-				---- ===== AUTO CONVERT CHECK =====
-				--if mod.data.actives["auto_farm"] == true and mod.data.actives["move"] == false then
-				--	local shouldConvert = false
-				--	local reason = ""
-
-				--	local info = farming.get_pollen_info()
-				--	local threshold = mod.data.actives["backpack"] or 80
-
-				--	if info and info.percent >= threshold then
-				--		shouldConvert = true
-				--		reason = "backpack " .. math.floor(info.percent) .. "% >= " .. threshold .. "%"
-				--	end
-
-				--	if not shouldConvert then
-				--		local autoMin = mod.data.actives["auto_convert"] or 20
-				--		local lastTime = mod.data.actives["__last_convert_time"] or tick()
-				--		local elapsed = (tick() - lastTime) / 60
-
-				--		if elapsed >= autoMin then
-				--			shouldConvert = true
-				--			reason = "timer " .. math.floor(elapsed) .. "m >= " .. autoMin .. "m"
-				--		end
-				--	end
-
-				--	if shouldConvert then
-				--		print("[AutoConvert] Запуск:", reason)
-				--		mod.data.actives["__converting"] = true
-
-				--		task.spawn(function()
-				--			local ok, err = pcall(farming.go_to_hive_and_convert)
-				--			if not ok then
-				--				warn("[AutoConvert] Ошибка:", err)
-				--			end
-				--			mod.data.actives["__converting"] = false
-				--			mod.data.actives["move"] = false
-
-				--			local char = find.player.Character
-				--			local rt = char and char:FindFirstChild("HumanoidRootPart")
-				--			local hm = char and char:FindFirstChildOfClass("Humanoid")
-				--			if rt then rt.Anchored = false end
-				--			if hm then
-				--				hm.WalkSpeed = mod.data.actives["walkspeed"] or 16
-				--				hm:ChangeState(Enum.HumanoidStateType.Running)
-				--			end
-				--		end)
-
-				--		return
-				--	end
-				--end
-				---- =============================
-
 				if mod.data.actives["move"] == false then
 					farming.inv(false)
-
-					--if mod.data.actives["auto_sprinkler"] == true then
-					--	farming.autosprinkler()
-					--end
-
 					if mod.data.actives["style_auto_farm"] == "Walk" then
 						farming.cornl(true)
 						m1(b, mod.data.actives["move_speed"])
