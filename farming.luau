@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.92")
+print("loaded 0.0.94")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -94,13 +94,10 @@ local function activateButton(...)
 
 	local waitStart = tick()
 	while tick() - waitStart < 2 do
-		if button.Visible and button.AbsoluteSize.X > 0 then
-			break
-		end
+		if button.Visible and button.AbsoluteSize.X > 0 then break end
 		task.wait(0.05)
 	end
 
-	local inset = find.guiservice:GetGuiInset()
 	local pos = button.AbsolutePosition
 	local size = button.AbsoluteSize
 	if size.X <= 0 or size.Y <= 0 then
@@ -108,37 +105,29 @@ local function activateButton(...)
 		return false
 	end
 
-	local clickX = pos.X + (size.X / 2)
-	local clickYNoInset = pos.Y + (size.Y / 2)
-	local clickYInset   = clickYNoInset + inset.Y
+	local cx = pos.X + (size.X / 2)
+	local cy = pos.Y + (size.Y / 2)
+	local inset = find.guiservice:GetGuiInset()
 
-	local function tryClick(clickY)
+	local function vic(x, y)
+		pcall(function() find.virtual:SendMouseMoveEvent(x, y, false, game) end)
+		task.wait(0.1)
 		pcall(function()
-			find.virtual:SendMouseMoveEvent(clickX, clickY, false, game)
+			local VU = game:GetService("VirtualUser")
+			VU:CaptureController()
+			VU:ClickButton1(Vector2.new(x, y))
 		end)
+		task.wait(0.1)
+		pcall(function() find.virtual:SendMouseButtonEvent(x, y, 0, true, game, 1) end)
 		task.wait(0.05)
-		
-		pcall(function()
-			local VirtualUser = game:GetService("VirtualUser")
-			VirtualUser:CaptureController()
-			VirtualUser:ClickButton1(Vector2.new(clickX, clickY))
-		end)
-		task.wait(0.05)
-		
-		pcall(function()
-			find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
-		end)
-		task.wait(0.05)
-		pcall(function()
-			find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
-		end)
+		pcall(function() find.virtual:SendMouseButtonEvent(x, y, 0, false, game, 1) end)
 	end
 	
-	tryClick(clickYNoInset)
-	task.wait(0.1)
-	tryClick(clickYInset)
+	vic(cx, cy + inset.Y)
+	--task.wait(0.15)
+	--vic(cx, cy)
 
-	--print("activateButton: fired at", clickX, clickYNoInset, clickYInset)
+	--print("activateButton: done")
 	return true
 end
 
@@ -600,14 +589,6 @@ function farming.move(...)
 	return false
 end
 
-local function pressE()
-	pcall(function()
-		find.virtual:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-		task.wait(0.05)
-		find.virtual:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-	end)
-end
-
 function farming.forceWalkSpeed(speed)
 	if farming.__speedConn then
 		farming.__speedConn:Disconnect()
@@ -694,12 +675,13 @@ function farming.convert(...)
 	if not eSucceeded then
 		local maxEAttempts = 5
 		local eWait = 5
+		local hivePos = farming.getHive()
 
 		for attempt = 1, maxEAttempts do
 			local before = farming.get_pollen_info()
 			local before_pollen = before and before.pollen or 0
 
-			pressE()
+			activateButton()
 
 			local checkStart = tick()
 			local dropped = false
@@ -726,7 +708,7 @@ function farming.convert(...)
 				eSucceeded = true
 				break
 			else
-				print("[convert] E #"..attempt..": нет падения, пробуем ещё")
+				--print("[convert] E #"..attempt..": нет падения, пробуем ещё")
 			end
 		end
 	end
