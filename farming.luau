@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.8431")
+print("loaded 0.0.8432")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -112,36 +112,13 @@ local function activateButton(...)
 	local clickY = pos.Y + (size.Y / 2) + inset.Y
 	local vec = Vector2.new(clickX, clickY)
 	
-	local before = farming.get_pollen_info()
-	local before_pollen = before and before.pollen or -1
-	
 	local VirtualUser = game:GetService("VirtualUser")
 	pcall(function()
 		VirtualUser:CaptureController()
 		VirtualUser:ClickButton1(vec)
 	end)
 
-	local checkStart = tick()
-	while tick() - checkStart < 10 do
-		task.wait(0.2)
-
-		local now = farming.get_pollen_info()
-		if now and before_pollen >= 0 then
-			if now.pollen < before_pollen or now.pollen <= 0 then
-				--print("activateButton: fired (first click ok)")
-				return true
-			end
-		end
-	end
-	
-	pcall(function()
-		local VIM = find.virtual
-		VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
-		task.wait(0.05)
-		VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
-	end)
-
-	--print("activateButton: fired (fallback)")
+	--print("activateButton: fired")
 	return true
 end
 
@@ -1487,8 +1464,6 @@ function farming.farm(...)
 
 		mod.data.actives["point"] = true
 
-		local RunService = game:GetService("RunService")
-
 		local function isTokenInField(token, field)
 			if not token or not token.Parent or not field then
 				return false
@@ -1516,8 +1491,6 @@ function farming.farm(...)
 			local nearest = nil
 			local nearestDist = math.huge
 
-			table.clear(queue["tokens"])
-
 			for _, token in ipairs(collectibles:GetChildren()) do
 				if token:IsA("BasePart")
 					and token.Parent
@@ -1528,13 +1501,9 @@ function farming.farm(...)
 						- Vector3.new(token.Position.X, 0, token.Position.Z)
 					).Magnitude
 
-					if dist > 0.1 then
-						table.insert(queue["tokens"], token)
-
-						if dist < nearestDist then
-							nearestDist = dist
-							nearest = token
-						end
+					if dist < nearestDist then
+						nearestDist = dist
+						nearest = token
 					end
 				end
 			end
@@ -1552,28 +1521,18 @@ function farming.farm(...)
 			local flowerZones = workspace:FindFirstChild("FlowerZones")
 			local field = nil
 
-			if mod.data.actives["selected_field"] ~= false
-				and flowerZones
-			then
+			if mod.data.actives["selected_field"] ~= false and flowerZones then
 				field = flowerZones:FindFirstChild(
 					mod.data.actives["selected_field"]
 				)
 			end
 
-			local speed =
-				a and a.Speed
-				or mod.data.actives["move_speed"]
-				or 80
-
-			local target = nil
-			local targetIsToken = false
-
-			if a and a.TargetPosition then
-				target = {
-					Position = a.TargetPosition,
-					Parent = true
-				}
+			local speed = (a and a.Speed) or mod.data.actives["move_speed"] or 80
+			if type(speed) ~= "number" or speed <= 0 then
+				speed = 80
 			end
+
+			local targetPosition = a and a.TargetPosition or nil
 
 			while id == farmId
 				and mod.data.actives["auto_farm"] == true
@@ -1587,90 +1546,43 @@ function farming.farm(...)
 					break
 				end
 
-				if root.Anchored or mod.data.actives["move"] == true then
+				if root.Anchored then
 					hum:Move(Vector3.zero, false)
-					RunService.Heartbeat:Wait()
+					task.wait(0.1)
 					continue
 				end
 
-				if targetIsToken then
-					if not target or not target.Parent then
-						target = nil
-						targetIsToken = false
-					end
-				end
+				local token = getNearestToken(root, field)
 
-				if not target then
-					local newToken = getNearestToken(root, field)
-
-					if newToken then
-						target = newToken
-						targetIsToken = true
-					elseif a and a.TargetPosition then
-						target = {
-							Position = a.TargetPosition,
-							Parent = true
-						}
-						targetIsToken = false
-					else
-						break
-					end
-				end
-
-				local targetPosition
-
-				if targetIsToken then
-					if not target.Parent then
-						target = nil
-						targetIsToken = false
-						continue
-					end
-
-					targetPosition = target.Position
+				local target
+				if token then
+					target = token.Position
+				elseif targetPosition then
+					target = targetPosition
 				else
-					targetPosition = target.Position
+					hum:Move(Vector3.zero, false)
+					break
 				end
 
 				local direction = Vector3.new(
-					targetPosition.X - root.Position.X,
+					target.X - root.Position.X,
 					0,
-					targetPosition.Z - root.Position.Z
+					target.Z - root.Position.Z
 				)
 
-				local distance = direction.Magnitude
-				if targetIsToken and not target.Parent then
-					target = nil
-					targetIsToken = false
-					continue
-				end
-				
-				if targetIsToken and distance <= 0.5 then
+				if not token and direction.Magnitude <= 2 then
 					hum:Move(Vector3.zero, false)
-					RunService.Heartbeat:Wait()
-					continue
-				end
-				--if direction.Magnitude > 0.001 then
-				--	hum.WalkSpeed = speed
-				--	hum:Move(direction.Unit, false)
-				--end
-				
-				if direction.Magnitude > 0.001 then
-					hum.WalkSpeed = speed
-					hum:MoveTo(Vector3.new(
-						targetPosition.X,
-						root.Position.Y,
-						targetPosition.Z
-						))
+					break
 				end
 
-				RunService.Heartbeat:Wait()
-			end
-			
-			local char = find.player.Character
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
+				hum.WalkSpeed = speed
+				hum:MoveTo(Vector3.new(
+					target.X,
+					root.Position.Y,
+					target.Z
+					))
 
-			if hum then
-				hum:Move(Vector3.zero, false)
+				task.wait(0.05)
 			end
 
 			task.wait()
