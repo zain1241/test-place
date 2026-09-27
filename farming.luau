@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.72")
+print("loaded 0.0.721")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -418,8 +418,9 @@ function farming.move(...)
 
 					root.Anchored = false
 					mod.data.actives["move"] = false
+					task.wait(.4)
 					farming.autosprinkler()
-					task.wait(1)
+					task.wait(.6)
 				end)
 
 				return currentTween
@@ -1952,200 +1953,93 @@ function farming.farm(...)
 				d(...)
 			end
 		end
-		
+
 		local function m(...)
 			local a = {...}
-			if not find.player.Character:FindFirstChild("HumanoidRootPart") then return false end
-			if mod.data.actives["converting"] then return false end
+			
+			--if mod.data.actives["converting"] then return end
 
-			local character = find.player.Character
-			local root = character:FindFirstChild("HumanoidRootPart")
-			local humanoid = character:FindFirstChildOfClass("Humanoid")
-			if not root or not humanoid then return false end
-			if root.Anchored then return false end
+			---- НЕ двигаем, если идёт конвертация или игрок анкорен
+			--if mod.data.actives["__converting"] then
+			--	return
+			--end
 
-			local targetInstance = nil
-			local p
+			if mod.data.actives["auto_farm"] == false then
+				return
+			end
+
+			if not find.player.Character:FindFirstChild("HumanoidRootPart") then return end
+
+			local checkRoot = find.player.Character:FindFirstChild("HumanoidRootPart")
+			if checkRoot.Anchored then return end
 
 			if typeof(a[1]) == "CFrame" then
 				p = a[1].Position
 			elseif typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
-				targetInstance = a[1]
-				if not targetInstance.Parent then return true end
-
-				local fieldPart = a[3]
-				if not fieldPart or not fieldPart.Parent then return false end
-
-				local lp = fieldPart.CFrame:PointToObjectSpace(targetInstance.Position)
-				p = fieldPart.CFrame:PointToWorldSpace(
-					Vector3.new(lp.X, fieldPart.Size.Y / 2, lp.Z)
-				)
+				local lp = a[3].CFrame:PointToObjectSpace(a[1].Position)
+				--p = a[3].CFrame:PointToWorldSpace(Vector3.new(lp.X, a[3].Size.Y / 2, lp.Z ))
+				local hip = find.player.Character:FindFirstChildOfClass("Humanoid").HipHeight
+				p = a[3].CFrame:PointToWorldSpace(Vector3.new(lp.X, a[3].Size.Y / 2 + hip, lp.Z))
 			else
-				return false
+				return
 			end
 
-			local horizontal = Vector3.new(p.X - root.Position.X, 0, p.Z - root.Position.Z)
-			local distance = horizontal.Magnitude
-			if distance <= 3.5 then return true end
-			
-			local targetPos = Vector3.new(p.X, root.Position.Y, p.Z)
-			local targetCF
-			if distance > 0.001 then
-				targetCF = CFrame.lookAt(targetPos, targetPos + horizontal.Unit)
-			else
-				targetCF = CFrame.new(targetPos) * root.CFrame.Rotation
-			end
-			
-			local animate = character:FindFirstChild("Animate")
-			local runAnimation = animate and animate:FindFirstChild("run")
-				and animate.run:FindFirstChildWhichIsA("Animation")
-			if runAnimation then
-				local animator = humanoid:FindFirstChildOfClass("Animator")
-				if animator then
-					if not track or animwalk ~= animator then
-						if track then track:Destroy() end
-						animwalk = animator
-						track = animator:LoadAnimation(runAnimation)
-						track.Looped = true
-					end
-					if not track.IsPlaying then track:Play(0.1) end
-					track:AdjustSpeed(math.clamp(a[2] / 16, 0.25, 3))
+			local d = Vector3.new(p.X - find.player.Character:FindFirstChild("HumanoidRootPart").Position.X, 0, p.Z - find.player.Character:FindFirstChild("HumanoidRootPart").Position.Z)
+			local cf = d.Magnitude > .001 and CFrame.lookAt(p, p + d.Unit) or CFrame.new(p) * find.player.Character:FindFirstChild("HumanoidRootPart").CFrame.Rotation
+			local t = Vector3.new(find.player.Character:FindFirstChild("HumanoidRootPart").Position.X - p.X, 0, find.player.Character:FindFirstChild("HumanoidRootPart").Position.Z - p.Z).Magnitude / math.max(a[2], .001)
+
+			if find.player.Character:FindFirstChild("Animate").run:FindFirstChildWhichIsA("Animation") then
+				local an = find.player.Character:FindFirstChildOfClass("Humanoid").Animator
+
+				if not track or animwalk ~= an then
+					if track then track:Destroy()end
+					animwalk = an
+					track = animwalk:LoadAnimation(find.player.Character:FindFirstChild("Animate").run:FindFirstChildWhichIsA("Animation"))
+					track.Looped = true
 				end
+
+				if not track.IsPlaying then track:Play() end
+				track:AdjustSpeed(math.clamp(a[2] / 16, .25, 3))
 			end
 
-			local duration = distance / math.max(a[2], 0.001)
-			root.Anchored = true
+			local tween = find.tweenservice:Create(find.player.Character:FindFirstChild("HumanoidRootPart"), TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = cf})
+			atween = tween
+			tween:Play()
+			tween.Completed:Wait()
 
-			local currentTween = find.tweenservice:Create(
-				root,
-				TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
-				{CFrame = targetCF}
-			)
-			atween = currentTween
-			currentTween:Play()
+			--if mod.data.actives["__converting"] then
+			--	if track and track.IsPlaying then track:Stop(0) end
+			--	return
+			--end
 
-			local state = currentTween.Completed:Wait()
-			if atween == currentTween then atween = nil end
+			--if atween == tween then
+			--	atween = nil
+			--end
+
+			--if id ~= farmId then
+			--	return
+			--end
+			--if mod.data.actives["lines"] == true then
+			--	tween:Play()
+			--	--b(true, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
+			--	tween.Completed:Wait()
+			--	--b(false, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
+			--	if track and track.IsPlaying then track:Stop(.1) end
+			--elseif mod.data.actives["lines"] == false then
+			--	tween:Play()
+			--	tween.Completed:Wait()
+			--	if track and track.IsPlaying then track:Stop(.1) end
+			--end
+
+			if atween == tween then atween = nil end
+			if id ~= farmId then return end
+			
 			if mod.data.actives["converting"] then
-				currentTween:Cancel()
-				atween = nil
-				root.Anchored = false
-				return false
+				if track and track.IsPlaying then track:Stop(.1) end
 			end
 
-			if id ~= farmId then
-				root.Anchored = false
-				return false
-			end
-
-			root.Anchored = false
-
-			if state == Enum.PlaybackState.Cancelled then
-				return false
-			end
-			
-			if targetInstance then
-				if not targetInstance.Parent then return true end
-				local rem = (
-					Vector3.new(root.Position.X, 0, root.Position.Z)
-					- Vector3.new(targetInstance.Position.X, 0, targetInstance.Position.Z)
-				).Magnitude
-				if rem <= 4 then
-					if track and track.IsPlaying then track:Stop(0.1) end
-					return true
-				end
-			end
-
-			if track and track.IsPlaying then track:Stop(0.1) end
-			return false
+			--if track and track.IsPlaying then track:Stop(.1) end
 		end
-
-		--local function m(...)
-		--	local a = {...}
-			
-		--	--if mod.data.actives["converting"] then return end
-
-		--	---- НЕ двигаем, если идёт конвертация или игрок анкорен
-		--	--if mod.data.actives["__converting"] then
-		--	--	return
-		--	--end
-
-		--	if mod.data.actives["auto_farm"] == false then
-		--		return
-		--	end
-
-		--	if not find.player.Character:FindFirstChild("HumanoidRootPart") then return end
-
-		--	local checkRoot = find.player.Character:FindFirstChild("HumanoidRootPart")
-		--	if checkRoot.Anchored then return end
-
-		--	if typeof(a[1]) == "CFrame" then
-		--		p = a[1].Position
-		--	elseif typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
-		--		local lp = a[3].CFrame:PointToObjectSpace(a[1].Position)
-		--		--p = a[3].CFrame:PointToWorldSpace(Vector3.new(lp.X, a[3].Size.Y / 2, lp.Z ))
-		--		local hip = find.player.Character:FindFirstChildOfClass("Humanoid").HipHeight
-		--		p = a[3].CFrame:PointToWorldSpace(Vector3.new(lp.X, a[3].Size.Y / 2 + hip, lp.Z))
-		--	else
-		--		return
-		--	end
-
-		--	local d = Vector3.new(p.X - find.player.Character:FindFirstChild("HumanoidRootPart").Position.X, 0, p.Z - find.player.Character:FindFirstChild("HumanoidRootPart").Position.Z)
-		--	local cf = d.Magnitude > .001 and CFrame.lookAt(p, p + d.Unit) or CFrame.new(p) * find.player.Character:FindFirstChild("HumanoidRootPart").CFrame.Rotation
-		--	local t = Vector3.new(find.player.Character:FindFirstChild("HumanoidRootPart").Position.X - p.X, 0, find.player.Character:FindFirstChild("HumanoidRootPart").Position.Z - p.Z).Magnitude / math.max(a[2], .001)
-
-		--	if find.player.Character:FindFirstChild("Animate").run:FindFirstChildWhichIsA("Animation") then
-		--		local an = find.player.Character:FindFirstChildOfClass("Humanoid").Animator
-
-		--		if not track or animwalk ~= an then
-		--			if track then track:Destroy()end
-		--			animwalk = an
-		--			track = animwalk:LoadAnimation(find.player.Character:FindFirstChild("Animate").run:FindFirstChildWhichIsA("Animation"))
-		--			track.Looped = true
-		--		end
-
-		--		if not track.IsPlaying then track:Play() end
-		--		track:AdjustSpeed(math.clamp(a[2] / 16, .25, 3))
-		--	end
-
-		--	local tween = find.tweenservice:Create(find.player.Character:FindFirstChild("HumanoidRootPart"), TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = cf})
-		--	atween = tween
-		--	tween:Play()
-		--	tween.Completed:Wait()
-
-		--	--if mod.data.actives["__converting"] then
-		--	--	if track and track.IsPlaying then track:Stop(0) end
-		--	--	return
-		--	--end
-
-		--	--if atween == tween then
-		--	--	atween = nil
-		--	--end
-
-		--	--if id ~= farmId then
-		--	--	return
-		--	--end
-		--	--if mod.data.actives["lines"] == true then
-		--	--	tween:Play()
-		--	--	--b(true, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
-		--	--	tween.Completed:Wait()
-		--	--	--b(false, find.player.Character:FindFirstChild("HumanoidRootPart"), p)
-		--	--	if track and track.IsPlaying then track:Stop(.1) end
-		--	--elseif mod.data.actives["lines"] == false then
-		--	--	tween:Play()
-		--	--	tween.Completed:Wait()
-		--	--	if track and track.IsPlaying then track:Stop(.1) end
-		--	--end
-
-		--	if atween == tween then atween = nil end
-		--	if id ~= farmId then return end
-			
-		--	if mod.data.actives["converting"] then
-		--		if track and track.IsPlaying then track:Stop(.1) end
-		--	end
-
-		--	--if track and track.IsPlaying then track:Stop(.1) end
-		--end
 
 		while id == farmId and mod.data.actives["auto_farm"] == true and #queue["auto_farm"] > 0 and not mod.data.actives["converting"] do
 			local a = table.remove(queue["auto_farm"], 1)
@@ -2180,18 +2074,18 @@ function farming.farm(...)
 						return (find.player.Character:FindFirstChild("HumanoidRootPart").Position - a.Position).Magnitude < (find.player.Character:FindFirstChild("HumanoidRootPart").Position - b.Position).Magnitude
 					end)
 
-					--local v = table.remove(queue["tokens"], 1)
-					--if v and v.Parent and a.Speed then
-					--	m(v, a.Speed, field)
-					--end
-					
 					local v = table.remove(queue["tokens"], 1)
 					if v and v.Parent and a.Speed then
-						local reached = m(v, a.Speed, field)
-						if not reached and v.Parent then
-							table.insert(queue["tokens"], v)
-						end
+						m(v, a.Speed, field)
 					end
+					
+					--local v = table.remove(queue["tokens"], 1)
+					--if v and v.Parent and a.Speed then
+					--	local reached = m(v, a.Speed, field)
+					--	if not reached and v.Parent then
+					--		table.insert(queue["tokens"], v)
+					--	end
+					--end
 				end
 			else
 				if a.TargetCFrame and a.Speed then
@@ -2203,125 +2097,125 @@ function farming.farm(...)
 		mod.data.actives["point"] = false
 	end
 
-	--local function m(...)
-	--	local a = {...}
-	--	if not find.player.Character:FindFirstChild("HumanoidRootPart") then
-	--		return
-	--	end
-
-	--	local tg = r(a[1])
-	--	local tgc = CFrame.new(tg) * find.player.Character:FindFirstChild("HumanoidRootPart").CFrame.Rotation
-
-	--	table.insert(queue["auto_farm"], {TargetCFrame = tgc, Speed = a[2]})
-
-	--	if not mod.data.actives["move"] then
-	--		task.spawn(q)
-	--	end
-	--end
-	
 	local function m(...)
 		local a = {...}
-
-		if mod.data.actives["converting"] then
-			return false
+		if not find.player.Character:FindFirstChild("HumanoidRootPart") then
+			return
 		end
 
-		local character = find.player.Character
-		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local tg = r(a[1])
+		local tgc = CFrame.new(tg) * find.player.Character:FindFirstChild("HumanoidRootPart").CFrame.Rotation
 
-		if not humanoid or not root or not a[1] or not a[2] then
-			return false
+		table.insert(queue["auto_farm"], {TargetCFrame = tgc, Speed = a[2]})
+
+		if not mod.data.actives["move"] then
+			task.spawn(q)
 		end
-
-		if root.Anchored then
-			return false
-		end
-
-		local targetPosition
-
-		if typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
-			local token = a[1]
-
-			if not token.Parent then
-				return true
-			end
-
-			targetPosition = Vector3.new(
-				token.Position.X,
-				root.Position.Y,
-				token.Position.Z
-			)
-		else
-			targetPosition = Vector3.new(
-				a[1].X,
-				root.Position.Y,
-				a[1].Z
-			)
-		end
-
-		humanoid.WalkSpeed = a[2]
-		
-		for attempt = 1, 3 do
-			if mod.data.actives["converting"] then
-				return false
-			end
-
-			if id ~= farmId then
-				return false
-			end
-			
-			if typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
-				if not a[1].Parent then
-					return true
-				end
-
-				targetPosition = Vector3.new(
-					a[1].Position.X,
-					root.Position.Y,
-					a[1].Position.Z
-				)
-			end
-			
-			if (
-				Vector3.new(root.Position.X, 0, root.Position.Z)
-				-
-					Vector3.new(targetPosition.X, 0, targetPosition.Z)
-				).Magnitude <= 4
-			then
-				return true
-			end
-
-			humanoid:MoveTo(targetPosition)
-
-			local startMove = tick()
-			while tick() - startMove < 3 do
-				if mod.data.actives["converting"] then
-					return false
-				end
-				if id ~= farmId then
-					return false
-				end
-
-				if typeof(a[1]) == "Instance" and not a[1].Parent then
-					return true  -- токен собран/исчез
-				end
-
-				local dist = (
-					Vector3.new(root.Position.X, 0, root.Position.Z)
-					- Vector3.new(targetPosition.X, 0, targetPosition.Z)
-				).Magnitude
-
-				if dist <= 4 then
-					return true
-				end
-
-				task.wait(0.05)
-			end
-		end
-
-		return false
 	end
+	
+	--local function m(...)
+	--	local a = {...}
+
+	--	if mod.data.actives["converting"] then
+	--		return false
+	--	end
+
+	--	local character = find.player.Character
+	--	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	--	local root = character and character:FindFirstChild("HumanoidRootPart")
+
+	--	if not humanoid or not root or not a[1] or not a[2] then
+	--		return false
+	--	end
+
+	--	if root.Anchored then
+	--		return false
+	--	end
+
+	--	local targetPosition
+
+	--	if typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
+	--		local token = a[1]
+
+	--		if not token.Parent then
+	--			return true
+	--		end
+
+	--		targetPosition = Vector3.new(
+	--			token.Position.X,
+	--			root.Position.Y,
+	--			token.Position.Z
+	--		)
+	--	else
+	--		targetPosition = Vector3.new(
+	--			a[1].X,
+	--			root.Position.Y,
+	--			a[1].Z
+	--		)
+	--	end
+
+	--	humanoid.WalkSpeed = a[2]
+		
+	--	for attempt = 1, 3 do
+	--		if mod.data.actives["converting"] then
+	--			return false
+	--		end
+
+	--		if id ~= farmId then
+	--			return false
+	--		end
+			
+	--		if typeof(a[1]) == "Instance" and a[1]:IsA("BasePart") then
+	--			if not a[1].Parent then
+	--				return true
+	--			end
+
+	--			targetPosition = Vector3.new(
+	--				a[1].Position.X,
+	--				root.Position.Y,
+	--				a[1].Position.Z
+	--			)
+	--		end
+			
+	--		if (
+	--			Vector3.new(root.Position.X, 0, root.Position.Z)
+	--			-
+	--				Vector3.new(targetPosition.X, 0, targetPosition.Z)
+	--			).Magnitude <= 4
+	--		then
+	--			return true
+	--		end
+
+	--		humanoid:MoveTo(targetPosition)
+
+	--		local startMove = tick()
+	--		while tick() - startMove < 3 do
+	--			if mod.data.actives["converting"] then
+	--				return false
+	--			end
+	--			if id ~= farmId then
+	--				return false
+	--			end
+
+	--			if typeof(a[1]) == "Instance" and not a[1].Parent then
+	--				return true  -- токен собран/исчез
+	--			end
+
+	--			local dist = (
+	--				Vector3.new(root.Position.X, 0, root.Position.Z)
+	--				- Vector3.new(targetPosition.X, 0, targetPosition.Z)
+	--			).Magnitude
+
+	--			if dist <= 4 then
+	--				return true
+	--			end
+
+	--			task.wait(0.05)
+	--		end
+	--	end
+
+	--	return false
+	--end
 
 	local function q1(...)
 		if mod.data.actives["point"] then
@@ -2455,21 +2349,21 @@ function farming.farm(...)
 						return (find.player.Character:FindFirstChild("HumanoidRootPart").Position - a.Position).Magnitude < (find.player.Character:FindFirstChild("HumanoidRootPart").Position - b.Position).Magnitude
 					end)
 
-					--local v = table.remove(queue["tokens"], 1)
-
-					--if v and v.Parent and a.Speed then
-					--	m(v, a.Speed)
-					--end
-					
 					local v = table.remove(queue["tokens"], 1)
 
 					if v and v.Parent and a.Speed then
-						local reached = m(v, a.Speed)
-
-						if not reached and v.Parent then
-							table.insert(queue["tokens"], v)
-						end
+						m(v, a.Speed)
 					end
+					
+					--local v = table.remove(queue["tokens"], 1)
+
+					--if v and v.Parent and a.Speed then
+					--	local reached = m(v, a.Speed)
+
+					--	if not reached and v.Parent then
+					--		table.insert(queue["tokens"], v)
+					--	end
+					--end
 				end
 			else
 				if a.TargetPosition and a.Speed then
