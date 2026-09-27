@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.65")
+print("loaded 0.0.66")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -68,11 +68,28 @@ local function clearFarmLines()
 	end
 end
 
+local function findActivateButton()
+	local pg = find.player.PlayerGui
+	local sg = pg:FindFirstChild("ScreenGui")
+	if sg then
+		local b = sg:FindFirstChild("ActivateButton")
+		if b then return b end
+	end
+	for _, gui in ipairs(pg:GetChildren()) do
+		if gui:IsA("ScreenGui") or gui:IsA("Folder") then
+			local b = gui:FindFirstChild("ActivateButton", true)
+			if b then return b end
+		end
+	end
+	return nil
+end
+
 local function activateButton(...)
-	local screenGui = find.player.PlayerGui:WaitForChild("ScreenGui", 5)
-	if not screenGui then warn("ScreenGui not found") return false end
-	local button = screenGui:WaitForChild("ActivateButton", 5)
-	if not button then warn("ActivateButton not found") return false end
+	local button = findActivateButton()
+	if not button then
+		warn("ActivateButton not found")
+		return false
+	end
 
 	local inset = find.guiservice:GetGuiInset()
 	local pos = button.AbsolutePosition
@@ -80,12 +97,58 @@ local function activateButton(...)
 	local clickX = pos.X + (size.X / 2)
 	local clickY = pos.Y + (size.Y / 2) + inset.Y
 
-	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, game, 1)
-	task.wait(0.05)
-	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
-	print("activated")
+	-- способ 1: VirtualUser
+	pcall(function()
+		game:GetService("VirtualUser"):ClickButton1(Vector2.new(clickX, clickY))
+	end)
+	task.wait(0.08)
+
+	-- способ 2: VirtualInputManager с явным target
+	pcall(function()
+		find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, button, 1)
+		task.wait(0.05)
+		find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, button, 1)
+	end)
+	task.wait(0.08)
+
+	-- способ 3: прямой Fire сигналов (если клики не работают)
+	pcall(function()
+		if button.Activated then button.Activated:Fire() end
+	end)
+	pcall(function()
+		if button.MouseButton1Click then button.MouseButton1Click:Fire() end
+	end)
+	pcall(function()
+		if button.MouseButton1Down then button.MouseButton1Down:Fire() end
+		if button.MouseButton1Up then button.MouseButton1Up:Fire() end
+	end)
+
+	print("activateButton: fired all methods")
 	return true
 end
+
+--local function activateButton(...)
+--	local screenGui = find.player.PlayerGui:WaitForChild("ScreenGui", 5)
+--	if not screenGui then warn("ScreenGui not found") return false end
+--	local button = screenGui:WaitForChild("ActivateButton", 5)
+--	if not button then warn("ActivateButton not found") return false end
+
+--	local inset = find.guiservice:GetGuiInset()
+--	local pos = button.AbsolutePosition
+--	local size = button.AbsoluteSize
+--	local clickX = pos.X + (size.X / 2)
+--	local clickY = pos.Y + (size.Y / 2) + inset.Y
+
+--	-- вариант 1: VirtualUser (надёжнее)
+--	game:GetService("VirtualUser"):ClickButton1(Vector2.new(clickX, clickY))
+
+--	-- вариант 2: явно target-кнопка
+--	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, true, button, 1)
+--	task.wait(0.05)
+--	find.virtual:SendMouseButtonEvent(clickX, clickY, 0, false, button, 1)
+--	print("activated")
+--	return true
+--end
 
 function farming.conAF(...)
 	local a = {...}
@@ -421,12 +484,36 @@ function farming.move(...)
 				return
 			end
 			
-			local ok, err = pcall(activateButton)
-			if not ok then warn("activateButton failed:", err) end
+			local tries = 0
+			local maxTries = 5
+			local occupied = false
 
-			task.wait(1)
+			while tries < maxTries and not occupied do
+				tries += 1
+				print("[hive] попытка занять улей:", tries)
+
+				local ok, res = pcall(activateButton)
+				if not ok or res ~= true then
+					warn("activateButton failed:", ok, res)
+				end
+
+				task.wait(1.2)
+
+				if farming.getHive() then
+					occupied = true
+					print("[hive] улей занят")
+					break
+				end
+			end
+
 			mod.data.actives["move"] = false
-			pcall(farming.farm())
+
+			if occupied then
+				pcall(farming.farm)
+			else
+				warn("[hive] не удалось занять улей за " .. maxTries .. " попыток")
+				mod.data.actives["converting"] = false
+			end
 		end)
 		return currentTween
 	elseif a[1] == "convert" then
@@ -505,9 +592,9 @@ function farming.convert(...)
 		aconvert = nil
 	end
 
-	local ok, err = pcall(activateButton)
-	if not ok or err == false then
-		warn("activateButton failed")
+	local ok, result = pcall(activateButton)
+	if not ok or result ~= true then
+		warn("activateButton failed:", ok, result)
 		mod.data.actives["converting"] = false
 		mod.data.actives["move"] = false
 		return
