@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.311")
+print("loaded 0.1.32")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1536,7 +1536,7 @@ function farming.move(...)
 				currentTween.Completed:Once(function(state)
 					if tween == currentTween then
 						tween = nil
-					end'
+					end
 					
 					if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
 						pcall(function()
