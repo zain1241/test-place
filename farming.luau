@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.371")
+print("loaded 0.1.374")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -377,6 +377,7 @@ function farming.farmPetalBloom(field, id)
 	end)
 	
 	local tracked = {}
+	local handled = {}
 	local lastSpawn = os.clock()
 
 	local conn
@@ -384,6 +385,7 @@ function farming.farmPetalBloom(field, id)
 		if not phaseEnabled() then return end
 		if not isPetal(v) then return end
 		if oldPetals[v] then return end
+		if handled[v] then return end
 		if (v.Position - origin).Magnitude <= 60 then
 			tracked[v] = true
 			lastSpawn = os.clock()
@@ -399,10 +401,22 @@ function farming.farmPetalBloom(field, id)
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
 
 		if humanoid and hrp and not hrp.Anchored then
+			for petal in pairs(tracked) do
+				if not petal.Parent then
+					tracked[petal] = nil
+				end
+			end
+			for petal in pairs(handled) do
+				if not petal.Parent then
+					handled[petal] = nil
+				end
+			end
+			
 			for _, v in ipairs(particles:GetChildren()) do
 				if isPetal(v)
 					and not oldPetals[v]
 					and not tracked[v]
+					and not handled[v]
 					and (v.Position - origin).Magnitude <= 60
 				then
 					tracked[v] = true
@@ -414,20 +428,26 @@ function farming.farmPetalBloom(field, id)
 			if petal then
 				local pos = petal.Position
 				local target = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
-				humanoid.WalkSpeed = speed
-				humanoid:MoveTo(target)
+				local d = (target - hrp.Position).Magnitude
 
-				if (target - hrp.Position).Magnitude <= 3.5 then
+				if d <= 3.5 then
 					tracked[petal] = nil
+					handled[petal] = true
+					task.wait(0.01)
+				else
+					humanoid.WalkSpeed = speed
+					humanoid:MoveTo(target)
+					task.wait(0.01)
 				end
 			else
 				if os.clock() - lastSpawn > 0.45 and os.clock() - petalStart > 0.5 then
 					break
 				end
+				task.wait(0.01)
 			end
+		else
+			task.wait(0.01)
 		end
-
-		task.wait(0.01)
 	end
 
 	if conn then conn:Disconnect() end
