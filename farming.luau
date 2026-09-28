@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.31")
+print("loaded 0.1.311")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -86,16 +86,25 @@ local function isInField(pos, field)
 end
 
 local function getNearestSprout(field, hrp)
-	if not hrp then return nil end
+	if not hrp then
+		return nil
+	end
 
 	local sf = workspace:FindFirstChild("Sprouts")
-	if not sf then return nil end
+	if not sf then
+		return nil
+	end
 
-	local nearest, nearestDist
+	local nearest
+	local nearestDist
 
 	for _, obj in ipairs(sf:GetChildren()) do
-		if obj.Name == "Sprout" and obj:IsA("BasePart") then
+		if obj.Name == "Sprout"
+			and obj:IsA("BasePart")
+			and isInField(obj.Position, field)
+		then
 			local d = (obj.Position - hrp.Position).Magnitude
+
 			if not nearestDist or d < nearestDist then
 				nearest = obj
 				nearestDist = d
@@ -178,9 +187,20 @@ local function getBloomPosition(bloom)
 end
 
 local function getNearestBloom(field, hrp)
-	if not bloomFolder then return nil end
+	if not hrp then
+		return nil
+	end
+
+	local happenings = getHappenings()
+	local folder = happenings and happenings:FindFirstChild("PoppablePlants")
+
+	if not folder then
+		return nil
+	end
+
 	local nearest, nearestDistance
-	for _, bloom in ipairs(bloomFolder:GetChildren()) do
+
+	for _, bloom in ipairs(folder:GetChildren()) do
 		if bloom:IsA("Model") and bloom.Name == "Bloom" then
 			local pos = getBloomPosition(bloom)
 			if pos and isInField(pos, field) then
@@ -255,7 +275,12 @@ function farming.farmPetalBloom(field, id)
 	end
 	
 	local function bloomAlive()
-		return phaseEnabled() and bloom.Parent == bloomFolder
+		local happenings = getHappenings()
+		local folder = happenings and happenings:FindFirstChild("PoppablePlants")
+
+		return phaseEnabled()
+			and folder ~= nil
+			and bloom.Parent == folder
 	end
 	
 	local approachStart = tick()
@@ -279,24 +304,38 @@ function farming.farmPetalBloom(field, id)
 	
 	local circleRadius = 7
 	local circleStart = tick()
+	local breakTimeout = 30
+	local spin = 1
 	local lastActivate = 0
-	local petalSpin = 1
 
-	while bloomAlive() and tick() - circleStart < 30 do
+	while bloomAlive() and (tick() - circleStart) < breakTimeout do
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
-		if not humanoid or not hrp or hrp.Anchored then break end
+
+		if not humanoid or not hrp or hrp.Anchored then
+			break
+		end
 
 		local pos = getBloomPosition(bloom)
-		if not pos then break end
-		
-		local center = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
+		if not pos then
+			break
+		end
+
+		local center = Vector3.new(
+			pos.X,
+			hrp.Position.Y,
+			pos.Z
+		)
+
 		local offset = Vector3.new(
-			hrp.Position.X - center.X, 0,
+			hrp.Position.X - center.X,
+			0,
 			hrp.Position.Z - center.Z
 		)
+
 		local dist = offset.Magnitude
+
 		if dist < 0.1 then
 			offset = Vector3.new(1, 0, 0)
 			dist = 1
@@ -304,31 +343,42 @@ function farming.farmPetalBloom(field, id)
 
 		local radial = offset.Unit
 		local tangent = Vector3.new(
-			-radial.Z * petalSpin, 0,
-			radial.X * petalSpin
+			-radial.Z * spin,
+			0,
+			radial.X * spin
 		)
 
 		local moveDir
+
 		if dist > circleRadius + 1.5 then
-			moveDir = (
-				Vector3.new(center.X, hrp.Position.Y, center.Z) - hrp.Position
-			).Unit
+			moveDir = -radial
 		elseif dist < circleRadius - 1.5 then
 			moveDir = radial
 		else
 			moveDir = tangent
 		end
 
+		local waypoint = hrp.Position + moveDir * 8
+		waypoint = Vector3.new(
+			waypoint.X,
+			hrp.Position.Y,
+			waypoint.Z
+		)
+
 		humanoid.WalkSpeed = speed
-		humanoid:Move(moveDir, false)
-		task.wait(0.01)
+
+		pcall(function()
+			humanoid:MoveTo(waypoint)
+		end)
+
+		task.wait(0.08)
 	end
 
-	character = find.player.Character
-	humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if humanoid then
-		pcall(function() humanoid:Move(Vector3.zero, false) end)
-	end
+	pcall(function()
+		if humanoid then
+			humanoid:Move(Vector3.zero, false)
+		end
+	end)
 	
 	local tracked = {}
 	local lastSpawn = os.clock()
@@ -406,7 +456,9 @@ function farming.farmSprout(field, id)
 			end)
 		end
 
-		farming.hardUninv()
+		pcall(function()
+			farming.inv(false)
+		end)
 
 		if clearMove ~= false then
 			mod.data.actives["move"] = false
@@ -511,8 +563,11 @@ function farming.farmSprout(field, id)
 		end)
 	end
 
-	pcall(function() startRoot.Anchored = false end)
-	safeCleanup(startRoot)
+	pcall(function()
+		startRoot.Anchored = false
+	end)
+	safeCleanup(startRoot, false)
+	mod.data.actives["move"] = true
 
 	if not enabled() then
 		return false
@@ -540,47 +595,80 @@ function farming.farmSprout(field, id)
 	local circleRadius = 7
 	local circleStart = tick()
 	local breakTimeout = 30
-	local lastActivate = 0
 	local spin = 1
+	local lastActivate = 0
 
-	while enabled() and sprout.Parent ~= nil and (tick() - circleStart) < breakTimeout do
+	while enabled()
+		and sprout.Parent ~= nil
+		and (tick() - circleStart) < breakTimeout
+	do
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
-		if not humanoid or not hrp or hrp.Anchored then break end
 
-		local center = Vector3.new(sprout.Position.X, hrp.Position.Y, sprout.Position.Z)
+		if not humanoid or not hrp or hrp.Anchored then
+			break
+		end
+
+		local center = Vector3.new(
+			sprout.Position.X,
+			hrp.Position.Y,
+			sprout.Position.Z
+		)
+
 		local offset = Vector3.new(
-			hrp.Position.X - center.X, 0,
+			hrp.Position.X - center.X,
+			0,
 			hrp.Position.Z - center.Z
 		)
+
 		local dist = offset.Magnitude
+
 		if dist < 0.1 then
 			offset = Vector3.new(1, 0, 0)
 			dist = 1
 		end
 
 		local radial = offset.Unit
+
 		local tangent = Vector3.new(
-			-radial.Z * spin, 0,
+			-radial.Z * spin,
+			0,
 			radial.X * spin
 		)
 
 		local moveDir
+
 		if dist > circleRadius + 1.5 then
-			moveDir = (
-				Vector3.new(center.X, hrp.Position.Y, center.Z) - hrp.Position
-			).Unit
+			moveDir = -radial
 		elseif dist < circleRadius - 1.5 then
 			moveDir = radial
 		else
 			moveDir = tangent
 		end
 
+		local waypoint = hrp.Position + moveDir * 8
+
+		waypoint = Vector3.new(
+			waypoint.X,
+			hrp.Position.Y,
+			waypoint.Z
+		)
+
 		humanoid.WalkSpeed = speed
-		humanoid:Move(moveDir, false)
-		task.wait(0.01)
+
+		pcall(function()
+			humanoid:MoveTo(waypoint)
+		end)
+
+		task.wait(0.08)
 	end
+
+	pcall(function()
+		if humanoid then
+			humanoid:Move(Vector3.zero, false)
+		end
+	end)
 
 	character = find.player.Character
 	humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -588,7 +676,7 @@ function farming.farmSprout(field, id)
 		pcall(function() humanoid:Move(Vector3.zero, false) end)
 	end
 
-	safeCleanup(nil)
+	safeCleanup(nil, false)
 
 	lastSproutTime = tick()
 	return true
@@ -844,7 +932,6 @@ function farming.farmPuffshroom(field, id)
 	pcall(function()
 		startRoot.Anchored = false
 	end)
-	
 	safeCleanup(startRoot, false)
 	mod.data.actives["move"] = true
 
@@ -1449,13 +1536,9 @@ function farming.move(...)
 				currentTween.Completed:Once(function(state)
 					if tween == currentTween then
 						tween = nil
-					end
-
+					end'
+					
 					if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
-						if s.Parent then
-							s:Destroy()
-						end
-
 						pcall(function()
 							root.Anchored = false
 						end)
@@ -1464,13 +1547,31 @@ function farming.move(...)
 							farming.inv(false)
 						end)
 
-						if humanoid and humanoid.Parent then
-							humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
-						end
-
+						mod.data.actives["converting"] = false
 						mod.data.actives["move"] = false
 						return
 					end
+
+					--if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+					--	if s.Parent then
+					--		s:Destroy()
+					--	end
+
+					--	pcall(function()
+					--		root.Anchored = false
+					--	end)
+
+					--	pcall(function()
+					--		farming.inv(false)
+					--	end)
+
+					--	if humanoid and humanoid.Parent then
+					--		humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+					--	end
+
+					--	mod.data.actives["move"] = false
+					--	return
+					--end
 
 					j(false)
 					if s.Parent then s:Destroy() end
@@ -2810,6 +2911,7 @@ function farming.farm(...)
 				if sproutFound then
 					print("found:", sproutFound:GetFullName(), sproutFound.Position)
 					farming.farmSprout(field, id)
+					continue
 				end
 			end
 			
@@ -2847,6 +2949,7 @@ function farming.farm(...)
 					)
 
 					if not nextPuff then
+						mod.data.actives["move"] = false
 						returnToField(field, id)
 					end
 
@@ -3033,6 +3136,7 @@ function farming.farm(...)
 		end
 
 		mod.data.actives["point"] = true
+		mod.data.actives["move"] = true
 
 		local function isTokenInField(token, field)
 			local p = field.CFrame:PointToObjectSpace(token.Position)
@@ -3128,6 +3232,7 @@ function farming.farm(...)
 				if sproutFound then
 					print("found:", sproutFound:GetFullName(), sproutFound.Position)
 					farming.farmSprout(field, id)
+					continue
 				end
 			end
 			
@@ -3145,28 +3250,40 @@ function farming.farm(...)
 			end
 
 			if mod.data.actives["pushrooms_enabled"] == true and field then
-				farming.farmPuffshroom(field, id)
-
-				if id ~= farmId
-					or mod.data.actives["auto_farm"] ~= true
-					or mod.data.actives["converting"]
-				then
-					continue
-				end
-
 				local rt = find.player.Character
 					and find.player.Character:FindFirstChild("HumanoidRootPart")
 
-				local nextPuff = getNearestPuff(
+				local puffFound = getNearestPuff(
 					field,
 					rt,
 					mod.data.actives["pushrooms"] or "All Pushrooms"
 				)
-				if not nextPuff then
-					returnToField(field, id)
-				end
 
-				continue
+				if puffFound then
+					farming.farmPuffshroom(field, id)
+
+					if id ~= farmId
+						or mod.data.actives["auto_farm"] ~= true
+						or mod.data.actives["converting"]
+					then
+						continue
+					end
+
+					rt = find.player.Character
+						and find.player.Character:FindFirstChild("HumanoidRootPart")
+
+					local nextPuff = getNearestPuff(
+						field,
+						rt,
+						mod.data.actives["pushrooms"] or "All Pushrooms"
+					)
+
+					if not nextPuff then
+						returnToField(field, id)
+					end
+
+					continue
+				end
 			end
 
 			table.clear(queue["tokens"])
