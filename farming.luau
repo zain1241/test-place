@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.27")
+print("loaded 0.1.29")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -401,7 +401,7 @@ function farming.farmSprout(field, id)
 				if rootPart.Parent then rootPart.Anchored = false end
 			end)
 		end
-		pcall(function() farming.inv(false) end)
+		farming.hardUninv()
 		mod.data.actives["move"] = false
 	end
 
@@ -437,7 +437,11 @@ function farming.farmSprout(field, id)
 
 	local startRoot = hrp
 	local startPosition = startRoot.Position
-	local target = sprout.Position
+	local target = sprout.Position + Vector3.new(
+		find.random:NextNumber(-3, 3),
+		5,
+		find.random:NextNumber(-3, 3)
+	)
 
 	local distance = (startRoot.Position - target).Magnitude
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
@@ -761,7 +765,11 @@ function farming.farmPuffshroom(field, id)
 
 	local startRoot = hrp
 	local startPosition = startRoot.Position
-	local target = rootPart.Position
+	local target = rootPart.Position + Vector3.new(
+		find.random:NextNumber(-3, 3),
+		5,
+		find.random:NextNumber(-3, 3)
+	)
 
 	local distance = (startRoot.Position - target).Magnitude
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
@@ -1171,9 +1179,30 @@ function farming.inv(...)
 	end
 end
 
-function farming.noclip(on)
-	local char = find.player.Character
+function farming.hardUninv()
+	if invc then
+		pcall(function() invc:Disconnect() end)
+		invc = nil
+	end
 
+	local b = workspace:FindFirstChild(find.player.Name)
+	if not b then return end
+
+	for _, v in ipairs(b:GetChildren()) do
+		if v:IsA("MeshPart") and v.Name ~= "HumanoidRootPart" then
+			v.Transparency = 0
+			v.CanTouch = true
+			v.CanQuery = true
+			if not __noclipConn then
+				v.CanCollide = true
+			else
+				v.CanCollide = false
+			end
+		end
+	end
+end
+
+function farming.noclip(on)
 	if on then
 		if __noclipConn then return end
 		__noclipConn = farming.conAF(
@@ -1182,7 +1211,7 @@ function farming.noclip(on)
 				local c = find.player.Character
 				if not c then return end
 				for _, v in ipairs(c:GetChildren()) do
-					if v:IsA("BasePart") then
+					if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
 						v.CanCollide = false
 						v.CanTouch = true
 						v.CanQuery = true
@@ -3179,6 +3208,7 @@ function farming.farm(...)
 					find.player.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = mod.data.actives["walkspeed"]
 					farming.cornl(false)
 					farming.inv(false)
+					farming.hardUninv()
 					farming.noclip(false)
 					mod.data.actives["move"] = false
 					return
@@ -3221,6 +3251,7 @@ function farming.farm(...)
 				
 				if mod.data.actives["move"] == false then
 					farming.inv(false)
+					farming.hardUninv()
 					local hasTokens = false
 					local collectibles = workspace:FindFirstChild("Collectibles")
 					local flowerZones = workspace:FindFirstChild("FlowerZones")
@@ -3321,6 +3352,7 @@ function farming.farm(...)
 
 		farming.cornl(false)
 		farming.inv(false)
+		farming.hardUninv()
 		farming.noclip(false)
 	end
 end
