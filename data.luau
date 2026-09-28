@@ -185,6 +185,7 @@ data.actives = {
 	--pushrooms = false,
 	pushrooms_enabled = false,
 	pushrooms = "All Pushrooms",
+	sprouts = false,
 
 	--options
 	hide_decorations = false,
