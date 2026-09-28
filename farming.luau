@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.291")
+print("loaded 0.1.3")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -88,32 +88,17 @@ end
 local function getNearestSprout(field, hrp)
 	if not hrp then return nil end
 
-	local containers = {}
-
-	local s1 = workspace:FindFirstChild("Sprouts")
-	if s1 then containers[#containers + 1] = s1 end
-
-	local particles = workspace:FindFirstChild("Particles")
-	if particles then
-		local f2 = particles:FindFirstChild("Folder2")
-		if f2 then containers[#containers + 1] = f2 end
-
-		local f1 = particles:FindFirstChild("Folder1")
-		if f1 then containers[#containers + 1] = f1 end
-	end
+	local sf = workspace:FindFirstChild("Sprouts")
+	if not sf then return nil end
 
 	local nearest, nearestDist
 
-	for _, container in ipairs(containers) do
-		for _, obj in ipairs(container:GetChildren()) do
-			if obj.Name == "Sprout" and obj:IsA("BasePart") then
-				if isInField(obj.Position, field) then
-					local d = (obj.Position - hrp.Position).Magnitude
-					if not nearestDist or d < nearestDist then
-						nearest = obj
-						nearestDist = d
-					end
-				end
+	for _, obj in ipairs(sf:GetChildren()) do
+		if obj.Name == "Sprout" and obj:IsA("BasePart") then
+			local d = (obj.Position - hrp.Position).Magnitude
+			if not nearestDist or d < nearestDist then
+				nearest = obj
+				nearestDist = d
 			end
 		end
 	end
@@ -700,7 +685,7 @@ local function isPuffLoot(v)
 	return v.Parent == workspace:FindFirstChild("Collectibles") and v:FindFirstChildWhichIsA("Decal") ~= nil
 end
 
-local function findLootNear(pos, radius)
+local function findLootNear(pos, radius, ignored)
 	if not pos then
 		return nil
 	end
@@ -714,7 +699,10 @@ local function findLootNear(pos, radius)
 	local bestDist
 
 	for _, v in ipairs(collectibles:GetChildren()) do
-		if isPuffLoot(v) then
+		if isPuffLoot(v)
+			and not (ignored and ignored[v])
+			and v.Parent
+		then
 			local d = (v.Position - pos).Magnitude
 
 			if d <= radius and (not bestDist or d < bestDist) then
@@ -934,6 +922,7 @@ function farming.farmPuffshroom(field, id)
 	
 	local lootTimeout = tick() + 7
 	local lastLootTime = tick()
+	local handledLoot = {}
 
 	while enabled() and tick() < lootTimeout do
 		character = find.player.Character
@@ -945,33 +934,55 @@ function farming.farmPuffshroom(field, id)
 			continue
 		end
 
-		local loot = findLootNear(target, 35)
+		local loot = findLootNear(hrp.Position, 35, handledLoot)
 
 		if loot and loot.Parent then
 			lastLootTime = tick()
+
 			local lootStart = tick()
 
-			while enabled() and loot.Parent and (tick() - lootStart) < 2 do
+			while enabled()
+				and loot.Parent
+				and not handledLoot[loot]
+				and tick() - lootStart < 2
+			do
 				character = find.player.Character
 				humanoid = character and character:FindFirstChildOfClass("Humanoid")
 				hrp = character and character:FindFirstChild("HumanoidRootPart")
-				if not humanoid or not hrp then break end
+
+				if not humanoid or not hrp then
+					break
+				end
 
 				local targetPos = Vector3.new(
-					loot.Position.X, hrp.Position.Y, loot.Position.Z
+					loot.Position.X,
+					hrp.Position.Y,
+					loot.Position.Z
 				)
+
 				local dx = hrp.Position.X - targetPos.X
 				local dz = hrp.Position.Z - targetPos.Z
 				local d = math.sqrt(dx * dx + dz * dz)
 
-				if d <= 2 then break end
+				if d <= 2 then
+					handledLoot[loot] = true
+					break
+				end
 
 				humanoid.WalkSpeed = speed
-				pcall(function() humanoid:MoveTo(targetPos) end)
+				pcall(function()
+					humanoid:MoveTo(targetPos)
+				end)
+
 				task.wait()
 			end
 		else
-			if tick() - lastLootTime > 0.2 then
+			for obj in pairs(handledLoot) do
+				if not obj.Parent then
+					handledLoot[obj] = nil
+				end
+			end
+			if tick() - lastLootTime > 0.45 then
 				break
 			end
 		end
@@ -986,6 +997,41 @@ function farming.farmPuffshroom(field, id)
 	end
 
 	safeCleanup(nil)
+
+	return true
+end
+
+local function returnToField(field, id)
+	if not field then
+		return false
+	end
+
+	if id ~= farmId
+		or mod.data.actives["auto_farm"] ~= true
+		or mod.data.actives["converting"]
+	then
+		return false
+	end
+
+	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
+
+	local currentTween = farming.move(
+		"flowerzones",
+		speed,
+		field.Name
+	)
+
+	if not currentTween then
+		return false
+	end
+	
+	while id == farmId
+		and mod.data.actives["auto_farm"] == true
+		and not mod.data.actives["converting"]
+		and mod.data.actives["move"] == true
+	do
+		task.wait()
+	end
 
 	return true
 end
@@ -2729,13 +2775,16 @@ function farming.farm(...)
 				and field
 				and (tick() - lastSproutTime) >= SPROUT_COOLDOWN
 			then
-				local ch = find.player.Character
 				local sproutFound = getNearestSprout(
 					field,
-					ch and ch:FindFirstChild("HumanoidRootPart")
+					find.player.Character
+						and find.player.Character:FindFirstChild("HumanoidRootPart")
 				)
+
 				if sproutFound then
+					print("found:", sproutFound:GetFullName(), sproutFound.Position)
 					farming.farmSprout(field, id)
+					continue
 				end
 			end
 			
@@ -2744,7 +2793,40 @@ function farming.farm(...)
 			end
 			
 			if mod.data.actives["pushrooms_enabled"] == true and field then
-				farming.farmPuffshroom(field, id)
+				local rt = find.player.Character
+					and find.player.Character:FindFirstChild("HumanoidRootPart")
+
+				local puffFound = getNearestPuff(
+					field,
+					rt,
+					mod.data.actives["pushrooms"] or "All Pushrooms"
+				)
+
+				if puffFound then
+					farming.farmPuffshroom(field, id)
+
+					if id ~= farmId
+						or mod.data.actives["auto_farm"] ~= true
+						or mod.data.actives["converting"]
+					then
+						continue
+					end
+
+					rt = find.player.Character
+						and find.player.Character:FindFirstChild("HumanoidRootPart")
+
+					local nextPuff = getNearestPuff(
+						field,
+						rt,
+						mod.data.actives["pushrooms"] or "All Pushrooms"
+					)
+
+					if not nextPuff then
+						returnToField(field, id)
+					end
+
+					continue
+				end
 			end
 
 			table.clear(queue["tokens"])
@@ -3019,6 +3101,7 @@ function farming.farm(...)
 				)
 
 				if sproutFound then
+					print("found:", sproutFound:GetFullName(), sproutFound.Position)
 					farming.farmSprout(field, id)
 					continue
 				end
@@ -3038,17 +3121,28 @@ function farming.farm(...)
 			end
 
 			if mod.data.actives["pushrooms_enabled"] == true and field then
-				local puffFound = getNearestPuff(
-					field,
-					find.player.Character
-						and find.player.Character:FindFirstChild("HumanoidRootPart"),
-					mod.data.actives["pushrooms"] or "All Pushrooms"
-				)
+				farming.farmPuffshroom(field, id)
 
-				if puffFound then
-					farming.farmPuffshroom(field, id)
+				if id ~= farmId
+					or mod.data.actives["auto_farm"] ~= true
+					or mod.data.actives["converting"]
+				then
 					continue
 				end
+
+				local rt = find.player.Character
+					and find.player.Character:FindFirstChild("HumanoidRootPart")
+
+				local nextPuff = getNearestPuff(
+					field,
+					rt,
+					mod.data.actives["pushrooms"] or "All Pushrooms"
+				)
+				if not nextPuff then
+					returnToField(field, id)
+				end
+
+				continue
 			end
 
 			table.clear(queue["tokens"])
