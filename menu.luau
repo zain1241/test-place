@@ -3,16 +3,13 @@ local loaded = rawget(env, "__NECTAR_MODULES")
 
 local data
 local farming
-local home
 
-if loaded and loaded.data and loaded.farming and loaded.home then
+if loaded and loaded.data and loaded.farming then
 	data = loaded.data
 	farming = loaded.farming
-	home = loaded.home
 else
 	data = require(script.Parent:WaitForChild("data"))
 	farming = require(script.Parent:WaitForChild("farming"))
-	home = require(script.Parent:WaitForChild("home"))
 end
 
 local menu = {}
@@ -20,7 +17,6 @@ local menu = {}
 local mod = {
 	data = data,
 	farming = farming,
-	home = home,
 }
 
 local find= {
