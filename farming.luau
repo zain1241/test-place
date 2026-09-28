@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.99")
+print("loaded 0.0.991")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -37,6 +37,87 @@ local queue = {
 
 local invc, tween, afarm, adig, aconvert, atween, track, animwalk, humanoid_walk_speed, p, p1;
 local farmId = 0
+
+-- ============================================================
+-- BUBBLES (workspace.Particles)
+-- ============================================================
+local bubbles = {}
+local staticBubbles = {}
+local bubblesReady = false
+
+local function initBubbles()
+	if bubblesReady then return end
+	local particles = workspace:FindFirstChild("Particles")
+	if not particles then return end
+	bubblesReady = true
+	
+	for _, v in ipairs(particles:GetChildren()) do
+		if v:IsA("BasePart") and (v.Name == "Bubble" or v.Name == "GoldBubble") then
+			staticBubbles[v] = true
+		end
+	end
+
+	for _, v in ipairs(particles:GetChildren()) do
+		if v:IsA("BasePart")
+			and (v.Name == "Bubble" or v.Name == "GoldBubble")
+			and not staticBubbles[v]
+		then
+			bubbles[v] = true
+		end
+	end
+
+	particles.ChildAdded:Connect(function(v)
+		if v:IsA("BasePart")
+			and (v.Name == "Bubble" or v.Name == "GoldBubble")
+			and not staticBubbles[v]
+		then
+			bubbles[v] = true
+		end
+	end)
+
+	particles.ChildRemoved:Connect(function(v)
+		bubbles[v] = nil
+	end)
+end
+
+local function getFieldBox(field)
+	if not field then return end
+	if field:IsA("BasePart") then
+		return field.CFrame, field.Size
+	end
+	if field:IsA("Model") then
+		return field:GetBoundingBox()
+	end
+end
+
+local function isInField(pos, field)
+	local cf, size = getFieldBox(field)
+	if not cf then return true end
+	local p = cf:PointToObjectSpace(pos)
+	return math.abs(p.X) <= size.X / 2
+		and math.abs(p.Z) <= size.Z / 2
+end
+
+local function getNearestBubble(field, hrp)
+	initBubbles()
+	if not hrp then return nil end
+
+	local nearest, nearestDistance
+	for bubble in pairs(bubbles) do
+		if not bubble.Parent then
+			bubbles[bubble] = nil
+			continue
+		end
+		if isInField(bubble.Position, field) then
+			local d = (bubble.Position - hrp.Position).Magnitude
+			if not nearestDistance or d < nearestDistance then
+				nearest = bubble
+				nearestDistance = d
+			end
+		end
+	end
+	return nearest
+end
 
 local function clearFarmLines()
 	local lines = workspace:FindFirstChild("Lines_Cub")
@@ -85,6 +166,46 @@ local function findActivateButton()
 	return nil
 end
 
+--local function activateButton(...)
+--	local button = findActivateButton()
+--	if not button then
+--		warn("ActivateButton not found")
+--		return false
+--	end
+
+--	local waitStart = tick()
+--	while tick() - waitStart < 3 do
+--		if button.Visible and button.AbsoluteSize.X > 0 then break end
+--		task.wait(0.05)
+--		button = findActivateButton() or button
+--	end
+
+--	local pos = button.AbsolutePosition
+--	local size = button.AbsoluteSize
+--	if size.X <= 0 or size.Y <= 0 then
+--		warn("ActivateButton has no size")
+--		return false
+--	end
+
+--	local cx = pos.X + (size.X / 2)
+--	local cy = pos.Y + (size.Y / 2)
+--	local inset = find.guiservice:GetGuiInset()
+
+--	pcall(function() find.virtual:SendMouseMoveEvent(cx, cy + inset.Y, false, game) end)
+--	task.wait(0.1)
+--	pcall(function()
+--		local VU = game:GetService("VirtualUser")
+--		VU:CaptureController()
+--		VU:ClickButton1(Vector2.new(cx, cy + inset.Y))
+--	end)
+--	task.wait(0.1)
+--	pcall(function() find.virtual:SendMouseButtonEvent(cx, cy + inset.Y, 0, true, game, 1) end)
+--	task.wait(0.05)
+--	pcall(function() find.virtual:SendMouseButtonEvent(cx, cy + inset.Y, 0, false, game, 1) end)
+
+--	return true
+--end
+
 local function activateButton(...)
 	local button = findActivateButton()
 	if not button then
@@ -109,18 +230,58 @@ local function activateButton(...)
 	local cx = pos.X + (size.X / 2)
 	local cy = pos.Y + (size.Y / 2)
 	local inset = find.guiservice:GetGuiInset()
+	local clickY = cy + inset.Y
 
-	pcall(function() find.virtual:SendMouseMoveEvent(cx, cy + inset.Y, false, game) end)
+	local VU = game:GetService("VirtualUser")
+	pcall(function()
+		find.virtual:SendMouseButtonEvent(cx, clickY, 0, false, game, 1)
+	end)
+	pcall(function()
+		find.virtual:SendMouseButtonEvent(cx, clickY, 1, false, game, 1)
+	end)
+	pcall(function()
+		find.virtual:SendKeyEvent(false, Enum.KeyCode.ButtonR2, false, game)
+	end)
+	pcall(function()
+		VU:Button1Up(Vector2.new(cx, clickY))
+	end)
+	
+	pcall(function()
+		VU:CaptureController()
+	end)
+	pcall(function()
+		VU:ReleaseController(Vector2.new(cx, clickY))
+	end)
+
+	task.wait(0.05)
+	
+	pcall(function()
+		find.virtual:SendMouseMoveEvent(cx, clickY, false, game)
+	end)
+	task.wait(0.08)
+	
+	pcall(function()
+		VU:CaptureController()
+		VU:ClickButton1(Vector2.new(cx, clickY))
+	end)
+	task.wait(0.05)
+
+	pcall(function()
+		find.virtual:SendMouseButtonEvent(cx, clickY, 0, true, game, 1)
+	end)
+	task.wait(0.05)
+	pcall(function()
+		find.virtual:SendMouseButtonEvent(cx, clickY, 0, false, game, 1)
+	end)
+	
 	task.wait(0.1)
 	pcall(function()
-		local VU = game:GetService("VirtualUser")
-		VU:CaptureController()
-		VU:ClickButton1(Vector2.new(cx, cy + inset.Y))
+		find.virtual:SendMouseButtonEvent(cx, clickY, 0, true, game, 1)
 	end)
-	task.wait(0.1)
-	pcall(function() find.virtual:SendMouseButtonEvent(cx, cy + inset.Y, 0, true, game, 1) end)
 	task.wait(0.05)
-	pcall(function() find.virtual:SendMouseButtonEvent(cx, cy + inset.Y, 0, false, game, 1) end)
+	pcall(function()
+		find.virtual:SendMouseButtonEvent(cx, clickY, 0, false, game, 1)
+	end)
 
 	return true
 end
@@ -698,7 +859,7 @@ function farming.convert(...)
 				mod.data.actives["move"] = false
 
 				task.defer(function()
-					task.wait(1)
+					task.wait(3)
 
 					if mod.data.actives["auto_farm"] then
 						farming.farm()
@@ -731,91 +892,60 @@ function farming.convert(...)
 				aconvert:Disconnect()
 				aconvert = nil
 			end
-
+			
 			task.spawn(function()
 				if mod.data.actives["balloon"] == true then
-					local hivePos = farming.getHive()
+					local char = find.player.Character
+					local root = char and char:FindFirstChild("HumanoidRootPart")
+					local playerPos = root and root.Position
+					
+					local function findBalloonNear(pos)
+						if not pos then return nil end
+						
+						local containers = {
+							workspace:FindFirstChild("Balloons"),
+							workspace:FindFirstChild("Effects"),
+							workspace:FindFirstChild("FX"),
+							workspace:FindFirstChild("Balloon"),
+						}
 
-					if hivePos then
-						local function findBalloonAt(hivePos)
-							if not hivePos then return nil end
-
-							local candidates = {
-								workspace,
-								workspace:FindFirstChild("Balloons"),
-								workspace:FindFirstChild("Effects"),
-								workspace:FindFirstChild("FX"),
-								workspace:FindFirstChild("Balloon"),
-							}
-
-							for _, container in ipairs(candidates) do
-								if container then
-									for _, obj in ipairs(container:GetChildren()) do
-										if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
-											if (obj.Position - hivePos).Magnitude <= 25 then
-												return obj
-											end
-										end
-									end
-									for _, child in ipairs(container:GetChildren()) do
-										for _, obj in ipairs(child:GetChildren()) do
-											if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
-												if (obj.Position - hivePos).Magnitude <= 25 then
-													return obj
-												end
-											end
-										end
+						for _, container in ipairs(containers) do
+							if container then
+								for _, obj in ipairs(container:GetChildren()) do
+									if obj:IsA("BasePart")
+										and obj.Name == "BalloonBody"
+										and (obj.Position - pos).Magnitude <= 25
+									then
+										return obj
 									end
 								end
 							end
-
-							return nil
 						end
 						
-						local balloon = nil
-						local searchStart = tick()
-						while tick() - searchStart < 10 do
-							balloon = findBalloonAt(hivePos)
-							if balloon then break end
+						for _, obj in ipairs(workspace:GetChildren()) do
+							if obj:IsA("BasePart")
+								and obj.Name == "BalloonBody"
+								and (obj.Position - pos).Magnitude <= 25
+							then
+								return obj
+							end
+						end
+
+						return nil
+					end
+
+					local balloon = findBalloonNear(playerPos)
+
+					if balloon then
+						local balloonStart = tick()
+						while balloon.Parent do
 							if not mod.data.actives["auto_farm"] then return end
-							task.wait(1)
+							if tick() - balloonStart > 600 then break end
+							task.wait(3)
 						end
-
-						if mod.data.actives["balloon"] == true then
-							local char = find.player.Character
-							local root = char and char:FindFirstChild("HumanoidRootPart")
-							local playerPos = root and root.Position
-
-							local balloon = nil
-							if playerPos then
-								for _, o in ipairs(workspace:GetDescendants()) do
-									if o.Name == "BalloonBody" and o:IsA("BasePart") then
-										if (o.Position - playerPos).Magnitude <= 25 then
-											balloon = o
-											break
-										end
-									end
-								end
-							end
-
-							if balloon then
-								--print("balloon found, waiting up to 5 min...")
-								local balloonStart = tick()
-								while balloon.Parent do
-									if not mod.data.actives["auto_farm"] then return end
-									if tick() - balloonStart > 300 then
-										--print("balloon timeout 5 min")
-										break
-									end
-									task.wait(1)
-								end
-								if not balloon.Parent then
-									print("balloon converted")
-								end
-							end
+						if not balloon.Parent then
+							print("balloon converted")
 						end
-					else
-						warn("not hive")
 					end
 				end
 
@@ -829,12 +959,114 @@ function farming.convert(...)
 				mod.data.actives["converting"] = false
 				mod.data.actives["move"] = false
 
-				task.wait(.4)
-
 				if mod.data.actives["auto_farm"] then
 					farming.farm()
 				end
 			end)
+
+			--task.spawn(function()
+			--	if mod.data.actives["balloon"] == true then
+			--		local hivePos = farming.getHive()
+
+			--		if hivePos then
+			--			local function findBalloonAt(hivePos)
+			--				if not hivePos then return nil end
+
+			--				local candidates = {
+			--					workspace,
+			--					workspace:FindFirstChild("Balloons"),
+			--					workspace:FindFirstChild("Effects"),
+			--					workspace:FindFirstChild("FX"),
+			--					workspace:FindFirstChild("Balloon"),
+			--				}
+
+			--				for _, container in ipairs(candidates) do
+			--					if container then
+			--						for _, obj in ipairs(container:GetChildren()) do
+			--							if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
+			--								if (obj.Position - hivePos).Magnitude <= 25 then
+			--									return obj
+			--								end
+			--							end
+			--						end
+			--						for _, child in ipairs(container:GetChildren()) do
+			--							for _, obj in ipairs(child:GetChildren()) do
+			--								if obj.Name == "BalloonBody" and obj:IsA("BasePart") then
+			--									if (obj.Position - hivePos).Magnitude <= 25 then
+			--										return obj
+			--									end
+			--								end
+			--							end
+			--						end
+			--					end
+			--				end
+
+			--				return nil
+			--			end
+						
+			--			local balloon = nil
+			--			local searchStart = tick()
+			--			while tick() - searchStart < 10 do
+			--				balloon = findBalloonAt(hivePos)
+			--				if balloon then break end
+			--				if not mod.data.actives["auto_farm"] then return end
+			--				task.wait(1)
+			--			end
+
+			--			if mod.data.actives["balloon"] == true then
+			--				local char = find.player.Character
+			--				local root = char and char:FindFirstChild("HumanoidRootPart")
+			--				local playerPos = root and root.Position
+
+			--				local balloon = nil
+			--				if playerPos then
+			--					for _, o in ipairs(workspace:GetDescendants()) do
+			--						if o.Name == "BalloonBody" and o:IsA("BasePart") then
+			--							if (o.Position - playerPos).Magnitude <= 25 then
+			--								balloon = o
+			--								break
+			--							end
+			--						end
+			--					end
+			--				end
+
+			--				if balloon then
+			--					--print("balloon found, waiting up to 10 min...")
+			--					local balloonStart = tick()
+			--					while balloon.Parent do
+			--						if not mod.data.actives["auto_farm"] then return end
+			--						if tick() - balloonStart > 600 then
+			--							--print("balloon timeout 10 min")
+			--							break
+			--						end
+			--						task.wait(3)
+			--					end
+			--					if not balloon.Parent then
+			--						print("balloon converted")
+			--					end
+			--				end
+			--			end
+			--		else
+			--			warn("not hive")
+			--		end
+			--	end
+
+			--	local target_mask = mod.data.actives["mask"]
+			--	if target_mask and target_mask ~= "None" then
+			--		farming.equip_mask(target_mask)
+			--		task.wait(0.4)
+			--	end
+
+			--	mod.data.actives["last_time_convert"] = tick()
+			--	mod.data.actives["converting"] = false
+			--	mod.data.actives["move"] = false
+
+			--	--task.wait(.4)
+
+			--	if mod.data.actives["auto_farm"] then
+			--		farming.farm()
+			--	end
+			--end)
 		end
 	)
 end
@@ -1337,6 +1569,40 @@ function farming.farm(...)
 		local l = Vector3.new(find.random:NextNumber(ix, ax), a[1].Size.Y / 2 + h, find.random:NextNumber(-z, z))
 		return a[1].CFrame:PointToWorldSpace(l)
 	end
+	
+	local textureToPriority = {}
+
+	local function buildTextureMap()
+		textureToPriority = {}
+
+		local prios = mod.data.actives["token_priorities"] or {}
+
+		local function addFrom(list)
+			for _, v in ipairs(list or {}) do
+				local p = prios[v.name]
+				if p then
+					textureToPriority[v.image] = tonumber(p) or 0
+				end
+			end
+		end
+
+		addFrom(mod.data.token_resources)
+		addFrom(mod.data.tokens)
+	end
+
+	buildTextureMap()
+	function farming.rebuildTextureMap()
+		buildTextureMap()
+	end
+	
+	local function getTokenPriority(token)
+		for _, child in ipairs(token:GetChildren()) do
+			if child:IsA("Decal") then
+				return textureToPriority[child.Texture] or 0
+			end
+		end
+		return 0
+	end
 
 	local function q(...)
 		if mod.data.actives["point"] then
@@ -1477,16 +1743,53 @@ function farming.farm(...)
 			local c = workspace:FindFirstChild("Collectibles")
 			local f = workspace:FindFirstChild("FlowerZones")
 			local d = mod.data.actives["selected_field"]
+			local root = find.player.Character
 			local field
 
 			if mod.data.actives["selected_field"] == false then field = nil else field = f:FindFirstChild(mod.data.actives["selected_field"]) end
 
 			table.clear(queue["tokens"])
+			
+			if mod.data.actives["collect_bubbles"] == true then
+				local bubbleStart = tick()
+				while id == farmId
+					and mod.data.actives["auto_farm"] == true
+					and not mod.data.actives["converting"]
+					and tick() - bubbleStart < 8
+				do
+					local ch = find.player.Character
+					local rt = ch and ch:FindFirstChild("HumanoidRootPart")
+					if not rt then break end
+
+					local bubble = getNearestBubble(field, rt)
+					if not bubble then break end
+
+					local bubbleRef = bubble
+					local tgc = CFrame.new(bubble.Position) * rt.CFrame.Rotation
+
+					m(tgc, a.Speed, field)
+					
+					local flyStart = tick()
+					while bubbleRef.Parent
+						and id == farmId
+						and mod.data.actives["auto_farm"] == true
+						and not mod.data.actives["converting"]
+						and tick() - flyStart < 2
+					do
+						local r2 = find.player.Character
+							and find.player.Character:FindFirstChild("HumanoidRootPart")
+						if not r2 then break end
+
+						if (r2.Position - bubbleRef.Position).Magnitude <= 5 then
+							break
+						end
+						task.wait(0.1)
+					end
+				end
+			end
 
 			if c and field then
-				local root = find.player.Character
-					and find.player.Character:FindFirstChild("HumanoidRootPart")
-
+				local root = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
 				if root then
 					for _, v in ipairs(c:GetChildren()) do
 						if v:IsA("BasePart")
@@ -1502,7 +1805,13 @@ function farming.farm(...)
 			if #queue["tokens"] > 0 then
 				while id == farmId and mod.data.actives["auto_farm"] == true and #queue["tokens"] > 0 do
 					table.sort(queue["tokens"], function(a, b)
-						return (find.player.Character:FindFirstChild("HumanoidRootPart").Position - a.Position).Magnitude < (find.player.Character:FindFirstChild("HumanoidRootPart").Position - b.Position).Magnitude
+						local pa = getTokenPriority(a)
+						local pb = getTokenPriority(b)
+						if pa ~= pb then
+							return pa > pb
+						end
+						return (root.Position - a.Position).Magnitude
+							< (root.Position - b.Position).Magnitude
 					end)
 
 					local v = table.remove(queue["tokens"], 1)
@@ -1651,6 +1960,24 @@ function farming.farm(...)
 			end
 
 			table.clear(queue["tokens"])
+			
+			if mod.data.actives["collect_bubbles"] == true then
+				local bubbleStart = tick()
+				while id == farmId
+					and mod.data.actives["auto_farm"] == true
+					and not mod.data.actives["converting"]
+					and tick() - bubbleStart < 8
+				do
+					local ch = find.player.Character
+					local rt = ch and ch:FindFirstChild("HumanoidRootPart")
+					if not rt then break end
+
+					local bubble = getNearestBubble(field, rt)
+					if not bubble then break end
+
+					walkTo(bubble.Position, a.Speed)
+				end
+			end
 
 			if c and field then
 				local root = find.player.Character
@@ -1678,6 +2005,11 @@ function farming.farm(...)
 					if not root then break end
 
 					table.sort(queue["tokens"], function(a, b)
+						local pa = getTokenPriority(a)
+						local pb = getTokenPriority(b)
+						if pa ~= pb then
+							return pa > pb
+						end
 						return (root.Position - a.Position).Magnitude
 							< (root.Position - b.Position).Magnitude
 					end)
