@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.991")
+print("loaded 0.0.992")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -38,9 +38,6 @@ local queue = {
 local invc, tween, afarm, adig, aconvert, atween, track, animwalk, humanoid_walk_speed, p, p1;
 local farmId = 0
 
--- ============================================================
--- BUBBLES (workspace.Particles)
--- ============================================================
 local bubbles = {}
 local staticBubbles = {}
 local bubblesReady = false
@@ -80,13 +77,25 @@ local function initBubbles()
 	end)
 end
 
+local __bboxCache = {}
+local __bboxCacheTime = {}
+
 local function getFieldBox(field)
 	if not field then return end
 	if field:IsA("BasePart") then
 		return field.CFrame, field.Size
 	end
 	if field:IsA("Model") then
-		return field:GetBoundingBox()
+		local now = tick()
+		local last = __bboxCacheTime[field]
+		if __bboxCache[field] and last and now - last < 2 then
+			local c = __bboxCache[field]
+			return c[1], c[2]
+		end
+		local cf, size = field:GetBoundingBox()
+		__bboxCache[field] = {cf, size}
+		__bboxCacheTime[field] = now
+		return cf, size
 	end
 end
 
@@ -1743,7 +1752,9 @@ function farming.farm(...)
 			local c = workspace:FindFirstChild("Collectibles")
 			local f = workspace:FindFirstChild("FlowerZones")
 			local d = mod.data.actives["selected_field"]
-			local root = find.player.Character
+			--local root = find.player.Character
+			local ch = find.player.Character
+			local root = ch and ch:FindFirstChild("HumanoidRootPart")
 			local field
 
 			if mod.data.actives["selected_field"] == false then field = nil else field = f:FindFirstChild(mod.data.actives["selected_field"]) end
@@ -1765,26 +1776,27 @@ function farming.farm(...)
 					if not bubble then break end
 
 					local bubbleRef = bubble
+					
 					local tgc = CFrame.new(bubble.Position) * rt.CFrame.Rotation
-
-					m(tgc, a.Speed, field)
+					table.insert(queue["auto_farm"], {TargetCFrame = tgc, Speed = a.Speed})
 					
 					local flyStart = tick()
 					while bubbleRef.Parent
 						and id == farmId
 						and mod.data.actives["auto_farm"] == true
 						and not mod.data.actives["converting"]
-						and tick() - flyStart < 2
+						and tick() - flyStart < 3
 					do
 						local r2 = find.player.Character
 							and find.player.Character:FindFirstChild("HumanoidRootPart")
 						if not r2 then break end
-
 						if (r2.Position - bubbleRef.Position).Magnitude <= 5 then
 							break
 						end
 						task.wait(0.1)
 					end
+
+					task.wait(0.15)
 				end
 			end
 
@@ -1963,6 +1975,8 @@ function farming.farm(...)
 			
 			if mod.data.actives["collect_bubbles"] == true then
 				local bubbleStart = tick()
+				local lastBubbleId = nil
+
 				while id == farmId
 					and mod.data.actives["auto_farm"] == true
 					and not mod.data.actives["converting"]
@@ -1974,8 +1988,16 @@ function farming.farm(...)
 
 					local bubble = getNearestBubble(field, rt)
 					if not bubble then break end
+					
+					if bubble == lastBubbleId then
+						bubbles[bubble] = nil
+						task.wait(0.1)
+						continue
+					end
+					lastBubbleId = bubble
 
 					walkTo(bubble.Position, a.Speed)
+					task.wait(0.2)
 				end
 			end
 
