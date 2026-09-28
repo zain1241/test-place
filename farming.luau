@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.99941")
+print("loaded 0.1.1")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -242,7 +242,7 @@ function farming.farmPetalBloom(field, id)
 		--	end
 		--end
 
-		task.wait(0.05)
+		--task.wait(0.05)
 	end
 	
 	local popTimeout = os.clock() + 4
@@ -260,7 +260,7 @@ function farming.farmPetalBloom(field, id)
 				lastActivate = os.clock()
 			end
 		end
-		task.wait(0.05)
+		--task.wait(0.05)
 	end
 	
 	local tracked = {}
@@ -316,7 +316,7 @@ function farming.farmPetalBloom(field, id)
 			end
 		end
 
-		task.wait(0.04)
+		--task.wait(0.01)
 	end
 
 	if conn then conn:Disconnect() end
@@ -970,7 +970,6 @@ function farming.forceWalkSpeed(speed)
 
 		if root then
 			root.Massless = false
-
 			local p = root.CurrentPhysicalProperties
 			if p then
 				root.CustomPhysicalProperties = PhysicalProperties.new(
@@ -1645,7 +1644,7 @@ function farming.autoHive(...)
 
 	farming.move(
 		"hive",
-		mod.data.actives["move_speed"],
+		mod.data.actives["walkspeed"],
 		targetPos
 	)
 end
@@ -1782,12 +1781,18 @@ function farming.farm(...)
 		resetFarmMovement(false)
 		return
 	end
-
+	
 	farming.move(
 		"flowerzones",
-		mod.data.actives["move_speed"],
+		mod.data.actives["walkspeed"],
 		selected
 	)
+	
+	--farming.move(
+	--	"flowerzones",
+	--	mod.data.actives["move_speed"],
+	--	selected
+	--)
 
 	--mod.data.actives["__last_convert_time"] = tick()
 
@@ -2690,7 +2695,7 @@ function farming.farm(...)
 					if shouldConvert and mod.data.actives["move"] == false then
 						local targetPos = farming.getHive()
 						if targetPos then
-							local ok = farming.move("convert", mod.data.actives["move_speed"], targetPos)
+							local ok = farming.move("convert", mod.data.actives["walkspeed"], targetPos)
 							if ok then
 								mod.data.actives["converting"] = true
 							end
@@ -2703,10 +2708,10 @@ function farming.farm(...)
 					farming.inv(false)
 					if mod.data.actives["style_auto_farm"] == "Walk" then
 						farming.cornl(true)
-						m1(b, mod.data.actives["move_speed"])
+						m1(b, mod.data.actives["walkspeed"])
 					elseif mod.data.actives["style_auto_farm"] == "Tween" then
 						farming.cornl(true)
-						m(b, mod.data.actives["move_speed"])
+						m(b, mod.data.actives["walkspeed"])
 					end
 				end
 			end
@@ -2762,10 +2767,7 @@ task.spawn(function()
 		farming.autoDig(true)
 	end
 
-	local base = mod.data.actives["walkspeed"] or 16
-	if base > 16 then
-		farming.forceWalkSpeed(base)
-	end
+	farming.forceWalkSpeed(mod.data.actives["walkspeed"] or 16)
 
 	if mod.data.actives["auto_farm"] == true then
 		farming.farm()
