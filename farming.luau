@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.11")
+print("loaded 0.1.12")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -994,40 +994,59 @@ function farming.convert(...)
 	end
 
 	local eSucceeded = false
-	task.wait(2)
-	do
-		local btnWait = tick()
-		while tick() - btnWait < 10 do
-			local b = findActivateButton()
-			if b and b.Visible and b.AbsoluteSize.X > 0 then break end
-			task.wait(0.2)
-		end
-	end
+	task.wait(1.5)
 	
-	while not eSucceeded do
+	local btnWait = tick()
+	while tick() - btnWait < 15 do
 		if not mod.data.actives["auto_farm"] then
 			if aconvert then aconvert:Disconnect() aconvert = nil end
 			mod.data.actives["converting"] = false
 			mod.data.actives["move"] = false
 			return
 		end
+		local b = findActivateButton()
+		if b and b.Visible and b.AbsoluteSize.X > 0 then break end
+		task.wait(0.2)
+	end
+	
+	local infoWait = tick()
+	while tick() - infoWait < 5 do
+		local info = farming.get_pollen_info()
+		if info and info.pollen ~= nil then break end
+		task.wait(0.2)
+	end
+	
+	local before = farming.get_pollen_info()
+	local before_pollen = (before and before.pollen) or 0
+	
+	local attempt = 0
+	local maxAttempts = 20
 
+	while not eSucceeded and attempt < maxAttempts do
+		attempt += 1
+
+		if not mod.data.actives["auto_farm"] then
+			if aconvert then aconvert:Disconnect() aconvert = nil end
+			mod.data.actives["converting"] = false
+			mod.data.actives["move"] = false
+			return
+		end
+		
 		local nowBefore = farming.get_pollen_info()
-		local before_pollen = nowBefore and nowBefore.pollen or 0
-		if before_pollen <= 0 then
-			eSucceeded = true
-			break
+		if nowBefore and nowBefore.pollen then
+			before_pollen = nowBefore.pollen
 		end
 
 		activateButton()
+
 		local checkStart = tick()
 		local dropped = false
 
-		while tick() - checkStart < 10 do
-			task.wait(0.5)
+		while tick() - checkStart < 8 do
+			task.wait(0.4)
 
 			local now = farming.get_pollen_info()
-			if now then
+			if now and now.pollen then
 				if now.pollen <= 0 then
 					dropped = true
 					break
@@ -1036,18 +1055,23 @@ function farming.convert(...)
 					dropped = true
 					break
 				end
+				if before_pollen <= 0 and now.pollen > 0 then
+					before_pollen = now.pollen
+				end
 			end
 		end
 
 		if dropped then
 			eSucceeded = true
-			print("[convert] разгрузка запущена")
+			print("convert started (try "..attempt..")")
 			break
 		end
+
 		task.wait(0.3)
 	end
 
 	if not eSucceeded then
+		warn("convert not a "..maxAttempts.." try")
 		if aconvert then aconvert:Disconnect() aconvert = nil end
 		mod.data.actives["converting"] = false
 		mod.data.actives["move"] = false
@@ -1398,6 +1422,45 @@ function farming.autosprinkler()
 
 	pac:FireServer({Name = "Sprinkler Builder"})
 	--print("autosprinkler fired")
+end
+
+function farming.wealthClock()
+	if farming.__wealthConn then
+		farming.__wealthConn = nil
+	end
+
+	local startTime = tick()
+	local nextTrigger = startTime + 3600
+
+	task.spawn(function()
+		while mod.data.actives["auto_farm"] == true do
+			task.wait(1)
+			if mod.data.actives["weatlh_clock"] ~= true then
+				startTime = tick()
+				nextTrigger = startTime + 3600
+				continue
+			end
+
+			if tick() < nextTrigger then
+				continue
+			end
+			
+			local events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
+			local toyEvent = events and events:FindFirstChild("ToyEvent")
+
+			if toyEvent and toyEvent:IsA("RemoteEvent") then
+				for i = 1, 3 do
+					pcall(function()
+						toyEvent:FireServer("Wealth Clock")
+					end)
+					--print("[wealth clock] attempt", i)
+					task.wait(3)
+				end
+			end
+
+			nextTrigger = tick() + 3600
+		end
+	end)
 end
 
 local function getStats()
@@ -2761,6 +2824,7 @@ task.spawn(function()
 	end
 
 	farming.forceWalkSpeed(mod.data.actives["walkspeed"] or 16)
+	farming.wealthClock()
 
 	if mod.data.actives["auto_farm"] == true then
 		farming.farm()
