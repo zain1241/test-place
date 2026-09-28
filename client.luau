@@ -4,27 +4,34 @@ local loaded = rawget(env, "__NECTAR_MODULES")
 local data
 local farming
 local menu
+local config
+local home
 
 if loaded
 	and loaded.data
 	and loaded.farming
 	and loaded.menu
 	and loaded.config
+	and loaded.home
 then
 	data = loaded.data
 	farming = loaded.farming
 	menu = loaded.menu
 	config = loaded.config
+	home = loaded.home
 else
 	data = require(script:WaitForChild("data"))
 	farming = require(script:WaitForChild("farming"))
 	menu = require(script:WaitForChild("menu"))
 	config = require(script:WaitForChild("config"))
+	home = require(script:WaitForChild("home"))
 end
 
 assert(type(data) == "table" and type(data.actives) == "table", "client: data not loaded")
 assert(type(farming) == "table", "client: farming not loaded")
 assert(type(menu) == "table" and type(menu.client_menu) == "function", "client: menu.client_menu not loaded")
+assert(type(config) == "table", "client: config not loaded")
+assert(type(home) == "table", "client: home not loaded")
 
 local CONFIG_FILE = "Nectar_config.json"
 
@@ -91,6 +98,7 @@ local mod = {
 	farming = farming,
 	menu = menu,
 	config = config,
+	home = home,
 	save = saveConfig,
 }
 
