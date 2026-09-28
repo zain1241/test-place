@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.4")
+print("loaded 0.1.41")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -249,6 +249,10 @@ function farming.farmPetalBloom(field, id)
 
 	local bloom = getNearestBloom(field, hrp)
 	if not bloom then return false end
+	
+	if not isInField(hrp.Position, field) then
+		return false
+	end
 
 	local origin = getBloomPosition(bloom)
 	if not origin then return false end
