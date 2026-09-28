@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.22")
+print("loaded 0.1.23")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -387,161 +387,286 @@ local function getNearestPuff(field, hrp, filter)
 	return nearest
 end
 
+local function isPuffLoot(v)
+	if not v or not v:IsA("BasePart") then
+		return false
+	end
+
+	if v.Name == "PuffballStem" or v.Name == "Puffball" then
+		return false
+	end
+
+	-- Реальный лут гриба находится в Collectibles.
+	-- Decal обычно содержит его картинку/тип.
+	return v.Parent == workspace:FindFirstChild("Collectibles")
+		and v:FindFirstChildWhichIsA("Decal") ~= nil
+end
+
 local function findLootNear(pos, radius)
-	if not pos then return nil end
-	local best, bestDist
-	-- только папки где реально появляются дропы, без обхода всего workspace
-	local containers = {
-		workspace:FindFirstChild("Collectibles"),
-		workspace:FindFirstChild("Particles"),
-	}
-	for _, c in ipairs(containers) do
-		if c then
-			for _, v in ipairs(c:GetChildren()) do
-				if v:IsA("BasePart") then
-					local d = (v.Position - pos).Magnitude
-					if d <= radius and (not bestDist or d < bestDist) then
-						best = v
-						bestDist = d
-					end
-				end
+	if not pos then
+		return nil
+	end
+
+	local collectibles = workspace:FindFirstChild("Collectibles")
+	if not collectibles then
+		return nil
+	end
+
+	local best
+	local bestDist
+
+	for _, v in ipairs(collectibles:GetChildren()) do
+		if isPuffLoot(v) then
+			local d = (v.Position - pos).Magnitude
+
+			if d <= radius and (not bestDist or d < bestDist) then
+				best = v
+				bestDist = d
 			end
 		end
 	end
+
 	return best
 end
 
 function farming.farmPuffshroom(field, id)
+	local function enabled()
+		return id == farmId
+			and mod.data.actives["auto_farm"] == true
+			and mod.data.actives["pushrooms_enabled"] == true
+			and not mod.data.actives["converting"]
+	end
+
 	local character = find.player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
-	if not humanoid or not hrp then return false end
+
+	if not humanoid or not hrp then
+		return false
+	end
 
 	local filter = mod.data.actives["pushrooms"] or "All Pushrooms"
 	local puff = getNearestPuff(field, hrp, filter)
+
 	if not puff then
 		return false
 	end
 
-	local root = getPuffRoot(puff)
-	if not root then
+	local rootPart = getPuffRoot(puff)
+
+	if not rootPart then
 		return false
 	end
 
-	print("going to", puff.Name, root.Position)
-
-	local origin = root.Position
-	local speed = mod.data.actives["walkspeed"] or 40
 	local pf = getPuffFolder()
 
-	local tool = character:FindFirstChildOfClass("Tool")
-	local lastActivate = 0
+	if not pf then
+		return false
+	end
 
-	-- ========================================
-	-- СБРОС ФЛАГОВ перед стартом
-	-- ========================================
-	mod.data.actives["move"] = false
+	print("[puff] target:", puff.Name)
 
-	-- ========================================
-	-- ФАЗА 1: ЛЕТИМ к грибу + NOCLIP
-	-- ========================================
+	-- =========================================
+	-- 1. ЛЁТ К ГРИБУ
+	-- =========================================
+
+	mod.data.actives["move"] = true
+
+	character = find.player.Character
+	humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	hrp = character and character:FindFirstChild("HumanoidRootPart")
+
+	if not humanoid or not hrp then
+		mod.data.actives["move"] = false
+		return false
+	end
+
+	if tween then
+		tween:Cancel()
+		tween = nil
+	end
+
+	local startRoot = hrp
+	local target = rootPart.Position
+
+	local distance = (startRoot.Position - target).Magnitude
+	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
+	local duration = distance / math.max(speed, 1)
+
+	startRoot.Anchored = true
+
+	-- INV только на время полёта
 	farming.inv(true)
 
-	local approachTarget = Vector3.new(root.Position.X, root.Position.Y, root.Position.Z)
-	farming.move("goto", speed, approachTarget)
+	local flyTween = find.tweenservice:Create(
+		startRoot,
+		TweenInfo.new(
+			math.max(duration, 0.05),
+			Enum.EasingStyle.Linear,
+			Enum.EasingDirection.Out
+		),
+		{
+			CFrame = CFrame.new(target)
+		}
+	)
 
-	local approachStart = tick()
-	while mod.data.actives["move"] == true
-		and tick() - approachStart < 10
-		and id == farmId
-		and mod.data.actives["pushrooms_enabled"] == true
+	tween = flyTween
+	flyTween:Play()
+
+	local finished = false
+
+	flyTween.Completed:Once(function()
+		finished = true
+
+		if tween == flyTween then
+			tween = nil
+		end
+	end)
+
+	while enabled()
 		and puff.Parent == pf
+		and not finished
 	do
-		task.wait(0.05)
+		task.wait()
 	end
 
+	if not enabled() then
+		pcall(function()
+			flyTween:Cancel()
+		end)
+
+		startRoot.Anchored = false
+		farming.inv(false)
+		mod.data.actives["move"] = false
+		return false
+	end
+
+	startRoot.Anchored = false
 	farming.inv(false)
-
-	-- ВАЖНО: сбрасываем анкор и move явно, даём Humanoid прийти в себя
-	character = find.player.Character
-	hrp = character and character:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		hrp.Anchored = false
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
-	end
 	mod.data.actives["move"] = false
-	task.wait(0.15)
 
-	print("arrived, breaking")
+	task.wait(0.1)
 
-	-- ========================================
-	-- ФАЗА 2: ХОДЬБА по кругу
-	-- ========================================
-	local circleAngle = 0
+	-- =========================================
+	-- 2. ЛОЖИМСЯ В КРУГ
+	-- =========================================
+
+	character = find.player.Character
+	humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	hrp = character and character:FindFirstChild("HumanoidRootPart")
+
+	if not humanoid or not hrp then
+		return false
+	end
+
 	local circleRadius = 5
-	local circleSpeed = 2.0
+	local circleDirection = 1
+	local lastActivate = 0
+
+	local tool = character:FindFirstChildOfClass("Tool")
 
 	local breakStart = tick()
-	while id == farmId
-		and mod.data.actives["auto_farm"] == true
-		and mod.data.actives["pushrooms_enabled"] == true
-		and not mod.data.actives["converting"]
+
+	while enabled()
 		and puff.Parent == pf
-		and tick() - breakStart < 15
+		and tick() - breakStart < 30
 	do
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
 
-		if humanoid and hrp and not hrp.Anchored then
-			local r = getPuffRoot(puff)
-			if r then
-				local center = r.Position
-
-				circleAngle = math.atan2(hrp.Position.Z - center.Z, hrp.Position.X - center.X)
-				circleAngle += circleSpeed * 0.05
-
-				local target = Vector3.new(
-					center.X + math.cos(circleAngle) * circleRadius,
-					hrp.Position.Y,
-					center.Z + math.sin(circleAngle) * circleRadius
-				)
-
-				humanoid.WalkSpeed = speed
-				humanoid:MoveTo(target)
-
-				local dx = center.X - hrp.Position.X
-				local dz = center.Z - hrp.Position.Z
-				local distToCenter = math.sqrt(dx * dx + dz * dz)
-
-				if distToCenter <= circleRadius + 3 then
-					tool = character:FindFirstChildOfClass("Tool") or tool
-					if tool and tool.Parent == character and os.clock() - lastActivate >= 0.08 then
-						pcall(function() tool:Activate() end)
-						lastActivate = os.clock()
-					end
-				end
-			end
+		if not humanoid or not hrp or hrp.Anchored then
+			break
 		end
-		task.wait(0.05)
+
+		local centerPart = getPuffRoot(puff)
+
+		if not centerPart then
+			break
+		end
+
+		local center = centerPart.Position
+
+		local offset = Vector3.new(
+			hrp.Position.X - center.X,
+			0,
+			hrp.Position.Z - center.Z
+		)
+
+		local distance = offset.Magnitude
+
+		if distance < 0.1 then
+			offset = Vector3.new(1, 0, 0)
+			distance = 1
+		end
+
+		local radial = offset.Unit
+
+		-- касательная к окружности
+		local tangent = Vector3.new(
+			-radial.Z * circleDirection,
+			0,
+			radial.X * circleDirection
+		)
+
+		-- Если слишком далеко от гриба,
+		-- сначала возвращаемся к радиусу.
+		if distance > circleRadius + 1.5 then
+			local correction = (
+				Vector3.new(center.X, hrp.Position.Y, center.Z)
+				- hrp.Position
+			).Unit
+
+			humanoid:Move(correction, false)
+		elseif distance < circleRadius - 1.5 then
+			local correction = radial
+
+			humanoid:Move(correction, false)
+		else
+			humanoid:Move(tangent, false)
+		end
+
+		humanoid.WalkSpeed = speed
+
+		-- Используем инструмент постоянно, но не спамим.
+		tool = character:FindFirstChildOfClass("Tool") or tool
+
+		if tool
+			and tool.Parent == character
+			and os.clock() - lastActivate >= 0.12
+		then
+			pcall(function()
+				tool:Activate()
+			end)
+
+			lastActivate = os.clock()
+		end
+
+		task.wait(0.04)
 	end
 
-	print("broken, looting")
+	-- Останавливаем движение
+	character = find.player.Character
+	humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
-	-- ========================================
-	-- ФАЗА 3: СОБИРАЕМ ЛУТ — БЕЗ фризов
-	-- ========================================
-	local lootStart = tick()
-	local lastLoot = findLootNear(origin, 25)
-	local lootCheck = tick()
+	if humanoid then
+		humanoid:Move(Vector3.zero, false)
+	end
 
-	while id == farmId
-		and mod.data.actives["auto_farm"] == true
-		and mod.data.actives["pushrooms_enabled"] == true
-		and not mod.data.actives["converting"]
-		and tick() - lootStart < 4
-	do
+	-- =========================================
+	-- 3. СОБИРАЕМ ТОЛЬКО НОВЫЙ ЛУТ
+	-- =========================================
+
+	if not enabled() then
+		return false
+	end
+
+	print("[puff] looting")
+
+	local lootTimeout = tick() + 7
+	local lastLootTime = tick()
+
+	while enabled() and tick() < lootTimeout do
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -551,47 +676,64 @@ function farming.farmPuffshroom(field, id)
 			continue
 		end
 
-		-- ищем новый лут только раз в 0.4 сек, а не каждый кадр
-		if tick() - lootCheck > 0.4 or not lastLoot or not lastLoot.Parent then
-			lastLoot = findLootNear(origin, 25)
-			lootCheck = tick()
-		end
+		local loot = findLootNear(target, 35)
 
-		local loot = lastLoot
-		if not loot then
-			break
-		end
+		if loot and loot.Parent then
+			lastLootTime = tick()
 
-		local walkStart = tick()
-		humanoid.WalkSpeed = speed
+			local lootStart = tick()
 
-		while tick() - walkStart < 5 do
-			if id ~= farmId
-				or mod.data.actives["auto_farm"] ~= true
-				or mod.data.actives["converting"]
-				or not loot.Parent
-			then
+			while enabled()
+				and loot.Parent
+				and tick() - lootStart < 2
+			do
+				character = find.player.Character
+				humanoid = character and character:FindFirstChildOfClass("Humanoid")
+				hrp = character and character:FindFirstChild("HumanoidRootPart")
+
+				if not humanoid or not hrp then
+					break
+				end
+
+				local targetPos = Vector3.new(
+					loot.Position.X,
+					hrp.Position.Y,
+					loot.Position.Z
+				)
+
+				local distance = (
+					Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
+					- Vector3.new(targetPos.X, 0, targetPos.Z)
+				).Magnitude
+
+				if distance <= 2 then
+					break
+				end
+
+				humanoid.WalkSpeed = speed
+				humanoid:MoveTo(targetPos)
+
+				task.wait()
+			end
+		else
+			-- Ждём ещё немного, потому что лут может появиться
+			-- чуть позже самого исчезновения гриба.
+			if tick() - lastLootTime > 0.7 then
 				break
 			end
-
-			character = find.player.Character
-			humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			hrp = character and character:FindFirstChild("HumanoidRootPart")
-			if not humanoid or not hrp or hrp.Anchored then break end
-
-			local dx = loot.Position.X - hrp.Position.X
-			local dz = loot.Position.Z - hrp.Position.Z
-			local distance = math.sqrt(dx * dx + dz * dz)
-
-			if distance <= 1.5 then
-				break
-			end
-
-			humanoid.WalkSpeed = speed
-			humanoid:MoveTo(Vector3.new(loot.Position.X, hrp.Position.Y, loot.Position.Z))
-			task.wait()
 		end
+
+		task.wait(0.05)
 	end
+
+	character = find.player.Character
+	humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+	if humanoid then
+		humanoid:Move(Vector3.zero, false)
+	end
+
+	print("[puff] done")
 
 	return true
 end
@@ -2917,11 +3059,33 @@ function farming.farm(...)
 			end
 			
 			if mod.data.actives["petals"] == true and field then
-				farming.farmPetalBloom(field, id)
+				local bloomFound = getNearestBloom(
+					field,
+					find.player.Character
+						and find.player.Character:FindFirstChild("HumanoidRootPart")
+				)
+
+				if bloomFound then
+					farming.farmPetalBloom(field, id)
+					continue
+				end
 			end
 
 			if mod.data.actives["pushrooms_enabled"] == true and field then
-				farming.farmPuffshroom(field, id)
+				local puffFound = getNearestPuff(
+					field,
+					find.player.Character
+						and find.player.Character:FindFirstChild("HumanoidRootPart"),
+					mod.data.actives["pushrooms"] or "All Pushrooms"
+				)
+
+				if puffFound then
+					farming.farmPuffshroom(field, id)
+
+					-- После гриба НЕ идём в случайную точку.
+					-- Следующий цикл сразу снова ищет гриб.
+					continue
+				end
 			end
 
 			table.clear(queue["tokens"])
