@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.34")
+print("loaded 0.1.341")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -672,8 +672,8 @@ function farming.farmSprout(field, id)
 		pcall(function() humanoid:Move(Vector3.zero, false) end)
 	end
 
-	safeCleanup(nil, false)
-	
+	safeCleanup(nil)
+
 	if field and field.Parent then
 		farming.move("flowerzones", speed, field.Name)
 		while id == farmId
