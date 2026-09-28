@@ -36,6 +36,15 @@ data.mask = {
 	{name = "None", image = "rbxassetid://1554410815"},
 }
 
+data.pushrooms = {
+	{name = "All Pushrooms"},
+	{name = "Common"},
+	{name = "Rare"},
+	{name = "Epic"},
+	{name = "Legendary"},
+	{name = "Mythic"},
+}
+
 data.tokens = {
 	-- eggs
 	{name = "Silver Egg", image = "rbxassetid://1436888293"},
@@ -173,6 +182,9 @@ data.actives = {
 	bubble_priority = 49,
 	petals = false,
 	wealth_clock = false,
+	--pushrooms = false,
+	pushrooms_enabled = false,
+	pushrooms = "All Pushrooms",
 
 	--options
 	hide_decorations = false,
