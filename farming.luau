@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.37")
+print("loaded 0.1.371")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1094,60 +1094,39 @@ function farming.farmPuffshroom(field, id)
 			task.wait(0.01)
 			continue
 		end
+		for obj in pairs(handledLoot) do
+			if not obj.Parent then handledLoot[obj] = nil end
+		end
 
 		local loot = findLootNear(hrp.Position, 35, handledLoot)
 
-		if loot and loot.Parent then
-			lastLootTime = tick()
-
-			local lootStart = tick()
-
-			while enabled()
-				and loot.Parent
-				and not handledLoot[loot]
-				and tick() - lootStart < 2
-			do
-				character = find.player.Character
-				humanoid = character and character:FindFirstChildOfClass("Humanoid")
-				hrp = character and character:FindFirstChild("HumanoidRootPart")
-
-				if not humanoid or not hrp then
-					break
-				end
-
-				local targetPos = Vector3.new(
-					loot.Position.X,
-					hrp.Position.Y,
-					loot.Position.Z
-				)
-
-				local dx = hrp.Position.X - targetPos.X
-				local dz = hrp.Position.Z - targetPos.Z
-				local d = math.sqrt(dx * dx + dz * dz)
-
-				if d <= 2 then
-					handledLoot[loot] = true
-					break
-				end
-
-				humanoid.WalkSpeed = speed
-				pcall(function()
-					humanoid:MoveTo(targetPos)
-				end)
-
-				task.wait()
-			end
-		else
-			for obj in pairs(handledLoot) do
-				if not obj.Parent then
-					handledLoot[obj] = nil
-				end
-			end
+		if not loot then
 			if tick() - lastLootTime > 0.45 then
 				break
 			end
+			task.wait(0.05)
+			continue
 		end
 
+		lastLootTime = tick()
+
+		local targetPos = Vector3.new(
+			loot.Position.X,
+			hrp.Position.Y,
+			loot.Position.Z
+		)
+		local d = (targetPos - hrp.Position).Magnitude
+		
+		if d <= 3.5 then
+			handledLoot[loot] = true
+			task.wait(0.01)
+			continue
+		end
+
+		humanoid.WalkSpeed = speed
+		pcall(function()
+			humanoid:MoveTo(targetPos)
+		end)
 		task.wait(0.01)
 	end
 	
@@ -1659,7 +1638,7 @@ function farming.move(...)
 					mod.data.actives["point"] = false
 					
 					--farming.autosprinkler()
-					task.wait(.4)
+					task.wait(.2)
 					farming.autosprinkler(true)
 					
 					--task.wait(1)
