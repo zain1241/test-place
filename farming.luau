@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.374")
+print("loaded 0.1.4")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -514,7 +514,7 @@ function farming.farmSprout(field, id)
 	local startPosition = startRoot.Position
 	local target = sprout.Position + Vector3.new(
 		find.random:NextNumber(-3, 3),
-		5,
+		2,
 		find.random:NextNumber(-3, 3)
 	)
 
@@ -613,6 +613,8 @@ function farming.farmSprout(field, id)
 	local breakTimeout = 30
 	local spin = 1
 	--local lastActivate = 0
+	
+	farming.autosprinkler(true)
 
 	while enabled() and sprout.Parent ~= nil and (tick() - circleStart) < breakTimeout do
 		character = find.player.Character
@@ -696,7 +698,7 @@ function farming.farmSprout(field, id)
 	local collectTimeout = 15
 	local handled = {}
 	
-	farming.autosprinkler(true)
+	--farming.autosprinkler(true)
 
 	while enabled() and (tick() - collectStart) < collectTimeout do
 		character = find.player.Character
@@ -949,7 +951,7 @@ function farming.farmPuffshroom(field, id)
 	local startPosition = startRoot.Position
 	local target = rootPart.Position + Vector3.new(
 		find.random:NextNumber(-3, 3),
-		5,
+		2,
 		find.random:NextNumber(-3, 3)
 	)
 
@@ -1047,6 +1049,8 @@ function farming.farmPuffshroom(field, id)
 	local circleDirection = 1
 	local breakStart = tick()
 	local breakTimeout = 30
+	
+	farming.autosprinkler(true)
 
 	while enabled() and puff.Parent == pf and (tick() - breakStart) < breakTimeout do
 		character = find.player.Character
