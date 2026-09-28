@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.993")
+print("loaded 0.0.994")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -808,30 +808,46 @@ function farming.convert(...)
 	local eSucceeded = false
 	task.wait(1.5)
 	
-	for attempt = 1, 10 do
-		local before = farming.get_pollen_info()
-		local before_pollen = before and before.pollen or 0
+	local before = farming.get_pollen_info()
+	local before_pollen = before and before.pollen or 0
+	
+	activateButton()
+	
+	local checkStart = tick()
+	while tick() - checkStart < 10 do
+		task.wait(1)
 
-		activateButton()
-
-		local checkStart = tick()
-		while tick() - checkStart < 10 do
+		local now = farming.get_pollen_info()
+		if now then
+			if now.pollen <= 0 then
+				eSucceeded = true
+				break
+			end
+			if before_pollen > 0 and now.pollen < before_pollen then
+				eSucceeded = true
+				break
+			end
+		end
+	end
+	
+	if not eSucceeded then
+		for attempt = 1, 5 do
 			task.wait(1)
+			activateButton()
 
-			local now = farming.get_pollen_info()
-			if now then
-				if now.pollen <= 0 then
-					eSucceeded = true
-					break
-				end
-				if before_pollen > 0 and now.pollen < before_pollen - 50 then
+			local retryStart = tick()
+			while tick() - retryStart < 15 do
+				task.wait(1)
+
+				local now = farming.get_pollen_info()
+				if now and (now.pollen <= 0 or (before_pollen > 0 and now.pollen < before_pollen)) then
 					eSucceeded = true
 					break
 				end
 			end
-		end
 
-		if eSucceeded then break end
+			if eSucceeded then break end
+		end
 	end
 
 	if not eSucceeded then
@@ -847,6 +863,46 @@ function farming.convert(...)
 		end)
 		return
 	end
+	
+	--for attempt = 1, 10 do
+	--	local before = farming.get_pollen_info()
+	--	local before_pollen = before and before.pollen or 0
+
+	--	activateButton()
+
+	--	local checkStart = tick()
+	--	while tick() - checkStart < 10 do
+	--		task.wait(1)
+
+	--		local now = farming.get_pollen_info()
+	--		if now then
+	--			if now.pollen <= 0 then
+	--				eSucceeded = true
+	--				break
+	--			end
+	--			if before_pollen > 0 and now.pollen < before_pollen - 50 then
+	--				eSucceeded = true
+	--				break
+	--			end
+	--		end
+	--	end
+
+	--	if eSucceeded then break end
+	--end
+
+	--if not eSucceeded then
+	--	if aconvert then aconvert:Disconnect() aconvert = nil end
+	--	mod.data.actives["converting"] = false
+	--	mod.data.actives["move"] = false
+
+	--	task.defer(function()
+	--		task.wait(2)
+	--		if mod.data.actives["auto_farm"] then
+	--			farming.farm()
+	--		end
+	--	end)
+	--	return
+	--end
 
 	local startTime = tick()
 	local pollenZeroSince = nil
