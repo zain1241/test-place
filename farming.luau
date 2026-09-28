@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.354")
+print("loaded 0.1.36")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1658,9 +1658,9 @@ function farming.move(...)
 					mod.data.actives["move"] = false
 					mod.data.actives["point"] = false
 					
-					task.wait(.4)
 					farming.autosprinkler()
-					wait(.4)
+					task.wait(.4)
+					farming.autosprinkler(true)
 					
 					--task.wait(1)
 					--farming.autosprinkler()
