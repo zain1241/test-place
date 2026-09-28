@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.24")
+print("loaded 0.1.25")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1536,6 +1536,18 @@ function farming.convert(...)
 	local started = isMakingHoney()
 
 	if not started then
+		if not beforePollen or beforePollen <= 0 then
+			mod.data.actives["converting"] = false
+			mod.data.actives["move"] = false
+			task.defer(function()
+				task.wait(1)
+				if mod.data.actives["auto_farm"] then
+					farming.farm()
+				end
+			end)
+			return
+		end
+
 		pcall(function()
 			hiveCommand:FireServer("ToggleHoneyMaking")
 		end)
@@ -1543,7 +1555,7 @@ function farming.convert(...)
 	
 	local verifyStart = tick()
 
-	while tick() - verifyStart < 10 do
+	while tick() - verifyStart < 3 do
 		if not mod.data.actives["auto_farm"] then
 			mod.data.actives["converting"] = false
 			mod.data.actives["move"] = false
@@ -1566,6 +1578,19 @@ function farming.convert(...)
 	end
 	
 	if not started then
+		local nowPollen = getPollen()
+		if not nowPollen or nowPollen <= 0 then
+			mod.data.actives["converting"] = false
+			mod.data.actives["move"] = false
+			task.defer(function()
+				task.wait(1)
+				if mod.data.actives["auto_farm"] then
+					farming.farm()
+				end
+			end)
+			return
+		end
+
 		pcall(function()
 			find.virtual:SendKeyEvent(true, Enum.KeyCode.E, false, game)
 			task.wait(0.1)
@@ -1592,7 +1617,7 @@ function farming.convert(...)
 	end
 
 	if not started then
-		warn("[convert] Make Honey не запустился")
+		warn("make honey not started")
 
 		mod.data.actives["converting"] = false
 		mod.data.actives["move"] = false
@@ -1608,7 +1633,7 @@ function farming.convert(...)
 		return
 	end
 
-	print("[convert] Make Honey started")
+	print("make honey started")
 
 	local startTime = tick()
 	local pollenZeroSince = nil
