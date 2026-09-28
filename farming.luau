@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.32")
+print("loaded 0.1.321")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1983,6 +1983,7 @@ function farming.convert(...)
 		if not beforePollen or beforePollen <= 0 then
 			mod.data.actives["converting"] = false
 			mod.data.actives["move"] = false
+			mod.data.actives["last_time_convert"] = tick()
 			task.defer(function()
 				task.wait(1)
 				if mod.data.actives["auto_farm"] then
@@ -2026,6 +2027,7 @@ function farming.convert(...)
 		if not nowPollen or nowPollen <= 0 then
 			mod.data.actives["converting"] = false
 			mod.data.actives["move"] = false
+			mod.data.actives["last_time_convert"] = tick()
 			task.defer(function()
 				task.wait(1)
 				if mod.data.actives["auto_farm"] then
@@ -3490,15 +3492,40 @@ function farming.farm(...)
 					end
 					
 					if shouldConvert and mod.data.actives["move"] == false then
-						local targetPos = farming.getHive()
-						if targetPos then
-							local ok = farming.move("convert", mod.data.actives["walkspeed"], targetPos)
-							if ok then
-								mod.data.actives["converting"] = true
+						local hasPollen = false
+						local coreStats = find.player:FindFirstChild("CoreStats")
+						local pv = coreStats and coreStats:FindFirstChild("Pollen")
+						if pv and pv:IsA("NumberValue") then
+							hasPollen = pv.Value > 0
+						else
+							local pInfo = farming.get_pollen_info()
+							hasPollen = pInfo and pInfo.pollen and pInfo.pollen > 0
+						end
+
+						if not hasPollen then
+							mod.data.actives["last_time_convert"] = tick()
+						else
+							local targetPos = farming.getHive()
+							if targetPos then
+								local ok = farming.move("convert", mod.data.actives["walkspeed"], targetPos)
+								if ok then
+									mod.data.actives["converting"] = true
+								end
 							end
 						end
 						return
 					end
+					
+					--if shouldConvert and mod.data.actives["move"] == false then
+					--	local targetPos = farming.getHive()
+					--	if targetPos then
+					--		local ok = farming.move("convert", mod.data.actives["walkspeed"], targetPos)
+					--		if ok then
+					--			mod.data.actives["converting"] = true
+					--		end
+					--	end
+					--	return
+					--end
 				end
 				
 				if mod.data.actives["move"] == false then
