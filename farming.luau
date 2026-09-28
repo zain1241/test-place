@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.321")
+print("loaded 0.1.34")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -99,10 +99,7 @@ local function getNearestSprout(field, hrp)
 	local nearestDist
 
 	for _, obj in ipairs(sf:GetChildren()) do
-		if obj.Name == "Sprout"
-			and obj:IsA("BasePart")
-			and isInField(obj.Position, field)
-		then
+		if obj.Name == "Sprout" and obj:IsA("BasePart") then
 			local d = (obj.Position - hrp.Position).Magnitude
 
 			if not nearestDist or d < nearestDist then
@@ -264,7 +261,6 @@ function farming.farmPetalBloom(field, id)
 		if isPetal(v) then oldPetals[v] = true end
 	end
 
-	local tool = character:FindFirstChildOfClass("Tool")
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
 	
 	local function phaseEnabled()
@@ -591,12 +587,12 @@ function farming.farmSprout(field, id)
 		return false
 	end
 	
-	local tool = character:FindFirstChildOfClass("Tool")
+	--local tool = character:FindFirstChildOfClass("Tool")
 	local circleRadius = 7
 	local circleStart = tick()
 	local breakTimeout = 30
 	local spin = 1
-	local lastActivate = 0
+	--local lastActivate = 0
 
 	while enabled()
 		and sprout.Parent ~= nil
@@ -677,6 +673,17 @@ function farming.farmSprout(field, id)
 	end
 
 	safeCleanup(nil, false)
+	
+	if field and field.Parent then
+		farming.move("flowerzones", speed, field.Name)
+		while id == farmId
+			and mod.data.actives["auto_farm"] == true
+			and not mod.data.actives["converting"]
+			and mod.data.actives["move"] == true
+		do
+			task.wait()
+		end
+	end
 
 	lastSproutTime = tick()
 	return true
@@ -1592,7 +1599,7 @@ function farming.move(...)
 					end
 
 					mod.data.actives["move"] = false
-					task.wait(.4)
+					task.wait(.6)
 					farming.autosprinkler()
 					task.wait(1)
 				end)
@@ -2911,7 +2918,7 @@ function farming.farm(...)
 				)
 
 				if sproutFound then
-					print("found:", sproutFound:GetFullName(), sproutFound.Position)
+					--print("found:", sproutFound:GetFullName(), sproutFound.Position)
 					farming.farmSprout(field, id)
 					continue
 				end
@@ -3232,7 +3239,7 @@ function farming.farm(...)
 				)
 
 				if sproutFound then
-					print("found:", sproutFound:GetFullName(), sproutFound.Position)
+					--print("found:", sproutFound:GetFullName(), sproutFound.Position)
 					farming.farmSprout(field, id)
 					continue
 				end
