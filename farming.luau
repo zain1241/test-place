@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.2")
+print("loaded 0.1.22")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -390,11 +390,10 @@ end
 local function findLootNear(pos, radius)
 	if not pos then return nil end
 	local best, bestDist
+	-- только папки где реально появляются дропы, без обхода всего workspace
 	local containers = {
-		workspace:FindFirstChild("Particles"),
 		workspace:FindFirstChild("Collectibles"),
-		workspace:FindFirstChild("Happenings"),
-		workspace,
+		workspace:FindFirstChild("Particles"),
 	}
 	for _, c in ipairs(containers) do
 		if c then
@@ -437,7 +436,15 @@ function farming.farmPuffshroom(field, id)
 
 	local tool = character:FindFirstChildOfClass("Tool")
 	local lastActivate = 0
-	
+
+	-- ========================================
+	-- СБРОС ФЛАГОВ перед стартом
+	-- ========================================
+	mod.data.actives["move"] = false
+
+	-- ========================================
+	-- ФАЗА 1: ЛЕТИМ к грибу + NOCLIP
+	-- ========================================
 	farming.inv(true)
 
 	local approachTarget = Vector3.new(root.Position.X, root.Position.Y, root.Position.Z)
@@ -455,8 +462,22 @@ function farming.farmPuffshroom(field, id)
 
 	farming.inv(false)
 
+	-- ВАЖНО: сбрасываем анкор и move явно, даём Humanoid прийти в себя
+	character = find.player.Character
+	hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.Anchored = false
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+	end
+	mod.data.actives["move"] = false
+	task.wait(0.15)
+
 	print("arrived, breaking")
-	
+
+	-- ========================================
+	-- ФАЗА 2: ХОДЬБА по кругу
+	-- ========================================
 	local circleAngle = 0
 	local circleRadius = 5
 	local circleSpeed = 2.0
@@ -477,7 +498,7 @@ function farming.farmPuffshroom(field, id)
 			local r = getPuffRoot(puff)
 			if r then
 				local center = r.Position
-				
+
 				circleAngle = math.atan2(hrp.Position.Z - center.Z, hrp.Position.X - center.X)
 				circleAngle += circleSpeed * 0.05
 
@@ -489,7 +510,7 @@ function farming.farmPuffshroom(field, id)
 
 				humanoid.WalkSpeed = speed
 				humanoid:MoveTo(target)
-				
+
 				local dx = center.X - hrp.Position.X
 				local dz = center.Z - hrp.Position.Z
 				local distToCenter = math.sqrt(dx * dx + dz * dz)
@@ -507,7 +528,13 @@ function farming.farmPuffshroom(field, id)
 	end
 
 	print("broken, looting")
+
+	-- ========================================
+	-- ФАЗА 3: СОБИРАЕМ ЛУТ — БЕЗ фризов
+	-- ========================================
 	local lootStart = tick()
+	local lastLoot = findLootNear(origin, 25)
+	local lootCheck = tick()
 
 	while id == farmId
 		and mod.data.actives["auto_farm"] == true
@@ -524,11 +551,17 @@ function farming.farmPuffshroom(field, id)
 			continue
 		end
 
-		local loot = findLootNear(origin, 25)
+		-- ищем новый лут только раз в 0.4 сек, а не каждый кадр
+		if tick() - lootCheck > 0.4 or not lastLoot or not lastLoot.Parent then
+			lastLoot = findLootNear(origin, 25)
+			lootCheck = tick()
+		end
+
+		local loot = lastLoot
 		if not loot then
 			break
 		end
-		
+
 		local walkStart = tick()
 		humanoid.WalkSpeed = speed
 
@@ -549,7 +582,7 @@ function farming.farmPuffshroom(field, id)
 			local dx = loot.Position.X - hrp.Position.X
 			local dz = loot.Position.Z - hrp.Position.Z
 			local distance = math.sqrt(dx * dx + dz * dz)
-			
+
 			if distance <= 1.5 then
 				break
 			end
@@ -765,6 +798,7 @@ end
 function farming.inv(...)
 	local a = {...}
 	local b = workspace:FindFirstChild(find.player.Name)
+	if not b then return end
 
 	if a[1] == true then
 		if invc then
