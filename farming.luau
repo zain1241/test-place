@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.3")
+print("loaded 0.1.31")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -397,14 +397,20 @@ function farming.farmSprout(field, id)
 			and not mod.data.actives["converting"]
 	end
 
-	local function safeCleanup(rootPart)
+	local function safeCleanup(rootPart, clearMove)
 		if rootPart then
 			pcall(function()
-				if rootPart.Parent then rootPart.Anchored = false end
+				if rootPart.Parent then
+					rootPart.Anchored = false
+				end
 			end)
 		end
+
 		farming.hardUninv()
-		mod.data.actives["move"] = false
+
+		if clearMove ~= false then
+			mod.data.actives["move"] = false
+		end
 	end
 
 	local function safeCancelTween()
@@ -835,8 +841,12 @@ function farming.farmPuffshroom(field, id)
 		end)
 	end
 	
-	pcall(function() startRoot.Anchored = false end)
-	safeCleanup(startRoot)
+	pcall(function()
+		startRoot.Anchored = false
+	end)
+	
+	safeCleanup(startRoot, false)
+	mod.data.actives["move"] = true
 
 	if not enabled() then
 		return false
@@ -1442,7 +1452,23 @@ function farming.move(...)
 					end
 
 					if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
-						if s.Parent then s:Destroy() end
+						if s.Parent then
+							s:Destroy()
+						end
+
+						pcall(function()
+							root.Anchored = false
+						end)
+
+						pcall(function()
+							farming.inv(false)
+						end)
+
+						if humanoid and humanoid.Parent then
+							humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+						end
+
+						mod.data.actives["move"] = false
 						return
 					end
 
@@ -2784,7 +2810,6 @@ function farming.farm(...)
 				if sproutFound then
 					print("found:", sproutFound:GetFullName(), sproutFound.Position)
 					farming.farmSprout(field, id)
-					continue
 				end
 			end
 			
@@ -3103,7 +3128,6 @@ function farming.farm(...)
 				if sproutFound then
 					print("found:", sproutFound:GetFullName(), sproutFound.Position)
 					farming.farmSprout(field, id)
-					continue
 				end
 			end
 			
@@ -3278,6 +3302,7 @@ function farming.farm(...)
 			task.wait()
 		end
 
+		mod.data.actives["move"] = false
 		mod.data.actives["point"] = false
 	end
 
