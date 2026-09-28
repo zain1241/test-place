@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.13")
+print("loaded 0.1.134")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1158,10 +1158,7 @@ function farming.forceWalkSpeed(speed)
 		farming.__speedConn:Disconnect()
 		farming.__speedConn = nil
 	end
-	if type(speed) ~= "number" or speed <= 0 then
-		farming.__forcedSpeed = nil
-		return
-	end
+
 	farming.__forcedSpeed = speed
 
 	local function applyMass()
@@ -1176,29 +1173,27 @@ function farming.forceWalkSpeed(speed)
 	end
 
 	local function applySpeed()
-		local targetSpeed = mod.data.actives["walkspeed"] or farming.__forcedSpeed
-		if targetSpeed and mod.data.actives["move_speed"] ~= targetSpeed then
+		local targetSpeed = tonumber(mod.data.actives["walkspeed"]) or farming.__forcedSpeed
+		if not targetSpeed or targetSpeed <= 0 then return end
+		
+		if mod.data.actives["move_speed"] ~= targetSpeed then
 			mod.data.actives["move_speed"] = targetSpeed
 		end
+
 		if mod.data.actives["converting"] then return end
-		if mod.data.actives["move"] == true then return end
 		local char = find.player.Character
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-		if humanoid and targetSpeed and humanoid.WalkSpeed ~= targetSpeed then
+		if humanoid and humanoid.WalkSpeed ~= targetSpeed then
 			humanoid.WalkSpeed = targetSpeed
 		end
 	end
 
 	applyMass()
 
-	-- только WalkSpeed каждый кадр, без обхода всего персонажа
-	farming.__speedConn = find.renderstepped:Connect(function()
-		if farming.__forcedSpeed then applySpeed() end
-	end)
+	farming.__speedConn = find.renderstepped:Connect(applySpeed)
 
 	applySpeed()
 
-	-- переприменяем массу при респавне
 	if farming.__charConn then
 		farming.__charConn:Disconnect()
 	end
