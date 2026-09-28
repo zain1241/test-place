@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.123")
+print("loaded 0.1.13")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -34,6 +34,10 @@ local queue = {
 	auto_farm = {},
 	tokens = {},
 }
+
+local happenings = workspace:FindFirstChild("Happenings")
+local bloomFolder = happenings and happenings:FindFirstChild("PoppablePlants")
+local puffFolder = happenings and happenings:FindFirstChild("Puffshrooms")
 
 local invc, tween, afarm, adig, aconvert, atween, track, animwalk, humanoid_walk_speed, p, p1;
 local farmId = 0
@@ -127,9 +131,6 @@ local function getNearestBubble(field, hrp)
 	end
 	return nearest
 end
-
-local happenings = workspace:FindFirstChild("Happenings")
-local bloomFolder = happenings and happenings:FindFirstChild("PoppablePlants")
 
 local function getBloomPosition(bloom)
 	local core = bloom and bloom:FindFirstChild("CorePart", true)
@@ -310,6 +311,189 @@ function farming.farmPetalBloom(field, id)
 	end
 
 	if conn then conn:Disconnect() end
+
+	return true
+end
+
+local PUFF_RARITY = {
+	["Common"] = true,
+	["Rare"] = true,
+	["Epic"] = true,
+	["Legendary"] = true,
+	["Mythic"] = true,
+}
+
+local function getPuffRarity(puff)
+	for rar in pairs(PUFF_RARITY) do
+		if string.find(puff.Name, rar, 1, true) then
+			return rar
+		end
+	end
+	return nil
+end
+
+local function getPuffRoot(puff)
+	return puff.PrimaryPart
+		or puff:FindFirstChild("PuffballStem", true)
+		or puff:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function getNearestPuff(field, hrp, filter)
+	if not puffFolder or not hrp then return nil end
+	local nearest, nearestDist
+	for _, puff in ipairs(puffFolder:GetChildren()) do
+		if puff:IsA("Model") then
+			local rarity = getPuffRarity(puff)
+			if rarity and (filter == "All Pushrooms" or filter == rarity) then
+				local root = getPuffRoot(puff)
+				if root and isInField(root.Position, field) then
+					local d = (root.Position - hrp.Position).Magnitude
+					if not nearestDist or d < nearestDist then
+						nearest = puff
+						nearestDist = d
+					end
+				end
+			end
+		end
+	end
+	return nearest
+end
+
+local function findLootNear(pos, radius)
+	if not pos then return nil end
+	local best, bestDist
+	local containers = {
+		workspace:FindFirstChild("Particles"),
+		workspace:FindFirstChild("Collectibles"),
+		workspace:FindFirstChild("Happenings"),
+		workspace,
+	}
+	for _, c in ipairs(containers) do
+		if c then
+			for _, v in ipairs(c:GetChildren()) do
+				if v:IsA("BasePart") then
+					local d = (v.Position - pos).Magnitude
+					if d <= radius and (not bestDist or d < bestDist) then
+						best = v
+						bestDist = d
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+function farming.farmPuffshroom(field, id)
+	local character = find.player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not hrp then return false end
+
+	local filter = mod.data.actives["pushrooms"] or "All Pushrooms"
+	local puff = getNearestPuff(field, hrp, filter)
+	if not puff then return false end
+
+	local root = getPuffRoot(puff)
+	if not root then return false end
+
+	local origin = root.Position
+	local speed = mod.data.actives["walkspeed"] or 40
+
+	local tool = character:FindFirstChildOfClass("Tool")
+	local lastActivate = 0
+	
+	local approachPos = Vector3.new(origin.X, origin.Y, origin.Z)
+
+	farming.move("goto", speed, approachPos)
+
+	local approachStart = tick()
+	while mod.data.actives["move"] == true
+		and tick() - approachStart < 15
+		and id == farmId
+		and mod.data.actives["pushrooms_enabled"] == true
+	do
+		task.wait(0.05)
+	end
+	
+	local circleAngle = 0
+	local circleSpeed = 2.0
+	local circleRadius = 5
+
+	local breakStart = tick()
+	while id == farmId
+		and mod.data.actives["auto_farm"] == true
+		and mod.data.actives["pushrooms_enabled"] == true
+		and not mod.data.actives["converting"]
+		and puff.Parent == puffFolder
+		and tick() - breakStart < 15
+	do
+		character = find.player.Character
+		humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		hrp = character and character:FindFirstChild("HumanoidRootPart")
+
+		if humanoid and hrp then
+			local r = getPuffRoot(puff)
+			if r then
+				local center = r.Position
+
+				circleAngle += circleSpeed * 0.05
+
+				local target = Vector3.new(
+					center.X + math.cos(circleAngle) * circleRadius,
+					hrp.Position.Y,
+					center.Z + math.sin(circleAngle) * circleRadius
+				)
+
+				humanoid:MoveTo(target)
+				
+				local dx = center.X - hrp.Position.X
+				local dz = center.Z - hrp.Position.Z
+				local distToCenter = math.sqrt(dx * dx + dz * dz)
+
+				if distToCenter <= circleRadius + 3 then
+					tool = character:FindFirstChildOfClass("Tool") or tool
+					if tool and tool.Parent == character and os.clock() - lastActivate >= 0.08 then
+						pcall(function() tool:Activate() end)
+						lastActivate = os.clock()
+					end
+				end
+			end
+		end
+
+		task.wait(0.05)
+	end
+	
+	local lootStart = tick()
+	while id == farmId
+		and mod.data.actives["auto_farm"] == true
+		and mod.data.actives["pushrooms_enabled"] == true
+		and not mod.data.actives["converting"]
+		and tick() - lootStart < 4
+	do
+		character = find.player.Character
+		humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		hrp = character and character:FindFirstChild("HumanoidRootPart")
+
+		if humanoid and hrp then
+			local loot = findLootNear(origin, 25)
+			if loot then
+				local target = Vector3.new(loot.Position.X, loot.Position.Y, loot.Position.Z)
+
+				farming.move("goto", speed, target)
+
+				local flyStart = tick()
+				while mod.data.actives["move"] == true
+					and tick() - flyStart < 2
+					and id == farmId
+				do
+					task.wait(0.03)
+				end
+			else
+				task.wait(0.1)
+			end
+		end
+	end
 
 	return true
 end
@@ -919,6 +1103,52 @@ function farming.move(...)
 			farming.convert()
 		end)
 		return currentTween
+	elseif a[1] == "goto" then
+		local target = a[3]
+		if typeof(target) ~= "Vector3" then return end
+		if not workspace:FindFirstChild(find.player.Name) then return end
+
+		local character = find.player.Character
+		if not character then return end
+
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+
+		if tween then tween:Cancel() tween = nil end
+		if atween then atween:Cancel() atween = nil end
+
+		mod.data.actives["move"] = true
+		local currentFarmId = farmId
+
+		local d1 = (root.Position - target).Magnitude / math.max(a[2], .001)
+
+		root.Anchored = true
+
+		local currentTween = find.tweenservice:Create(
+			root,
+			TweenInfo.new(d1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+			{CFrame = CFrame.new(target)}
+		)
+
+		tween = currentTween
+		currentTween:Play()
+		farming.inv(true)
+
+		currentTween.Completed:Once(function(state)
+			if tween == currentTween then tween = nil end
+
+			if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+				root.Anchored = false
+				mod.data.actives["move"] = false
+				return
+			end
+
+			farming.inv(false)
+			root.Anchored = false
+			mod.data.actives["move"] = false
+		end)
+
+		return currentTween
 	end
 	return false
 end
@@ -1016,7 +1246,7 @@ function farming.convert(...)
 	local convertPos
 
 	if spawnPos and spawnPos:IsA("CFrameValue") then
-		convertPos = spawnPos.Value.Position + Vector3.new(0, 0, 9)
+		convertPos = spawnPos.Value.Position + Vector3.new(0, 0, 6)
 	end
 
 	-- Подходим ближе к кнопке/падду.
@@ -1218,7 +1448,7 @@ function farming.convert(...)
 				return
 			end
 
-			print("[convert] completed")
+			print("convert completed")
 
 			if aconvert then
 				aconvert:Disconnect()
@@ -1252,7 +1482,7 @@ function farming.convert(...)
 					
 					local balloon = nil
 					local appearStart = tick()
-					while tick() - appearStart < 20 do
+					while tick() - appearStart < 10 do
 						if not mod.data.actives["auto_farm"] then return end
 
 						local c2 = player.Character
@@ -1265,19 +1495,19 @@ function farming.convert(...)
 					end
 
 					if balloon then
-						print("[convert] balloon found, waiting pop")
+						print("balloon found, waiting pop")
 						local popStart = tick()
 						while balloon.Parent and tick() - popStart < 300 do
 							if not mod.data.actives["auto_farm"] then return end
 							task.wait(1)
 						end
 						if not balloon.Parent then
-							print("[convert] balloon converted")
+							print("balloon converted")
 						else
-							print("[convert] balloon timeout")
+							print("balloon timeout")
 						end
 					else
-						print("[convert] balloon not found (20s)")
+						print("balloon not found 10s")
 					end
 				end
 
@@ -2403,6 +2633,10 @@ function farming.farm(...)
 			
 			if mod.data.actives["petals"] == true and field then
 				farming.farmPetalBloom(field, id)
+			end
+			
+			if mod.data.actives["pushrooms_enabled"] == true and field then
+				farming.farmPuffshroom(field, id)
 			end
 
 			table.clear(queue["tokens"])
