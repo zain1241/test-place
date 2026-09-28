@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.994")
+print("loaded 0.0.99941")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -126,6 +126,202 @@ local function getNearestBubble(field, hrp)
 		end
 	end
 	return nearest
+end
+
+-- ============================================================
+-- PETALS / BLOOM
+-- ============================================================
+local happenings = workspace:FindFirstChild("Happenings")
+local bloomFolder = happenings and happenings:FindFirstChild("PoppablePlants")
+
+local function getBloomPosition(bloom)
+	local core = bloom and bloom:FindFirstChild("CorePart", true)
+	if core and core:IsA("BasePart") then
+		return core.Position
+	end
+end
+
+local function getNearestBloom(field, hrp)
+	if not bloomFolder then return nil end
+	local nearest, nearestDistance
+	for _, bloom in ipairs(bloomFolder:GetChildren()) do
+		if bloom:IsA("Model") and bloom.Name == "Bloom" then
+			local pos = getBloomPosition(bloom)
+			if pos and isInField(pos, field) then
+				local target = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
+				local d = (target - hrp.Position).Magnitude
+				if not nearestDistance or d < nearestDistance then
+					nearest = bloom
+					nearestDistance = d
+				end
+			end
+		end
+	end
+	return nearest
+end
+
+local function isPetal(v)
+	return v
+		and v:IsA("BasePart")
+		and v.Name == "PetalPart"
+		and v.Parent == workspace:FindFirstChild("Particles")
+end
+
+local function getBestPetal(tracked, hrp)
+	local nearest, bestScore
+	for petal in pairs(tracked) do
+		if not petal.Parent then
+			tracked[petal] = nil
+			continue
+		end
+		local pos = petal.Position
+		local dx = pos.X - hrp.Position.X
+		local dz = pos.Z - hrp.Position.Z
+		local flat = math.sqrt(dx * dx + dz * dz)
+		local hDiff = math.abs(pos.Y - hrp.Position.Y)
+		local score = flat + hDiff * 0.30
+		if not bestScore or score < bestScore then
+			bestScore = score
+			nearest = petal
+		end
+	end
+	return nearest
+end
+
+function farming.farmPetalBloom(field, id)
+	local character = find.player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not hrp then return false end
+
+	local bloom = getNearestBloom(field, hrp)
+	if not bloom then return false end
+
+	local origin = getBloomPosition(bloom)
+	if not origin then return false end
+
+	local particles = workspace:FindFirstChild("Particles")
+	if not particles then return false end
+	
+	local oldPetals = {}
+	for _, v in ipairs(particles:GetChildren()) do
+		if isPetal(v) then oldPetals[v] = true end
+	end
+
+	local tool = character:FindFirstChildOfClass("Tool")
+	local lastActivate = 0
+	
+	local phaseStart = tick()
+	while id == farmId
+		and mod.data.actives["auto_farm"] == true
+		and mod.data.actives["petals"] == true
+		and not mod.data.actives["converting"]
+		and bloom.Parent == bloomFolder
+		and tick() - phaseStart < 30
+	do
+		character = find.player.Character
+		humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		hrp = character and character:FindFirstChild("HumanoidRootPart")
+		if not character then task.wait(0.1) continue end
+
+		local pos = getBloomPosition(bloom)
+		if not pos then break end
+
+		local target = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
+		local distance = (target - hrp.Position).Magnitude
+
+		if distance > 5 then
+			humanoid:MoveTo(target)
+		end
+
+		--if distance <= 7 then
+		--	tool = character:FindFirstChildOfClass("Tool") or tool
+		--	if tool and tool.Parent == character and os.clock() - lastActivate >= 0.08 then
+		--		pcall(function() tool:Activate() end)
+		--		lastActivate = os.clock()
+		--	end
+		--end
+
+		task.wait(0.05)
+	end
+	
+	local popTimeout = os.clock() + 4
+	while id == farmId
+		and mod.data.actives["auto_farm"] == true
+		and mod.data.actives["petals"] == true
+		and bloom.Parent == bloomFolder
+		and os.clock() < popTimeout
+	do
+		character = find.player.Character
+		if character then
+			tool = character:FindFirstChildOfClass("Tool") or tool
+			if tool and tool.Parent == character and os.clock() - lastActivate >= 0.08 then
+				pcall(function() tool:Activate() end)
+				lastActivate = os.clock()
+			end
+		end
+		task.wait(0.05)
+	end
+	
+	local tracked = {}
+	local lastSpawn = os.clock()
+
+	local conn
+	conn = particles.ChildAdded:Connect(function(v)
+		if not mod.data.actives["auto_farm"] then return end
+		if not isPetal(v) then return end
+		if oldPetals[v] then return end
+		if (v.Position - origin).Magnitude <= 60 then
+			tracked[v] = true
+			lastSpawn = os.clock()
+		end
+	end)
+
+	local petalStart = os.clock()
+	local petalTimeout = petalStart + 7
+
+	while id == farmId
+		and mod.data.actives["auto_farm"] == true
+		and mod.data.actives["petals"] == true
+		and not mod.data.actives["converting"]
+		and os.clock() < petalTimeout
+	do
+		character = find.player.Character
+		humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		hrp = character and character:FindFirstChild("HumanoidRootPart")
+		if not character then task.wait(0.05) continue end
+		
+		for _, v in ipairs(particles:GetChildren()) do
+			if isPetal(v)
+				and not oldPetals[v]
+				and not tracked[v]
+				and (v.Position - origin).Magnitude <= 60
+			then
+				tracked[v] = true
+				lastSpawn = os.clock()
+			end
+		end
+
+		local petal = getBestPetal(tracked, hrp)
+		if petal then
+			local pos = petal.Position
+			local target = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
+			humanoid:MoveTo(target)
+			if (target - hrp.Position).Magnitude <= 3.5 then
+				tracked[petal] = nil
+			end
+		else
+			if os.clock() - lastSpawn > 0.45 and os.clock() - petalStart > 0.5 then
+				break
+			end
+		end
+
+		task.wait(0.04)
+	end
+
+	if conn then conn:Disconnect() end
+
+	return true
 end
 
 local function clearFarmLines()
@@ -806,48 +1002,57 @@ function farming.convert(...)
 	end
 
 	local eSucceeded = false
-	task.wait(1.5)
-	
-	local before = farming.get_pollen_info()
-	local before_pollen = before and before.pollen or 0
-	
-	activateButton()
-	
-	local checkStart = tick()
-	while tick() - checkStart < 10 do
-		task.wait(1)
-
-		local now = farming.get_pollen_info()
-		if now then
-			if now.pollen <= 0 then
-				eSucceeded = true
-				break
-			end
-			if before_pollen > 0 and now.pollen < before_pollen then
-				eSucceeded = true
-				break
-			end
+	task.wait(2)
+	do
+		local btnWait = tick()
+		while tick() - btnWait < 10 do
+			local b = findActivateButton()
+			if b and b.Visible and b.AbsoluteSize.X > 0 then break end
+			task.wait(0.2)
 		end
 	end
 	
-	if not eSucceeded then
-		for attempt = 1, 5 do
-			task.wait(1)
-			activateButton()
+	while not eSucceeded do
+		if not mod.data.actives["auto_farm"] then
+			if aconvert then aconvert:Disconnect() aconvert = nil end
+			mod.data.actives["converting"] = false
+			mod.data.actives["move"] = false
+			return
+		end
 
-			local retryStart = tick()
-			while tick() - retryStart < 15 do
-				task.wait(1)
+		local nowBefore = farming.get_pollen_info()
+		local before_pollen = nowBefore and nowBefore.pollen or 0
+		if before_pollen <= 0 then
+			eSucceeded = true
+			break
+		end
 
-				local now = farming.get_pollen_info()
-				if now and (now.pollen <= 0 or (before_pollen > 0 and now.pollen < before_pollen)) then
-					eSucceeded = true
+		activateButton()
+		local checkStart = tick()
+		local dropped = false
+
+		while tick() - checkStart < 10 do
+			task.wait(0.5)
+
+			local now = farming.get_pollen_info()
+			if now then
+				if now.pollen <= 0 then
+					dropped = true
+					break
+				end
+				if before_pollen > 0 and now.pollen < before_pollen then
+					dropped = true
 					break
 				end
 			end
-
-			if eSucceeded then break end
 		end
+
+		if dropped then
+			eSucceeded = true
+			print("[convert] разгрузка запущена")
+			break
+		end
+		task.wait(0.3)
 	end
 
 	if not eSucceeded then
@@ -1817,46 +2022,9 @@ function farming.farm(...)
 			local field
 
 			if mod.data.actives["selected_field"] == false then field = nil else field = f:FindFirstChild(mod.data.actives["selected_field"]) end
-
-			table.clear(queue["tokens"])
 			
-			if mod.data.actives["collect_bubbles"] == true then
-				local bubbleStart = tick()
-				while id == farmId
-					and mod.data.actives["auto_farm"] == true
-					and not mod.data.actives["converting"]
-					and tick() - bubbleStart < 8
-				do
-					local ch = find.player.Character
-					local rt = ch and ch:FindFirstChild("HumanoidRootPart")
-					if not rt then break end
-
-					local bubble = getNearestBubble(field, rt)
-					if not bubble then break end
-
-					local bubbleRef = bubble
-					
-					local tgc = CFrame.new(bubble.Position) * rt.CFrame.Rotation
-					table.insert(queue["auto_farm"], {TargetCFrame = tgc, Speed = a.Speed})
-					
-					local flyStart = tick()
-					while bubbleRef.Parent
-						and id == farmId
-						and mod.data.actives["auto_farm"] == true
-						and not mod.data.actives["converting"]
-						and tick() - flyStart < 3
-					do
-						local r2 = find.player.Character
-							and find.player.Character:FindFirstChild("HumanoidRootPart")
-						if not r2 then break end
-						if (r2.Position - bubbleRef.Position).Magnitude <= 5 then
-							break
-						end
-						task.wait(0.1)
-					end
-
-					task.wait(0.15)
-				end
+			if mod.data.actives["petals"] == true and field then
+				farming.farmPetalBloom(field, id)
 			end
 
 			table.clear(queue["tokens"])
@@ -2040,6 +2208,10 @@ function farming.farm(...)
 				field = nil
 			else
 				field = f and f:FindFirstChild(mod.data.actives["selected_field"])
+			end
+			
+			if mod.data.actives["petals"] == true and field then
+				farming.farmPetalBloom(field, id)
 			end
 
 			table.clear(queue["tokens"])
