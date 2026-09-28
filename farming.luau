@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.351")
+print("loaded 0.1.354")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -52,7 +52,7 @@ local function getSproutFolder()
 	return particles and particles:FindFirstChild("Folder2")
 end
 
-local SPROUT_COOLDOWN = 15
+local SPROUT_COOLDOWN = 20
 local lastSproutTime = 0
 
 local __bboxCache = {}
@@ -675,6 +675,8 @@ function farming.farmSprout(field, id)
 	local collectStart = tick()
 	local collectTimeout = 15
 	local handled = {}
+	
+	farming.autosprinkler()
 
 	while enabled() and (tick() - collectStart) < collectTimeout do
 		character = find.player.Character
@@ -1580,7 +1582,7 @@ function farming.move(...)
 				end
 				
 				local target = v.CFrame:PointToWorldSpace(
-					Vector3.new(0, v.Size.Y / 2 + 4, 0)
+					Vector3.new(0, v.Size.Y / 2 + 2, 0)
 				)
 				local d1 = (root.Position - target).Magnitude / math.max(a[2], .001)
 				root.Anchored = true
@@ -1656,9 +1658,9 @@ function farming.move(...)
 					mod.data.actives["move"] = false
 					mod.data.actives["point"] = false
 					
-					wait(1)
+					task.wait(.4)
 					farming.autosprinkler()
-					wait(1)
+					wait(.4)
 					
 					--task.wait(1)
 					--farming.autosprinkler()
