@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.121")
+print("loaded 0.1.122")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -928,56 +928,55 @@ function farming.forceWalkSpeed(speed)
 		farming.__speedConn:Disconnect()
 		farming.__speedConn = nil
 	end
-
 	if type(speed) ~= "number" or speed <= 0 then
 		farming.__forcedSpeed = nil
 		return
 	end
-
 	farming.__forcedSpeed = speed
 
-	local function apply()
+	local function applyMass()
+		local char = find.player.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+		root.Massless = false
+		local p = root.CurrentPhysicalProperties
+		root.CustomPhysicalProperties = PhysicalProperties.new(
+			20, p.Friction, p.Elasticity, p.FrictionWeight, p.ElasticityWeight
+		)
+	end
+
+	local function applySpeed()
 		local targetSpeed = mod.data.actives["walkspeed"] or farming.__forcedSpeed
 		if targetSpeed and mod.data.actives["move_speed"] ~= targetSpeed then
 			mod.data.actives["move_speed"] = targetSpeed
 		end
-
 		if mod.data.actives["converting"] then return end
 		if mod.data.actives["move"] == true then return end
-		if mod.data.actives["auto_farm"] == true
-			and mod.data.actives["style_auto_farm"] == "Walk" then
-			return
-		end
-
 		local char = find.player.Character
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-		local root = char and char:FindFirstChild("HumanoidRootPart")
-		if not humanoid then return end
-
-		if humanoid.WalkSpeed ~= targetSpeed then
+		if humanoid and targetSpeed and humanoid.WalkSpeed ~= targetSpeed then
 			humanoid.WalkSpeed = targetSpeed
-		end
-
-		if root then
-			root.Massless = false
-			local p = root.CurrentPhysicalProperties
-			if p then
-				root.CustomPhysicalProperties = PhysicalProperties.new(
-					20,
-					p.Friction,
-					p.Elasticity,
-					p.FrictionWeight,
-					p.ElasticityWeight
-				)
-			end
 		end
 	end
 
+	applyMass()
+
+	-- только WalkSpeed каждый кадр, без обхода всего персонажа
 	farming.__speedConn = find.renderstepped:Connect(function()
-		if farming.__forcedSpeed then apply() end
+		if farming.__forcedSpeed then applySpeed() end
 	end)
 
-	apply()
+	applySpeed()
+
+	-- переприменяем массу при респавне
+	if farming.__charConn then
+		farming.__charConn:Disconnect()
+	end
+	farming.__charConn = find.player.CharacterAdded:Connect(function()
+		task.wait(1)
+		applyMass()
+		applySpeed()
+	end)
 end
 
 function farming.convert(...)
