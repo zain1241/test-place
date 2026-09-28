@@ -1037,12 +1037,38 @@ function menu.dop_create()
 		ms.Transparency = 0.8
 		ms.Parent = r
 
+		--local h = Instance.new("TextButton")
+		--h.Name = "Header"
+		--h.BackgroundTransparency = 1
+		--h.BorderSizePixel = 0
+		--h.AutoButtonColor = true
+		--h.Size = d.header_size or UDim2.new(0.96, 0, 0, 32)
+		--h.LayoutOrder = 0
+		--h.ZIndex = 1004
+		--h.Font = Enum.Font.BuilderSansBold
+		--h.TextColor3 = Color3.fromRGB(255, 255, 255)
+		--h.TextSize = 15
+		--h.TextTruncate = Enum.TextTruncate.AtEnd
+		--h.TextXAlignment = Enum.TextXAlignment.Left
+		--h.Parent = r
+		
+		local useHeaderIcon = d.header_icon == true
+		local headerSize = d.header_size
+
+		if headerSize == nil then
+			if useHeaderIcon then
+				headerSize = UDim2.new(0.962, 0,0, 32) -- icon
+			else
+				headerSize = UDim2.new(0.962, 0,0, 32)
+			end
+		end
+
 		local h = Instance.new("TextButton")
 		h.Name = "Header"
 		h.BackgroundTransparency = 1
 		h.BorderSizePixel = 0
 		h.AutoButtonColor = true
-		h.Size = d.header_size or UDim2.new(0.96, 0, 0, 32)
+		h.Size = headerSize
 		h.LayoutOrder = 0
 		h.ZIndex = 1004
 		h.Font = Enum.Font.BuilderSansBold
@@ -1051,6 +1077,23 @@ function menu.dop_create()
 		h.TextTruncate = Enum.TextTruncate.AtEnd
 		h.TextXAlignment = Enum.TextXAlignment.Left
 		h.Parent = r
+
+		local headerIcon
+		if useHeaderIcon then
+			headerIcon = Instance.new("ImageLabel")
+			headerIcon.Name = "HeaderIcon"
+			headerIcon.AnchorPoint = Vector2.new(0, 0.5)
+			headerIcon.BackgroundTransparency = 1
+			headerIcon.BorderSizePixel = 0
+			headerIcon.Position = UDim2.new(-0.012, 6,0.5, 0)
+			headerIcon.Size = UDim2.fromOffset(21, 21)
+			headerIcon.Image = ""
+			headerIcon.ImageColor3 = Color3.fromRGB(255, 255, 255)
+			headerIcon.ScaleType = Enum.ScaleType.Fit
+			headerIcon.Visible = false
+			headerIcon.ZIndex = 1006
+			headerIcon.Parent = h
+		end
 
 		--local hp = Instance.new("UIPadding")
 		--hp.PaddingRight = UDim.new(0, 34)
@@ -1063,7 +1106,7 @@ function menu.dop_create()
 		h2.AnchorPoint = Vector2.new(0, 0)
 		h2.Interactable = false
 		h2.BorderSizePixel = 0
-		h2.Position = UDim2.new(0.941, 0,0.107, 0)
+		h2.Position = UDim2.new(0.967, 0,0.138, 0)
 		h2.Size = UDim2.new(0.05, 0,0.723, 0)
 		h2.ZIndex = 1005
 		h2.Font = Enum.Font.BuilderSansExtraBold
@@ -1099,10 +1142,59 @@ function menu.dop_create()
 		rp.PaddingBottom = UDim.new(0, 7)
 		rp.Parent = r1
 
+		--local function updateHeader()
+		--	h.Text = tostring(d.text or "Field")
+		--		.. ": "
+		--		.. tostring(selected or "NONE")
+		--end
+		
 		local function updateHeader()
-			h.Text = tostring(d.text or "Field")
-				.. ": "
-				.. tostring(selected or "NONE")
+			--h.Text = "          " .. tostring(d.text or "Field")
+			--	.. ": "
+			--	.. tostring(selected or "NONE")
+			
+			if headerIcon then
+				h.TextXAlignment = Enum.TextXAlignment.Left
+				h.Size = UDim2.new(0.962, 0,0, 32)
+
+				h.Text = "          " .. tostring(d.text or "Field")
+					.. ": "
+					.. tostring(selected or "NONE")
+			else
+				h.TextXAlignment = Enum.TextXAlignment.Left
+				h.Size = UDim2.new(0.962, 0,0, 32)
+
+				h.Text = tostring(d.text or "Field")
+					.. ": "
+					.. tostring(selected or "NONE")
+			end
+
+			if not useHeaderIcon or not headerIcon then return end
+			local selectedImage = ""
+			if selected ~= nil then
+				for _, v in ipairs(list) do
+					local vname = type(v) == "table" and v.name or v
+					if vname == selected then
+						selectedImage = type(v) == "table"
+							and tostring(v.image or "") or ""
+						break
+					end
+				end
+			end
+
+			local hasIcon = selectedImage ~= ""
+				and selectedImage ~= "rbxassetid://0"
+
+			headerIcon.Image = hasIcon and selectedImage or ""
+			headerIcon.Visible = hasIcon
+
+			if hasIcon then
+				h.TextXAlignment = Enum.TextXAlignment.Left
+				h.Size = UDim2.new(0.962, 0,0, 32)
+			else
+				h.TextXAlignment = Enum.TextXAlignment.Left
+				h.Size = UDim2.new(0.962, 0,0, 32)
+			end
 		end
 
 		local function updateOpened()
@@ -1259,11 +1351,248 @@ function menu.dop_create()
 			--print(opened)
 			updateOpened()
 		end)
+		
+		h2.MouseButton1Click:Connect(function()
+			opened = not opened
+			--print(opened)
+			updateOpened()
+		end)
 
 		updateHeader()
 		updateOpened()
 
 		return r1
+	end
+	
+	local function addtokenpriority(parent, d, order)
+		if parent == nil or type(d) ~= "table" then
+			return
+		end
+
+		local list = d.list or mod.data.tokens or {}
+		local key = d.key or "token_priorities"
+		local defaultPriority = d.default_priority or 0
+
+		local priorities = mod.data.actives[key]
+		if type(priorities) ~= "table" then
+			priorities = {}
+			mod.data.actives[key] = priorities
+		end
+
+		for _, v in ipairs(list) do
+			local name = type(v) == "table" and v.name or v
+			if type(name) == "string" and name ~= "" and priorities[name] == nil then
+				priorities[name] = defaultPriority
+			end
+		end
+
+		local r = Instance.new("Frame")
+		r.Name = d.name or "TokenPriority"
+		r.BackgroundColor3 = Color3.fromRGB(26, 24, 29)
+		r.BackgroundTransparency = 0.2
+		r.AutomaticSize = Enum.AutomaticSize.Y
+		r.BorderSizePixel = 0
+		r.Size = UDim2.new(1.025, -12, 0, 30)
+		r.LayoutOrder = order or 0
+		r.ZIndex = 1004
+		r.Parent = parent
+
+		r:SetAttribute("search_text", string.lower(tostring(d.text or "")))
+
+		corner(r, UDim.new(0, 7))
+
+		local ll = Instance.new("UIListLayout")
+		ll.SortOrder = Enum.SortOrder.LayoutOrder
+		ll.Padding = UDim.new(0, 5)
+		ll.FillDirection = Enum.FillDirection.Vertical
+		ll.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		ll.VerticalAlignment = Enum.VerticalAlignment.Top
+		ll.Parent = r
+
+		local ms = Instance.new("UIShadow")
+		ms.BlurRadius = UDim.new(0.1, 0)
+		ms.Color = Color3.fromRGB(0, 0, 0)
+		ms.Transparency = 0.8
+		ms.Parent = r
+
+		local h = Instance.new("TextButton")
+		h.Name = "Header"
+		h.BackgroundTransparency = 1
+		h.BorderSizePixel = 0
+		h.Size = d.header_size or UDim2.new(0.96, 0, 0, 32)
+		h.LayoutOrder = 0
+		h.ZIndex = 1004
+		h.Font = Enum.Font.BuilderSansBold
+		h.Text = tostring(d.text or "Token Priority")
+		h.TextColor3 = Color3.fromRGB(255, 255, 255)
+		h.TextSize = 15
+		h.TextXAlignment = Enum.TextXAlignment.Left
+		h.Parent = r
+
+		local h2 = Instance.new("TextButton")
+		h2.Name = "Arrow"
+		h2.BackgroundColor3 = Color3.fromRGB(24, 23, 25)
+		h2.AnchorPoint = Vector2.new(0, 0)
+		h2.Interactable = false
+		h2.BorderSizePixel = 0
+		h2.Position = UDim2.new(0.967, 0,0.138, 0)
+		h2.Size = UDim2.new(0.05, 0, 0.723, 0)
+		h2.ZIndex = 1005
+		h2.Font = Enum.Font.BuilderSansExtraBold
+		h2.Text = "<"
+		h2.TextColor3 = Color3.fromRGB(255, 255, 255)
+		h2.TextScaled = true
+		h2.Parent = h
+
+		corner(h2, UDim.new(0.4, 0))
+
+		local r1 = Instance.new("Frame")
+		r1.Name = "Rows"
+		r1.AutomaticSize = Enum.AutomaticSize.Y
+		r1.BackgroundTransparency = 1
+		r1.Size = UDim2.new(1, 0, 0, 0)
+		r1.LayoutOrder = 1
+		r1.ZIndex = 1004
+		r1.Visible = d.opened ~= false
+		r1.Parent = r
+
+		local rl = Instance.new("UIListLayout")
+		rl.SortOrder = Enum.SortOrder.LayoutOrder
+		rl.Padding = UDim.new(0, 5)
+		rl.Wraps = true
+		rl.FillDirection = Enum.FillDirection.Horizontal
+		rl.HorizontalAlignment = Enum.HorizontalAlignment.Left
+		rl.VerticalAlignment = Enum.VerticalAlignment.Top
+		rl.Parent = r1
+
+		local rp = Instance.new("UIPadding")
+		rp.PaddingLeft = UDim.new(0, 6)
+		rp.PaddingRight = UDim.new(0, 6)
+		rp.PaddingBottom = UDim.new(0, 7)
+		rp.Parent = r1
+
+		h.MouseButton1Click:Connect(function()
+			r1.Visible = not r1.Visible
+			h2.Text = r1.Visible and "<" or ">"
+		end)
+
+		local function rebuild()
+			local items = {}
+			for _, v in ipairs(list) do
+				local name = type(v) == "table" and v.name or v
+				local image = type(v) == "table" and (v.image or "") or ""
+				if type(name) == "string" and name ~= "" then
+					items[#items + 1] = {
+						name = name,
+						image = image,
+						priority = tonumber(priorities[name]) or 0,
+					}
+				end
+			end
+
+			table.sort(items, function(a, b)
+				if a.priority ~= b.priority then
+					return a.priority > b.priority
+				end
+				return a.name < b.name
+			end)
+
+			for _, child in ipairs(r1:GetChildren()) do
+				if child:IsA("Frame") then
+					child:Destroy()
+				end
+			end
+
+			for i, item in ipairs(items) do
+				local row = Instance.new("Frame")
+				row.Name = item.name
+				row.BackgroundColor3 = Color3.fromRGB(26, 24, 29)
+				row.BackgroundTransparency = 0.2
+				row.BorderSizePixel = 0
+				row.Size = UDim2.new(0.333, -8,0, 32)
+				row.LayoutOrder = i
+				row.ZIndex = 1004
+				row.Parent = r1
+
+				corner(row, UDim.new(0, 7))
+
+				local rp2 = Instance.new("UIPadding")
+				rp2.PaddingLeft = UDim.new(0, 8)
+				rp2.PaddingRight = UDim.new(0, 6)
+				rp2.Parent = row
+
+				if item.image ~= "" then
+					local icon = Instance.new("ImageLabel")
+					icon.Name = "Icon"
+					icon.BackgroundTransparency = 1
+					icon.BorderSizePixel = 0
+					icon.Position = UDim2.new(0, 0, 0.5, -9)
+					icon.Size = UDim2.fromOffset(18, 18)
+					icon.Image = item.image
+					icon.ScaleType = Enum.ScaleType.Fit
+					icon.ZIndex = 1006
+					icon.Parent = row
+				end
+
+				local nameLabel = Instance.new("TextLabel")
+				nameLabel.Name = "NameLabel"
+				nameLabel.BackgroundTransparency = 1
+				nameLabel.BorderSizePixel = 0
+				nameLabel.Position = UDim2.new(0, item.image ~= "" and 24 or 0, 0, 0)
+				nameLabel.Size = UDim2.new(1, item.image ~= "" and -66 or -42, 1, 0)
+				nameLabel.ZIndex = 1005
+				nameLabel.Font = Enum.Font.BuilderSansMedium
+				nameLabel.Text = item.name
+				nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+				nameLabel.TextSize = 14
+				nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+				nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+				nameLabel.Parent = row
+
+				local pbox = Instance.new("TextBox")
+				pbox.Name = "PriorityBox"
+				pbox.AnchorPoint = Vector2.new(1, 0.5)
+				pbox.BackgroundColor3 = Color3.fromRGB(42, 40, 45)
+				pbox.BorderSizePixel = 0
+				pbox.Position = UDim2.new(1, 0, 0.5, 0)
+				pbox.Size = UDim2.fromOffset(36, 22)
+				pbox.ZIndex = 1005
+				pbox.Font = Enum.Font.BuilderSansBold
+				pbox.Text = tostring(item.priority)
+				pbox.TextColor3 = Color3.fromRGB(255, 255, 255)
+				pbox.TextSize = 13
+				pbox.TextXAlignment = Enum.TextXAlignment.Center
+				pbox.ClearTextOnFocus = false
+				pbox.Parent = row
+
+				corner(pbox, UDim.new(0.3, 0))
+
+				pbox:GetPropertyChangedSignal("Text"):Connect(function()
+					local txt = pbox.Text
+					local filtered = string.gsub(txt, "[^%d%-]", "")
+					if filtered ~= txt then
+						pbox.Text = filtered
+					end
+				end)
+
+				pbox.FocusLost:Connect(function()
+					local num = tonumber(pbox.Text)
+					if num == nil then num = 0 end
+					num = math.floor(num)
+
+					priorities[item.name] = num
+
+					if type(d.changed) == "function" then
+						d.changed(priorities)
+					end
+
+					rebuild()
+				end)
+			end
+		end
+
+		rebuild()
+		return r
 	end
 
 	local function additem(...)
@@ -1281,6 +1610,8 @@ function menu.dop_create()
 			return addslider(a[1], a[2], a[3])
 		elseif type == "addlistchose" then
 			return addlistChose(a[1], a[2], a[3])
+		elseif type == "tokenpriority" then
+			return addtokenpriority(a[1], a[2], a[3])
 		else
 			return addtext(a[1], a[2], a[3])
 		end
@@ -1461,6 +1792,7 @@ function menu.dop_create()
 							text = "Field",
 							key = "selected_field",
 							allow_none = false,
+							header_icon = true,
 							changed = function()
 								if mod.data.actives.auto_farm then
 									mod.farming.farm()
@@ -1468,36 +1800,15 @@ function menu.dop_create()
 							end,
 						},
 						{
-							type = "slider",
-							text = "WalkSpeed",
-							key = "walkspeed",
-							min = 16,
-							max = 100,
-							step = 1,
-
-							callback = function(value)
-								local character = find.player.Character
-								local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-								if humanoid then humanoid.WalkSpeed = value end
-
-								if mod.farming.forceWalkSpeed then
-									mod.farming.forceWalkSpeed(value)
-								end
-								
-								local root = character
-									and character:FindFirstChild("HumanoidRootPart")
-
-								if root then
-									local p = root.CurrentPhysicalProperties
-
-									root.Massless = false
-									root.CustomPhysicalProperties = PhysicalProperties.new(
-										20,
-										p.Friction,
-										p.Elasticity,
-										p.FrictionWeight,
-										p.ElasticityWeight
-									)
+							type = "tokenpriority",
+							text = "Token Priority",
+							key = "token_priorities",
+							list = mod.data.all_tokens,
+							opened = false,
+							header_icon = false,
+							changed = function()
+								if mod.data.actives.auto_farm then
+									mod.farming.farm()
 								end
 							end,
 						},
@@ -1515,6 +1826,7 @@ function menu.dop_create()
 							key = "mask",
 							list = mod.data.mask,
 							allow_none = false,
+							header_icon = true,
 						},
 						{
 							type = "slider",
@@ -1534,14 +1846,14 @@ function menu.dop_create()
 						},
 					},
 				},
-				--{
-				--	name = "Farm Settings",
-				--	opened = true,
-				--	items = {
-				--		{ type = "button", text = "Collect Bubbles", key = "collect_bubbles"},
-				--		{ type = "button", text = "Wealth Clock", key = "weatlh_clock"},
-				--	},
-				--},
+				{
+					name = "Farm Settings",
+					opened = true,
+					items = {
+						{ type = "button", text = "Collect Bubbles", key = "collect_bubbles"},
+						--{ type = "button", text = "Wealth Clock", key = "weatlh_clock"},
+					},
+				},
 			},
 		},
 		{
@@ -1551,19 +1863,66 @@ function menu.dop_create()
 					name = "Config",
 					opened = true,
 					items = {
+						{ type = "button", text = "Auto Hive", key = "autohive", callback = mod.farming.autoHive},
+						{ type = "button", text = "Anti AFK", key = "anti_afk" },
 						{
 							type = "addlistchose",
 							text = "Movement Method",
 							key = "style_auto_farm",
 							list = mod.data.other,
 							allow_none = false,
+							header_icon = true,
 						},
-						{ type = "button", text = "Auto Hive", key = "autohive", callback = mod.farming.autoHive},
-						{ type = "button", text = "Anti AFK", key = "anti_afk" },
+						{
+							type = "slider",
+							text = "WalkSpeed",
+							key = "walkspeed",
+							min = 16,
+							max = 100,
+							step = 1,
+
+							callback = function(value)
+								local character = find.player.Character
+								local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+								if humanoid then humanoid.WalkSpeed = value end
+
+								if mod.farming.forceWalkSpeed then
+									mod.farming.forceWalkSpeed(value)
+								end
+
+								local root = character
+									and character:FindFirstChild("HumanoidRootPart")
+
+								if root then
+									local p = root.CurrentPhysicalProperties
+
+									root.Massless = false
+									root.CustomPhysicalProperties = PhysicalProperties.new(
+										20,
+										p.Friction,
+										p.Elasticity,
+										p.FrictionWeight,
+										p.ElasticityWeight
+									)
+								end
+							end,
+						},
 					},
 				},
 			},
 		},
+		--{
+		--	name = "Home",
+		--	lists = {
+		--		{
+		--			name = "Home",
+		--			opened = true,
+		--			items = {
+		--				{ type = "text", text = "Honey"},
+		--			},
+		--		},
+		--	},
+		--},
 	}
 
 	local b1 = Instance.new("TextButton")
