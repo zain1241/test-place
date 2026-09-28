@@ -195,7 +195,7 @@ data.actives = {
 	move_speed = 100,
 
 	--other
-	script_name = "Nectar 0.0.1",
+	script_name = "Nectar 0.0.2",
 	position_script = UDim2.new(0.22, 0, 0.5, 0),
 	walkspeed = 40,
 	autohive = true,
