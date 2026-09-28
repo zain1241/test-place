@@ -852,8 +852,8 @@ function menu.dop_create()
 
 		local gradient = Instance.new("UIGradient")
 		gradient.Color = ColorSequence.new(
-			Color3.fromRGB(231, 46, 255), -- #E72EFF
-			Color3.fromRGB(255, 66, 148)  -- #FF4294
+			Color3.fromRGB(194, 49, 142), -- #E72EFF
+			Color3.fromRGB(242, 96, 190)  -- #FF4294
 		)
 		gradient.Rotation = 0
 		gradient.Parent = fill
@@ -1853,6 +1853,14 @@ function menu.dop_create()
 					items = {
 						{ type = "button", text = "Collect Bubbles", key = "collect_bubbles"},
 						{ type = "button", text = "Petals", key = "petals"},
+						{ type = "button", text = "Pushrooms", key = "pushrooms_enabled"},
+						{
+							type = "addlistchose",
+							text = "Pushrooms List",
+							key = "pushrooms",
+							list = mod.data.pushrooms,
+							allow_none = false,
+						},
 						--{ type = "button", text = "Wealth Clock", key = "weatlh_clock"},
 					},
 				},
