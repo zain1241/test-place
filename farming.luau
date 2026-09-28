@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.136")
+print("loaded 0.1.2")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -421,13 +421,11 @@ function farming.farmPuffshroom(field, id)
 	local filter = mod.data.actives["pushrooms"] or "All Pushrooms"
 	local puff = getNearestPuff(field, hrp, filter)
 	if not puff then
-		--print("[puff] no puff found")
 		return false
 	end
 
 	local root = getPuffRoot(puff)
 	if not root then
-		--print("[puff] no root in", puff.Name)
 		return false
 	end
 
@@ -439,6 +437,9 @@ function farming.farmPuffshroom(field, id)
 
 	local tool = character:FindFirstChildOfClass("Tool")
 	local lastActivate = 0
+	
+	farming.inv(true)
+
 	local approachTarget = Vector3.new(root.Position.X, root.Position.Y, root.Position.Z)
 	farming.move("goto", speed, approachTarget)
 
@@ -452,11 +453,13 @@ function farming.farmPuffshroom(field, id)
 		task.wait(0.05)
 	end
 
+	farming.inv(false)
+
 	print("arrived, breaking")
 	
 	local circleAngle = 0
-	local circleSpeed = 2.0
 	local circleRadius = 5
+	local circleSpeed = 2.0
 
 	local breakStart = tick()
 	while id == farmId
@@ -470,11 +473,12 @@ function farming.farmPuffshroom(field, id)
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
 
-		if humanoid and hrp then
+		if humanoid and hrp and not hrp.Anchored then
 			local r = getPuffRoot(puff)
 			if r then
 				local center = r.Position
-
+				
+				circleAngle = math.atan2(hrp.Position.Z - center.Z, hrp.Position.X - center.X)
 				circleAngle += circleSpeed * 0.05
 
 				local target = Vector3.new(
@@ -483,8 +487,9 @@ function farming.farmPuffshroom(field, id)
 					center.Z + math.sin(circleAngle) * circleRadius
 				)
 
+				humanoid.WalkSpeed = speed
 				humanoid:MoveTo(target)
-
+				
 				local dx = center.X - hrp.Position.X
 				local dz = center.Z - hrp.Position.Z
 				local distToCenter = math.sqrt(dx * dx + dz * dz)
@@ -502,28 +507,56 @@ function farming.farmPuffshroom(field, id)
 	end
 
 	print("broken, looting")
-	
 	local lootStart = tick()
+
 	while id == farmId
 		and mod.data.actives["auto_farm"] == true
 		and mod.data.actives["pushrooms_enabled"] == true
 		and not mod.data.actives["converting"]
 		and tick() - lootStart < 4
 	do
-		local loot = findLootNear(origin, 25)
-		if loot then
-			local target = Vector3.new(loot.Position.X, loot.Position.Y, loot.Position.Z)
-			farming.move("goto", speed, target)
+		character = find.player.Character
+		humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		hrp = character and character:FindFirstChild("HumanoidRootPart")
 
-			local flyStart = tick()
-			while mod.data.actives["move"] == true
-				and tick() - flyStart < 2
-				and id == farmId
-			do
-				task.wait(0.03)
+		if not humanoid or not hrp or hrp.Anchored then
+			task.wait(0.05)
+			continue
+		end
+
+		local loot = findLootNear(origin, 25)
+		if not loot then
+			break
+		end
+		
+		local walkStart = tick()
+		humanoid.WalkSpeed = speed
+
+		while tick() - walkStart < 5 do
+			if id ~= farmId
+				or mod.data.actives["auto_farm"] ~= true
+				or mod.data.actives["converting"]
+				or not loot.Parent
+			then
+				break
 			end
-		else
-			task.wait(0.1)
+
+			character = find.player.Character
+			humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			hrp = character and character:FindFirstChild("HumanoidRootPart")
+			if not humanoid or not hrp or hrp.Anchored then break end
+
+			local dx = loot.Position.X - hrp.Position.X
+			local dz = loot.Position.Z - hrp.Position.Z
+			local distance = math.sqrt(dx * dx + dz * dz)
+			
+			if distance <= 1.5 then
+				break
+			end
+
+			humanoid.WalkSpeed = speed
+			humanoid:MoveTo(Vector3.new(loot.Position.X, hrp.Position.Y, loot.Position.Z))
+			task.wait()
 		end
 	end
 
