@@ -676,7 +676,7 @@ function farming.farmSprout(field, id)
 	local collectTimeout = 15
 	local handled = {}
 	
-	farming.autosprinkler()
+	farming.autosprinkler(true)
 
 	while enabled() and (tick() - collectStart) < collectTimeout do
 		character = find.player.Character
