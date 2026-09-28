@@ -158,6 +158,7 @@ data.actives = {
 	
 	--farm settings
 	collect_bubbles = false,
+	bubble_priority = 49,
 	wealth_clock = false,
 
 	--options
