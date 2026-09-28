@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.135")
+print("loaded 0.1.136")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -439,29 +439,16 @@ function farming.farmPuffshroom(field, id)
 
 	local tool = character:FindFirstChildOfClass("Tool")
 	local lastActivate = 0
-	local approachStart = tick()
-	while id == farmId
-		and mod.data.actives["auto_farm"] == true
-		and mod.data.actives["pushrooms_enabled"] == true
-		and not mod.data.actives["converting"]
-		and puff.Parent == pf
-		and tick() - approachStart < 15
-	do
-		character = find.player.Character
-		humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		hrp = character and character:FindFirstChild("HumanoidRootPart")
+	local approachTarget = Vector3.new(root.Position.X, root.Position.Y, root.Position.Z)
+	farming.move("goto", speed, approachTarget)
 
-		if humanoid and hrp then
-			local r = getPuffRoot(puff)
-			if r then
-				local target = Vector3.new(r.Position.X, hrp.Position.Y, r.Position.Z)
-				if (target - hrp.Position).Magnitude > 6 then
-					humanoid:MoveTo(target)
-				else
-					break
-				end
-			end
-		end
+	local approachStart = tick()
+	while mod.data.actives["move"] == true
+		and tick() - approachStart < 10
+		and id == farmId
+		and mod.data.actives["pushrooms_enabled"] == true
+		and puff.Parent == pf
+	do
 		task.wait(0.05)
 	end
 
@@ -523,20 +510,21 @@ function farming.farmPuffshroom(field, id)
 		and not mod.data.actives["converting"]
 		and tick() - lootStart < 4
 	do
-		character = find.player.Character
-		humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		hrp = character and character:FindFirstChild("HumanoidRootPart")
+		local loot = findLootNear(origin, 25)
+		if loot then
+			local target = Vector3.new(loot.Position.X, loot.Position.Y, loot.Position.Z)
+			farming.move("goto", speed, target)
 
-		if humanoid and hrp then
-			local loot = findLootNear(origin, 25)
-			if loot then
-				local target = Vector3.new(loot.Position.X, hrp.Position.Y, loot.Position.Z)
-				humanoid:MoveTo(target)
-			else
-				task.wait(0.1)
+			local flyStart = tick()
+			while mod.data.actives["move"] == true
+				and tick() - flyStart < 2
+				and id == farmId
+			do
+				task.wait(0.03)
 			end
+		else
+			task.wait(0.1)
 		end
-		task.wait(0.05)
 	end
 
 	return true
@@ -2863,6 +2851,10 @@ function farming.farm(...)
 			
 			if mod.data.actives["petals"] == true and field then
 				farming.farmPetalBloom(field, id)
+			end
+
+			if mod.data.actives["pushrooms_enabled"] == true and field then
+				farming.farmPuffshroom(field, id)
 			end
 
 			table.clear(queue["tokens"])
