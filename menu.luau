@@ -1854,6 +1854,7 @@ function menu.dop_create()
 						{ type = "button", text = "Collect Bubbles", key = "collect_bubbles"},
 						{ type = "button", text = "Petals", key = "petals"},
 						{ type = "button", text = "Pushrooms", key = "pushrooms_enabled"},
+						{ type = "button", text = "Sprouts", key = "sprouts"},
 						{
 							type = "addlistchose",
 							text = "Pushrooms List",
