@@ -508,8 +508,9 @@ function menu.main_nav()
 
 	addNavigation("Home", "rbxassetid://13060262529", 1)
 	addNavigation("Farming", "rbxassetid://15332137726", 2)
-	addNavigation("Combat", "rbxassetid://4391741881", 3)
-	addNavigation("Config", "rbxassetid://4857706689", 4)
+	addNavigation("Toys", "rbxassetid://102597526078163", 3)
+	addNavigation("Combat", "rbxassetid://4391741881", 4)
+	addNavigation("Config", "rbxassetid://4857706689", 5)
 
 	showsel("Home")
 end
@@ -1908,6 +1909,18 @@ function menu.dop_create()
 								end
 							end,
 						},
+					},
+				},
+			},
+		},
+		{
+			name = "Toys",
+			lists = {
+				{
+					name = "Other",
+					opened = true,
+					items = {
+						{ type = "button", text = "Wealth Clock", key = "weatlh_clock", callback = farming.wealthClock},
 					},
 				},
 			},
