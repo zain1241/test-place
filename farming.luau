@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.341")
+print("loaded 0.1.344")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -673,6 +673,50 @@ function farming.farmSprout(field, id)
 	end
 
 	safeCleanup(nil)
+	mod.data.actives["move"] = true
+	
+	local collectStart = tick()
+	local collectTimeout = 15
+	while enabled() and (tick() - collectStart) < collectTimeout do
+		character = find.player.Character
+		humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		hrp = character and character:FindFirstChild("HumanoidRootPart")
+
+		if not humanoid or not hrp or hrp.Anchored then
+			task.wait(0.05)
+			continue
+		end
+
+		local collectibles = workspace:FindFirstChild("Collectibles")
+		local nearestToken, nearestDist
+
+		if collectibles then
+			for _, v in ipairs(collectibles:GetChildren()) do
+				if v:IsA("BasePart") and v.Parent then
+					local d = (v.Position - hrp.Position).Magnitude
+					if d <= 100 and (not nearestDist or d < nearestDist) then
+						nearestToken = v
+						nearestDist = d
+					end
+				end
+			end
+		end
+
+		if nearestToken then
+			local tp = Vector3.new(nearestToken.Position.X, hrp.Position.Y, nearestToken.Position.Z)
+			if (tp - hrp.Position).Magnitude > 2 then
+				humanoid.WalkSpeed = speed
+				humanoid:MoveTo(tp)
+			else
+				task.wait(0.01)
+			end
+		else
+			task.wait(0.01)
+		end
+
+		task.wait(0.01)
+	end
+	mod.data.actives["move"] = false
 
 	if field and field.Parent then
 		farming.move("flowerzones", speed, field.Name)
@@ -1599,9 +1643,14 @@ function farming.move(...)
 					end
 
 					mod.data.actives["move"] = false
-					task.wait(.6)
+					mod.data.actives["point"] = false
+
 					farming.autosprinkler()
-					task.wait(1)
+					task.wait(0.4)
+					farming.autosprinkler()
+					task.wait(0.4)
+					farming.autosprinkler()
+					task.wait(0.8)
 				end)
 				
 				task.wait(1)
@@ -2181,7 +2230,7 @@ function farming.convert(...)
 					
 					local balloon = nil
 					local appearStart = tick()
-					while tick() - appearStart < 10 do
+					while tick() - appearStart < 3 do
 						if not mod.data.actives["auto_farm"] then return end
 
 						local c2 = player.Character
@@ -2206,7 +2255,7 @@ function farming.convert(...)
 							print("balloon timeout")
 						end
 					else
-						print("balloon not found 10s")
+						print("balloon not found 3s")
 					end
 				end
 
@@ -2264,9 +2313,9 @@ function farming.get_pollen_from_gui() -- ai
 	}
 end
 
-function farming.autosprinkler()
+function farming.autosprinkler(force)
 	if mod.data.actives["auto_sprinkler"] ~= true then return end
-	if mod.data.actives["move"] == true then return end
+	if not force and mod.data.actives["move"] == true then return end
 
 	local Events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
 	if not Events then return end
@@ -2274,8 +2323,9 @@ function farming.autosprinkler()
 	local pac = Events:FindFirstChild("PlayerActivesCommand")
 	if not pac or not pac:IsA("RemoteEvent") then return end
 
-	pac:FireServer({Name = "Sprinkler Builder"})
-	--print("autosprinkler fired")
+	pcall(function()
+		pac:FireServer({Name = "Sprinkler Builder"})
+	end)
 end
 
 function farming.wealthClock()
