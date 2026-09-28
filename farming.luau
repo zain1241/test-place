@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.344")
+print("loaded 0.1.35")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -677,45 +677,50 @@ function farming.farmSprout(field, id)
 	
 	local collectStart = tick()
 	local collectTimeout = 15
+
 	while enabled() and (tick() - collectStart) < collectTimeout do
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
 
 		if not humanoid or not hrp or hrp.Anchored then
-			task.wait(0.05)
+			task.wait(0.01)
 			continue
 		end
-
+		
 		local collectibles = workspace:FindFirstChild("Collectibles")
-		local nearestToken, nearestDist
+		local target, targetDist
 
 		if collectibles then
 			for _, v in ipairs(collectibles:GetChildren()) do
 				if v:IsA("BasePart") and v.Parent then
 					local d = (v.Position - hrp.Position).Magnitude
-					if d <= 100 and (not nearestDist or d < nearestDist) then
-						nearestToken = v
-						nearestDist = d
+					if d <= 100 and (not targetDist or d < targetDist) then
+						target = v
+						targetDist = d
 					end
 				end
 			end
 		end
 
-		if nearestToken then
-			local tp = Vector3.new(nearestToken.Position.X, hrp.Position.Y, nearestToken.Position.Z)
-			if (tp - hrp.Position).Magnitude > 2 then
-				humanoid.WalkSpeed = speed
-				humanoid:MoveTo(tp)
-			else
-				task.wait(0.01)
-			end
-		else
+		if not target then
 			task.wait(0.01)
+			continue
 		end
 
+		local tp = Vector3.new(target.Position.X, hrp.Position.Y, target.Position.Z)
+		local d = (tp - hrp.Position).Magnitude
+		
+		if d <= 3.5 then
+			task.wait(0.01)
+			continue
+		end
+
+		humanoid.WalkSpeed = speed
+		humanoid:MoveTo(tp)
 		task.wait(0.01)
 	end
+
 	mod.data.actives["move"] = false
 
 	if field and field.Parent then
@@ -1644,13 +1649,9 @@ function farming.move(...)
 
 					mod.data.actives["move"] = false
 					mod.data.actives["point"] = false
-
-					farming.autosprinkler()
-					task.wait(0.4)
-					farming.autosprinkler()
-					task.wait(0.4)
-					farming.autosprinkler()
-					task.wait(0.8)
+					
+					--task.wait(1)
+					--farming.autosprinkler()
 				end)
 				
 				task.wait(1)
@@ -2944,6 +2945,8 @@ function farming.farm(...)
 
 			--if track and track.IsPlaying then track:Stop(.1) end
 		end
+		
+		farming.autosprinkler()
 
 		while id == farmId and mod.data.actives["auto_farm"] == true and #queue["auto_farm"] > 0 and not mod.data.actives["converting"] do
 			local a = table.remove(queue["auto_farm"], 1)
@@ -3261,6 +3264,8 @@ function farming.farm(...)
 			local h3 = c3 and c3:FindFirstChildOfClass("Humanoid")
 			if h3 then h3:Move(Vector3.zero, false) end
 		end
+		
+		farming.autosprinkler()
 
 		while id == farmId
 			and mod.data.actives["auto_farm"] == true
