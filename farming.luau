@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.0.992")
+print("loaded 0.0.993")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1610,6 +1610,9 @@ function farming.farm(...)
 				return textureToPriority[child.Texture] or 0
 			end
 		end
+		if token.Name == "Bubble" or token.Name == "GoldBubble" then
+			return tonumber(mod.data.actives["bubble_priority"]) or 0
+		end
 		return 0
 	end
 
@@ -1800,15 +1803,32 @@ function farming.farm(...)
 				end
 			end
 
+			table.clear(queue["tokens"])
+			
 			if c and field then
-				local root = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
-				if root then
+				local rt = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
+				if rt then
 					for _, v in ipairs(c:GetChildren()) do
 						if v:IsA("BasePart")
 							and i(v, field)
-							and (root.Position - v.Position).Magnitude > 4
+							and (rt.Position - v.Position).Magnitude > 4
 						then
 							table.insert(queue["tokens"], v)
+						end
+					end
+				end
+			end
+			
+			if mod.data.actives["collect_bubbles"] == true and field then
+				initBubbles()
+				local rt = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
+				if rt then
+					for bubble in pairs(bubbles) do
+						if bubble.Parent
+							and isInField(bubble.Position, field)
+							and (rt.Position - bubble.Position).Magnitude > 4
+						then
+							table.insert(queue["tokens"], bubble)
 						end
 					end
 				end
@@ -1816,30 +1836,25 @@ function farming.farm(...)
 
 			if #queue["tokens"] > 0 then
 				while id == farmId and mod.data.actives["auto_farm"] == true and #queue["tokens"] > 0 do
-					table.sort(queue["tokens"], function(a, b)
-						local pa = getTokenPriority(a)
-						local pb = getTokenPriority(b)
+					local rt = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
+					if not rt then break end
+
+					table.sort(queue["tokens"], function(x, y)
+						local pa = getTokenPriority(x)
+						local pb = getTokenPriority(y)
 						if pa ~= pb then
 							return pa > pb
 						end
-						return (root.Position - a.Position).Magnitude
-							< (root.Position - b.Position).Magnitude
+						return (rt.Position - x.Position).Magnitude
+							< (rt.Position - y.Position).Magnitude
 					end)
 
 					local v = table.remove(queue["tokens"], 1)
 					if v and v.Parent and a.Speed then
 						m(v, a.Speed, field)
 					end
-					
-					--local v = table.remove(queue["tokens"], 1)
-					--if v and v.Parent and a.Speed then
-					--	local reached = m(v, a.Speed, field)
-					--	if not reached and v.Parent then
-					--		table.insert(queue["tokens"], v)
-					--	end
-					--end
-					
-					task.wait()
+
+					task.wait(0.1)
 				end
 			else
 				if a.TargetCFrame and a.Speed then
@@ -1973,45 +1988,30 @@ function farming.farm(...)
 
 			table.clear(queue["tokens"])
 			
-			if mod.data.actives["collect_bubbles"] == true then
-				local bubbleStart = tick()
-				local lastBubbleId = nil
-
-				while id == farmId
-					and mod.data.actives["auto_farm"] == true
-					and not mod.data.actives["converting"]
-					and tick() - bubbleStart < 8
-				do
-					local ch = find.player.Character
-					local rt = ch and ch:FindFirstChild("HumanoidRootPart")
-					if not rt then break end
-
-					local bubble = getNearestBubble(field, rt)
-					if not bubble then break end
-					
-					if bubble == lastBubbleId then
-						bubbles[bubble] = nil
-						task.wait(0.1)
-						continue
-					end
-					lastBubbleId = bubble
-
-					walkTo(bubble.Position, a.Speed)
-					task.wait(0.2)
-				end
-			end
-
 			if c and field then
-				local root = find.player.Character
-					and find.player.Character:FindFirstChild("HumanoidRootPart")
-
-				if root then
+				local rt = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
+				if rt then
 					for _, v in ipairs(c:GetChildren()) do
 						if v:IsA("BasePart")
 							and isTokenInField(v, field)
-							and (root.Position - v.Position).Magnitude > 2
+							and (rt.Position - v.Position).Magnitude > 2
 						then
 							table.insert(queue["tokens"], v)
+						end
+					end
+				end
+			end
+			
+			if mod.data.actives["collect_bubbles"] == true and field then
+				initBubbles()
+				local rt = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
+				if rt then
+					for bubble in pairs(bubbles) do
+						if bubble.Parent
+							and isInField(bubble.Position, field)
+							and (rt.Position - bubble.Position).Magnitude > 2
+						then
+							table.insert(queue["tokens"], bubble)
 						end
 					end
 				end
@@ -2022,18 +2022,17 @@ function farming.farm(...)
 					and mod.data.actives["auto_farm"] == true
 					and #queue["tokens"] > 0
 				do
-					local root = find.player.Character
-						and find.player.Character:FindFirstChild("HumanoidRootPart")
-					if not root then break end
+					local rt = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
+					if not rt then break end
 
-					table.sort(queue["tokens"], function(a, b)
-						local pa = getTokenPriority(a)
-						local pb = getTokenPriority(b)
+					table.sort(queue["tokens"], function(x, y)
+						local pa = getTokenPriority(x)
+						local pb = getTokenPriority(y)
 						if pa ~= pb then
 							return pa > pb
 						end
-						return (root.Position - a.Position).Magnitude
-							< (root.Position - b.Position).Magnitude
+						return (rt.Position - x.Position).Magnitude
+							< (rt.Position - y.Position).Magnitude
 					end)
 
 					local v = table.remove(queue["tokens"], 1)
