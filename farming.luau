@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.1")
+print("loaded 0.1.11")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -202,7 +202,7 @@ function farming.farmPetalBloom(field, id)
 
 	local particles = workspace:FindFirstChild("Particles")
 	if not particles then return false end
-	
+
 	local oldPetals = {}
 	for _, v in ipairs(particles:GetChildren()) do
 		if isPetal(v) then oldPetals[v] = true end
@@ -222,27 +222,18 @@ function farming.farmPetalBloom(field, id)
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
-		if not character then task.wait(0.1) continue end
 
-		local pos = getBloomPosition(bloom)
-		if not pos then break end
-
-		local target = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
-		local distance = (target - hrp.Position).Magnitude
-
-		if distance > 5 then
-			humanoid:MoveTo(target)
+		if humanoid and hrp then
+			local pos = getBloomPosition(bloom)
+			if pos then
+				local target = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
+				if (target - hrp.Position).Magnitude > 5 then
+					humanoid:MoveTo(target)
+				end
+			end
 		end
 
-		--if distance <= 7 then
-		--	tool = character:FindFirstChildOfClass("Tool") or tool
-		--	if tool and tool.Parent == character and os.clock() - lastActivate >= 0.08 then
-		--		pcall(function() tool:Activate() end)
-		--		lastActivate = os.clock()
-		--	end
-		--end
-
-		--task.wait(0.05)
+		task.wait(0.01)
 	end
 	
 	local popTimeout = os.clock() + 4
@@ -260,7 +251,8 @@ function farming.farmPetalBloom(field, id)
 				lastActivate = os.clock()
 			end
 		end
-		--task.wait(0.05)
+
+		task.wait(0.01)
 	end
 	
 	local tracked = {}
@@ -289,34 +281,35 @@ function farming.farmPetalBloom(field, id)
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
-		if not character then task.wait(0.05) continue end
-		
-		for _, v in ipairs(particles:GetChildren()) do
-			if isPetal(v)
-				and not oldPetals[v]
-				and not tracked[v]
-				and (v.Position - origin).Magnitude <= 60
-			then
-				tracked[v] = true
-				lastSpawn = os.clock()
+
+		if humanoid and hrp then
+			for _, v in ipairs(particles:GetChildren()) do
+				if isPetal(v)
+					and not oldPetals[v]
+					and not tracked[v]
+					and (v.Position - origin).Magnitude <= 60
+				then
+					tracked[v] = true
+					lastSpawn = os.clock()
+				end
+			end
+
+			local petal = getBestPetal(tracked, hrp)
+			if petal then
+				local pos = petal.Position
+				local target = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
+				humanoid:MoveTo(target)
+				if (target - hrp.Position).Magnitude <= 3.5 then
+					tracked[petal] = nil
+				end
+			else
+				if os.clock() - lastSpawn > 0.45 and os.clock() - petalStart > 0.5 then
+					break
+				end
 			end
 		end
 
-		local petal = getBestPetal(tracked, hrp)
-		if petal then
-			local pos = petal.Position
-			local target = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
-			humanoid:MoveTo(target)
-			if (target - hrp.Position).Magnitude <= 3.5 then
-				tracked[petal] = nil
-			end
-		else
-			if os.clock() - lastSpawn > 0.45 and os.clock() - petalStart > 0.5 then
-				break
-			end
-		end
-
-		--task.wait(0.01)
+		task.wait(0.01)
 	end
 
 	if conn then conn:Disconnect() end
