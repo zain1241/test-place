@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.25")
+print("loaded 0.1.27")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -45,6 +45,33 @@ end
 local function getPuffFolder()
 	local h = getHappenings()
 	return h and h:FindFirstChild("Puffshrooms")
+end
+
+local function getSproutFolder()
+	local particles = workspace:FindFirstChild("Particles")
+	return particles and particles:FindFirstChild("Folder2")
+end
+
+local SPROUT_COOLDOWN = 15
+local lastSproutTime = 0
+
+local function getNearestSprout(field, hrp)
+	local sf = getSproutFolder()
+	if not sf or not hrp then return nil end
+
+	local nearest, nearestDist
+	for _, obj in ipairs(sf:GetChildren()) do
+		if obj.Name == "Sprout" and obj:IsA("BasePart") then
+			if isInField(obj.Position, field) then
+				local d = (obj.Position - hrp.Position).Magnitude
+				if not nearestDist or d < nearestDist then
+					nearest = obj
+					nearestDist = d
+				end
+			end
+		end
+	end
+	return nearest
 end
 
 local invc, tween, afarm, adig, aconvert, atween, track, animwalk, humanoid_walk_speed, p, p1;
@@ -217,17 +244,20 @@ function farming.farmPetalBloom(field, id)
 
 	local tool = character:FindFirstChildOfClass("Tool")
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
-
+	
 	local function phaseEnabled()
 		return id == farmId
 			and mod.data.actives["auto_farm"] == true
 			and mod.data.actives["petals"] == true
 			and not mod.data.actives["converting"]
-			and bloom.Parent == bloomFolder
+	end
+	
+	local function bloomAlive()
+		return phaseEnabled() and bloom.Parent == bloomFolder
 	end
 	
 	local approachStart = tick()
-	while phaseEnabled() and tick() - approachStart < 10 do
+	while bloomAlive() and tick() - approachStart < 10 do
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -250,7 +280,7 @@ function farming.farmPetalBloom(field, id)
 	local lastActivate = 0
 	local petalSpin = 1
 
-	while phaseEnabled() and tick() - circleStart < 30 do
+	while bloomAlive() and tick() - circleStart < 30 do
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -303,7 +333,7 @@ function farming.farmPetalBloom(field, id)
 
 	local conn
 	conn = particles.ChildAdded:Connect(function(v)
-		if not mod.data.actives["auto_farm"] then return end
+		if not phaseEnabled() then return end
 		if not isPetal(v) then return end
 		if oldPetals[v] then return end
 		if (v.Position - origin).Magnitude <= 60 then
@@ -313,7 +343,7 @@ function farming.farmPetalBloom(field, id)
 	end)
 
 	local petalStart = os.clock()
-	local petalTimeout = petalStart + 8
+	local petalTimeout = petalStart + 4
 
 	while phaseEnabled() and os.clock() < petalTimeout do
 		character = find.player.Character
@@ -354,6 +384,202 @@ function farming.farmPetalBloom(field, id)
 
 	if conn then conn:Disconnect() end
 
+	return true
+end
+
+function farming.farmSprout(field, id)
+	local function enabled()
+		return id == farmId
+			and mod.data.actives["auto_farm"] == true
+			and mod.data.actives["sprouts"] == true
+			and not mod.data.actives["converting"]
+	end
+
+	local function safeCleanup(rootPart)
+		if rootPart then
+			pcall(function()
+				if rootPart.Parent then rootPart.Anchored = false end
+			end)
+		end
+		pcall(function() farming.inv(false) end)
+		mod.data.actives["move"] = false
+	end
+
+	local function safeCancelTween()
+		if tween then
+			pcall(function() tween:Cancel() end)
+			tween = nil
+		end
+	end
+
+	local character = find.player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not hrp then return false end
+
+	local sprout = getNearestSprout(field, hrp)
+	if not sprout then return false end
+
+	local sf = getSproutFolder()
+	if not sf then return false end
+
+	mod.data.actives["move"] = true
+
+	character = find.player.Character
+	humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not hrp then
+		safeCleanup(hrp)
+		return false
+	end
+
+	safeCancelTween()
+
+	local startRoot = hrp
+	local startPosition = startRoot.Position
+	local target = sprout.Position
+
+	local distance = (startRoot.Position - target).Magnitude
+	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
+	local duration = distance / math.max(speed, 1)
+
+	local anchorOk = pcall(function() startRoot.Anchored = true end)
+	if not anchorOk then
+		safeCleanup(startRoot)
+		return false
+	end
+
+	pcall(function() farming.inv(true) end)
+	
+	local flyTween
+	local tweenOk = pcall(function()
+		flyTween = find.tweenservice:Create(
+			startRoot,
+			TweenInfo.new(
+				math.max(duration, 0.05),
+				Enum.EasingStyle.Linear,
+				Enum.EasingDirection.Out
+			),
+			{ CFrame = CFrame.new(target) }
+		)
+		tween = flyTween
+		flyTween:Play()
+	end)
+
+	if not tweenOk or not flyTween then
+		safeCancelTween()
+		safeCleanup(startRoot)
+		return false
+	end
+
+	local finished = false
+	flyTween.Completed:Once(function()
+		finished = true
+		if tween == flyTween then tween = nil end
+	end)
+
+	local flyStart = tick()
+	local flyTimeout = duration + 3
+
+	while enabled()
+		and sprout.Parent == sf
+		and not finished
+		and (tick() - flyStart) < flyTimeout
+	do
+		task.wait()
+	end
+
+	if not finished then
+		pcall(function() flyTween:Cancel() end)
+	end
+	if tween == flyTween then tween = nil end
+
+	if not finished and startRoot and startRoot.Parent then
+		pcall(function()
+			startRoot.CFrame = CFrame.new(startPosition)
+		end)
+	end
+
+	pcall(function() startRoot.Anchored = false end)
+	safeCleanup(startRoot)
+
+	if not enabled() then
+		return false
+	end
+
+	task.wait(0.05)
+
+	character = find.player.Character
+	humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not hrp then return false end
+
+	local pp = hrp.Position
+	if pp.X ~= pp.X or pp.Y ~= pp.Y or pp.Z ~= pp.Z
+		or math.abs(pp.X) == math.huge
+		or math.abs(pp.Y) == math.huge
+		or math.abs(pp.Z) == math.huge
+	then
+		pcall(function() hrp.CFrame = CFrame.new(startPosition) end)
+		safeCleanup(nil)
+		return false
+	end
+	
+	local tool = character:FindFirstChildOfClass("Tool")
+	local circleRadius = 7
+	local circleStart = tick()
+	local breakTimeout = 30
+	local lastActivate = 0
+	local spin = 1
+
+	while enabled() and sprout.Parent == sf and (tick() - circleStart) < breakTimeout do
+		character = find.player.Character
+		humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		hrp = character and character:FindFirstChild("HumanoidRootPart")
+		if not humanoid or not hrp or hrp.Anchored then break end
+
+		local center = Vector3.new(sprout.Position.X, hrp.Position.Y, sprout.Position.Z)
+		local offset = Vector3.new(
+			hrp.Position.X - center.X, 0,
+			hrp.Position.Z - center.Z
+		)
+		local dist = offset.Magnitude
+		if dist < 0.1 then
+			offset = Vector3.new(1, 0, 0)
+			dist = 1
+		end
+
+		local radial = offset.Unit
+		local tangent = Vector3.new(
+			-radial.Z * spin, 0,
+			radial.X * spin
+		)
+
+		local moveDir
+		if dist > circleRadius + 1.5 then
+			moveDir = (
+				Vector3.new(center.X, hrp.Position.Y, center.Z) - hrp.Position
+			).Unit
+		elseif dist < circleRadius - 1.5 then
+			moveDir = radial
+		else
+			moveDir = tangent
+		end
+
+		humanoid.WalkSpeed = speed
+		humanoid:Move(moveDir, false)
+		task.wait(0.01)
+	end
+
+	character = find.player.Character
+	humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		pcall(function() humanoid:Move(Vector3.zero, false) end)
+	end
+
+	safeCleanup(nil)
+
+	lastSproutTime = tick()
 	return true
 end
 
@@ -2160,6 +2386,8 @@ local function resetFarmMovement(enabled)
 	mod.data.actives["move"] = false
 	mod.data.actives["converting"] = false
 
+	lastSproutTime = 0
+
 	farming.cornl(enabled)
 	farming.inv(enabled)
 	farming.noclip(false)
@@ -2201,6 +2429,8 @@ function farming.farm(...)
 	farmId += 1
 	local id = farmId
 	local enabled = mod.data.actives["auto_farm"] == true
+	
+	lastSproutTime = 0
 	
 	resetFarmMovement(enabled)
 
@@ -2449,6 +2679,20 @@ function farming.farm(...)
 			local field
 
 			if mod.data.actives["selected_field"] == false then field = nil else field = f:FindFirstChild(mod.data.actives["selected_field"]) end
+			
+			if mod.data.actives["sprouts"] == true
+				and field
+				and (tick() - lastSproutTime) >= SPROUT_COOLDOWN
+			then
+				local ch = find.player.Character
+				local sproutFound = getNearestSprout(
+					field,
+					ch and ch:FindFirstChild("HumanoidRootPart")
+				)
+				if sproutFound then
+					farming.farmSprout(field, id)
+				end
+			end
 			
 			if mod.data.actives["petals"] == true and field then
 				farming.farmPetalBloom(field, id)
@@ -2717,6 +2961,22 @@ function farming.farm(...)
 				field = nil
 			else
 				field = f and f:FindFirstChild(mod.data.actives["selected_field"])
+			end
+			
+			if mod.data.actives["sprouts"] == true
+				and field
+				and (tick() - lastSproutTime) >= SPROUT_COOLDOWN
+			then
+				local sproutFound = getNearestSprout(
+					field,
+					find.player.Character
+						and find.player.Character:FindFirstChild("HumanoidRootPart")
+				)
+
+				if sproutFound then
+					farming.farmSprout(field, id)
+					continue
+				end
 			end
 			
 			if mod.data.actives["petals"] == true and field then
