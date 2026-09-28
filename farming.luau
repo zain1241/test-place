@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.134")
+print("loaded 0.1.135")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -37,7 +37,15 @@ local queue = {
 
 local happenings = workspace:FindFirstChild("Happenings")
 local bloomFolder = happenings and happenings:FindFirstChild("PoppablePlants")
-local puffFolder = happenings and happenings:FindFirstChild("Puffshrooms")
+
+local function getHappenings()
+	return workspace:FindFirstChild("Happenings")
+end
+
+local function getPuffFolder()
+	local h = getHappenings()
+	return h and h:FindFirstChild("Puffshrooms")
+end
 
 local invc, tween, afarm, adig, aconvert, atween, track, animwalk, humanoid_walk_speed, p, p1;
 local farmId = 0
@@ -329,8 +337,17 @@ local function getPuffRarity(puff)
 			return rar
 		end
 	end
+	local attr = puff:GetAttribute("Rarity") or puff:GetAttribute("rarity")
+	if type(attr) == "string" then
+		for rar in pairs(PUFF_RARITY) do
+			if string.find(attr, rar, 1, true) then
+				return rar
+			end
+		end
+	end
 	return nil
 end
+
 
 local function getPuffRoot(puff)
 	return puff.PrimaryPart
@@ -339,14 +356,23 @@ local function getPuffRoot(puff)
 end
 
 local function getNearestPuff(field, hrp, filter)
-	if not puffFolder or not hrp then return nil end
+	local pf = getPuffFolder()
+	if not pf or not hrp then
+		--warn("[puff] puffFolder =", pf, "hrp =", hrp)
+		return nil
+	end
+
 	local nearest, nearestDist
-	for _, puff in ipairs(puffFolder:GetChildren()) do
+	local total = 0
+	for _, puff in ipairs(pf:GetChildren()) do
 		if puff:IsA("Model") then
+			total += 1
 			local rarity = getPuffRarity(puff)
-			if rarity and (filter == "All Pushrooms" or filter == rarity) then
+			local accept = (filter == "All Pushrooms") or (rarity == filter)
+
+			if accept then
 				local root = getPuffRoot(puff)
-				if root and isInField(root.Position, field) then
+				if root then
 					local d = (root.Position - hrp.Position).Magnitude
 					if not nearestDist or d < nearestDist then
 						nearest = puff
@@ -356,6 +382,8 @@ local function getNearestPuff(field, hrp, filter)
 			end
 		end
 	end
+
+	--print("[puff] total models:", total, "filter:", filter, "->", nearest and nearest.Name or "nil")
 	return nearest
 end
 
@@ -392,29 +420,52 @@ function farming.farmPuffshroom(field, id)
 
 	local filter = mod.data.actives["pushrooms"] or "All Pushrooms"
 	local puff = getNearestPuff(field, hrp, filter)
-	if not puff then return false end
+	if not puff then
+		--print("[puff] no puff found")
+		return false
+	end
 
 	local root = getPuffRoot(puff)
-	if not root then return false end
+	if not root then
+		--print("[puff] no root in", puff.Name)
+		return false
+	end
+
+	print("going to", puff.Name, root.Position)
 
 	local origin = root.Position
 	local speed = mod.data.actives["walkspeed"] or 40
+	local pf = getPuffFolder()
 
 	local tool = character:FindFirstChildOfClass("Tool")
 	local lastActivate = 0
-	
-	local approachPos = Vector3.new(origin.X, origin.Y, origin.Z)
-
-	farming.move("goto", speed, approachPos)
-
 	local approachStart = tick()
-	while mod.data.actives["move"] == true
-		and tick() - approachStart < 15
-		and id == farmId
+	while id == farmId
+		and mod.data.actives["auto_farm"] == true
 		and mod.data.actives["pushrooms_enabled"] == true
+		and not mod.data.actives["converting"]
+		and puff.Parent == pf
+		and tick() - approachStart < 15
 	do
+		character = find.player.Character
+		humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		hrp = character and character:FindFirstChild("HumanoidRootPart")
+
+		if humanoid and hrp then
+			local r = getPuffRoot(puff)
+			if r then
+				local target = Vector3.new(r.Position.X, hrp.Position.Y, r.Position.Z)
+				if (target - hrp.Position).Magnitude > 6 then
+					humanoid:MoveTo(target)
+				else
+					break
+				end
+			end
+		end
 		task.wait(0.05)
 	end
+
+	print("arrived, breaking")
 	
 	local circleAngle = 0
 	local circleSpeed = 2.0
@@ -425,7 +476,7 @@ function farming.farmPuffshroom(field, id)
 		and mod.data.actives["auto_farm"] == true
 		and mod.data.actives["pushrooms_enabled"] == true
 		and not mod.data.actives["converting"]
-		and puff.Parent == puffFolder
+		and puff.Parent == pf
 		and tick() - breakStart < 15
 	do
 		character = find.player.Character
@@ -446,7 +497,7 @@ function farming.farmPuffshroom(field, id)
 				)
 
 				humanoid:MoveTo(target)
-				
+
 				local dx = center.X - hrp.Position.X
 				local dz = center.Z - hrp.Position.Z
 				local distToCenter = math.sqrt(dx * dx + dz * dz)
@@ -460,9 +511,10 @@ function farming.farmPuffshroom(field, id)
 				end
 			end
 		end
-
 		task.wait(0.05)
 	end
+
+	print("broken, looting")
 	
 	local lootStart = tick()
 	while id == farmId
@@ -478,21 +530,13 @@ function farming.farmPuffshroom(field, id)
 		if humanoid and hrp then
 			local loot = findLootNear(origin, 25)
 			if loot then
-				local target = Vector3.new(loot.Position.X, loot.Position.Y, loot.Position.Z)
-
-				farming.move("goto", speed, target)
-
-				local flyStart = tick()
-				while mod.data.actives["move"] == true
-					and tick() - flyStart < 2
-					and id == farmId
-				do
-					task.wait(0.03)
-				end
+				local target = Vector3.new(loot.Position.X, hrp.Position.Y, loot.Position.Z)
+				humanoid:MoveTo(target)
 			else
 				task.wait(0.1)
 			end
 		end
+		task.wait(0.05)
 	end
 
 	return true
