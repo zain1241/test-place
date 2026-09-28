@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.122")
+print("loaded 0.1.123")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1227,50 +1227,57 @@ function farming.convert(...)
 
 			task.spawn(function()
 				if mod.data.actives["balloon"] == true then
-					local char2 = player.Character
-					local root2 = char2 and char2:FindFirstChild("HumanoidRootPart")
-
-					if root2 then
-						local startBalloon = tick()
-
-						while tick() - startBalloon < 600 do
-							if not mod.data.actives["auto_farm"] then
-								return
-							end
-
-							local balloonFound = false
-
-							local containers = {
-								workspace:FindFirstChild("Balloons"),
-								workspace:FindFirstChild("Effects"),
-								workspace:FindFirstChild("FX"),
-								workspace:FindFirstChild("Balloon"),
-							}
-
-							for _, container in ipairs(containers) do
-								if container then
-									for _, obj in ipairs(container:GetDescendants()) do
-										if obj:IsA("BasePart")
-											and obj.Name == "BalloonBody"
-											and (obj.Position - root2.Position).Magnitude <= 25
-										then
-											balloonFound = true
-											break
-										end
+					local function findBalloonNear(pos)
+						if not pos then return nil end
+						local containers = {
+							workspace:FindFirstChild("Balloons"),
+							workspace:FindFirstChild("Effects"),
+							workspace:FindFirstChild("FX"),
+							workspace:FindFirstChild("Balloon"),
+						}
+						for _, container in ipairs(containers) do
+							if container then
+								for _, obj in ipairs(container:GetDescendants()) do
+									if obj:IsA("BasePart")
+										and obj.Name == "BalloonBody"
+										and (obj.Position - pos).Magnitude <= 25
+									then
+										return obj
 									end
 								end
-
-								if balloonFound then
-									break
-								end
 							end
-
-							if not balloonFound then
-								break
-							end
-
-							task.wait(3)
 						end
+						return nil
+					end
+					
+					local balloon = nil
+					local appearStart = tick()
+					while tick() - appearStart < 20 do
+						if not mod.data.actives["auto_farm"] then return end
+
+						local c2 = player.Character
+						local r2 = c2 and c2:FindFirstChild("HumanoidRootPart")
+						if r2 then
+							balloon = findBalloonNear(r2.Position)
+							if balloon then break end
+						end
+						task.wait(1)
+					end
+
+					if balloon then
+						print("[convert] balloon found, waiting pop")
+						local popStart = tick()
+						while balloon.Parent and tick() - popStart < 300 do
+							if not mod.data.actives["auto_farm"] then return end
+							task.wait(1)
+						end
+						if not balloon.Parent then
+							print("[convert] balloon converted")
+						else
+							print("[convert] balloon timeout")
+						end
+					else
+						print("[convert] balloon not found (20s)")
 					end
 				end
 
