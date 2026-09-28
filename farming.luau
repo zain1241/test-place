@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.29")
+print("loaded 0.1.291")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -55,22 +55,69 @@ end
 local SPROUT_COOLDOWN = 15
 local lastSproutTime = 0
 
+local __bboxCache = {}
+local __bboxCacheTime = {}
+
+local function getFieldBox(field)
+	if not field then return end
+	if field:IsA("BasePart") then
+		return field.CFrame, field.Size
+	end
+	if field:IsA("Model") then
+		local now = tick()
+		local last = __bboxCacheTime[field]
+		if __bboxCache[field] and last and now - last < 2 then
+			local c = __bboxCache[field]
+			return c[1], c[2]
+		end
+		local cf, size = field:GetBoundingBox()
+		__bboxCache[field] = {cf, size}
+		__bboxCacheTime[field] = now
+		return cf, size
+	end
+end
+
+local function isInField(pos, field)
+	local cf, size = getFieldBox(field)
+	if not cf then return true end
+	local p = cf:PointToObjectSpace(pos)
+	return math.abs(p.X) <= size.X / 2
+		and math.abs(p.Z) <= size.Z / 2
+end
+
 local function getNearestSprout(field, hrp)
-	local sf = getSproutFolder()
-	if not sf or not hrp then return nil end
+	if not hrp then return nil end
+
+	local containers = {}
+
+	local s1 = workspace:FindFirstChild("Sprouts")
+	if s1 then containers[#containers + 1] = s1 end
+
+	local particles = workspace:FindFirstChild("Particles")
+	if particles then
+		local f2 = particles:FindFirstChild("Folder2")
+		if f2 then containers[#containers + 1] = f2 end
+
+		local f1 = particles:FindFirstChild("Folder1")
+		if f1 then containers[#containers + 1] = f1 end
+	end
 
 	local nearest, nearestDist
-	for _, obj in ipairs(sf:GetChildren()) do
-		if obj.Name == "Sprout" and obj:IsA("BasePart") then
-			if isInField(obj.Position, field) then
-				local d = (obj.Position - hrp.Position).Magnitude
-				if not nearestDist or d < nearestDist then
-					nearest = obj
-					nearestDist = d
+
+	for _, container in ipairs(containers) do
+		for _, obj in ipairs(container:GetChildren()) do
+			if obj.Name == "Sprout" and obj:IsA("BasePart") then
+				if isInField(obj.Position, field) then
+					local d = (obj.Position - hrp.Position).Magnitude
+					if not nearestDist or d < nearestDist then
+						nearest = obj
+						nearestDist = d
+					end
 				end
 			end
 		end
 	end
+
 	return nearest
 end
 
@@ -115,36 +162,6 @@ local function initBubbles()
 	particles.ChildRemoved:Connect(function(v)
 		bubbles[v] = nil
 	end)
-end
-
-local __bboxCache = {}
-local __bboxCacheTime = {}
-
-local function getFieldBox(field)
-	if not field then return end
-	if field:IsA("BasePart") then
-		return field.CFrame, field.Size
-	end
-	if field:IsA("Model") then
-		local now = tick()
-		local last = __bboxCacheTime[field]
-		if __bboxCache[field] and last and now - last < 2 then
-			local c = __bboxCache[field]
-			return c[1], c[2]
-		end
-		local cf, size = field:GetBoundingBox()
-		__bboxCache[field] = {cf, size}
-		__bboxCacheTime[field] = now
-		return cf, size
-	end
-end
-
-local function isInField(pos, field)
-	local cf, size = getFieldBox(field)
-	if not cf then return true end
-	local p = cf:PointToObjectSpace(pos)
-	return math.abs(p.X) <= size.X / 2
-		and math.abs(p.Z) <= size.Z / 2
 end
 
 local function getNearestBubble(field, hrp)
@@ -420,8 +437,7 @@ function farming.farmSprout(field, id)
 	local sprout = getNearestSprout(field, hrp)
 	if not sprout then return false end
 
-	local sf = getSproutFolder()
-	if not sf then return false end
+	if not sprout.Parent then return false end
 
 	mod.data.actives["move"] = true
 
@@ -486,7 +502,7 @@ function farming.farmSprout(field, id)
 	local flyTimeout = duration + 3
 
 	while enabled()
-		and sprout.Parent == sf
+		and sprout.Parent ~= nil
 		and not finished
 		and (tick() - flyStart) < flyTimeout
 	do
@@ -536,7 +552,7 @@ function farming.farmSprout(field, id)
 	local lastActivate = 0
 	local spin = 1
 
-	while enabled() and sprout.Parent == sf and (tick() - circleStart) < breakTimeout do
+	while enabled() and sprout.Parent ~= nil and (tick() - circleStart) < breakTimeout do
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
