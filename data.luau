@@ -182,6 +182,7 @@ data.actives = {
 	bubble_priority = 49,
 	petals = false,
 	wealth_clock = false,
+	mondo = false,
 	--pushrooms = false,
 	pushrooms_enabled = false,
 	pushrooms = "All Pushrooms",
