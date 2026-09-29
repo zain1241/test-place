@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.44")
+print("loaded 0.1.441")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -85,8 +85,8 @@ local function isInField(pos, field)
 		and math.abs(p.Z) <= size.Z / 2
 end
 
-local MONDO_SAFE_DIST    = 15
-local MONDO_AVOID_DIST   = 22
+local MONDO_SAFE_DIST    = 24
+local MONDO_AVOID_DIST   = 26
 local MONDO_FARM_RADIUS  = 35
 local MONDO_COLLECT_TIME = 40
 
@@ -529,8 +529,7 @@ function farming.farmMondo(field, id)
 
 	local startRoot = hrp
 	local startPosition = startRoot.Position
-
-	-- точка прилёта — рядом с чикеном, но не на него
+	
 	local angle = find.random:NextNumber(0, math.pi * 2)
 	local r = find.random:NextNumber(MONDO_SAFE_DIST + 5, MONDO_FARM_RADIUS)
 	local target = Vector3.new(
