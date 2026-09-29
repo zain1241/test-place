@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.442")
+print("loaded 0.1.5")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -37,6 +37,10 @@ local queue = {
 
 local happenings = workspace:FindFirstChild("Happenings")
 local bloomFolder = happenings and happenings:FindFirstChild("PoppablePlants")
+
+local function isOpaque(v)
+	return v ~= nil and v:IsA("BasePart") and v.Transparency <= 0
+end
 
 local function getHappenings()
 	return workspace:FindFirstChild("Happenings")
@@ -245,6 +249,7 @@ local function isPetal(v)
 		and v:IsA("BasePart")
 		and v.Name == "PetalPart"
 		and v.Parent == workspace:FindFirstChild("Particles")
+		and v.Transparency <= 0
 end
 
 local function getBestPetal(tracked, hrp)
@@ -817,7 +822,7 @@ function farming.farmMondo(field, id)
 
 		if collectibles then
 			for _, v in ipairs(collectibles:GetChildren()) do
-				if v:IsA("BasePart") and v.Parent and not handled[v] then
+				if v:IsA("BasePart") and v.Parent and not handled[v] and v.Transparency <= 0 then
 					local d = (v.Position - hrp.Position).Magnitude
 					if d <= 120 and (not targetDist2 or d < targetDist2) then
 						target2 = v
@@ -1022,7 +1027,10 @@ function farming.farmSprout(field, id)
 	local spin = 1
 	--local lastActivate = 0
 	
+	task.wait(.4)
 	farming.autosprinkler(true)
+
+	local currentAngle = nil
 
 	while enabled() and sprout.Parent ~= nil and (tick() - circleStart) < breakTimeout do
 		character = find.player.Character
@@ -1039,53 +1047,49 @@ function farming.farmSprout(field, id)
 			sprout.Position.Z
 		)
 
-		local offset = Vector3.new(
-			hrp.Position.X - center.X,
-			0,
-			hrp.Position.Z - center.Z
-		)
+		local dx = hrp.Position.X - center.X
+		local dz = hrp.Position.Z - center.Z
+		local dist = math.sqrt(dx * dx + dz * dz)
 
-		local dist = offset.Magnitude
-
-		if dist < 0.1 then
-			offset = Vector3.new(1, 0, 0)
-			dist = 1
+		-- Инициализация угла: либо из текущей позиции, либо случайно
+		if not currentAngle then
+			if dist > 0.5 then
+				currentAngle = math.atan2(dz, dx)
+			else
+				currentAngle = find.random:NextNumber(0, math.pi * 2)
+			end
 		end
 
-		local radial = offset.Unit
+		-- Плавный advance по кругу
+		currentAngle = currentAngle + 0.35 * spin
 
-		local tangent = Vector3.new(
-			-radial.Z * spin,
-			0,
-			radial.X * spin
-		)
-
-		local moveDir
-
-		if dist > circleRadius + 1.5 then
-			moveDir = -radial
-		elseif dist < circleRadius - 1.5 then
-			moveDir = radial
-		else
-			moveDir = tangent
+		-- Если слишком далеко от круга — сначала вернуться на окружность
+		if dist > circleRadius + 2 then
+			currentAngle = math.atan2(dz, dx)
+		elseif dist < circleRadius - 2 then
+			currentAngle = math.atan2(dz, dx)
 		end
 
-		local waypoint = hrp.Position + moveDir * 8
-
-		waypoint = Vector3.new(
-			waypoint.X,
+		local target = Vector3.new(
+			center.X + math.cos(currentAngle) * circleRadius,
 			hrp.Position.Y,
-			waypoint.Z
+			center.Z + math.sin(currentAngle) * circleRadius
 		)
 
 		humanoid.WalkSpeed = speed
 
 		pcall(function()
-			humanoid:MoveTo(waypoint)
+			humanoid:MoveTo(target)
 		end)
 
 		task.wait(0.08)
 	end
+
+	pcall(function()
+		if humanoid then
+			humanoid:Move(Vector3.zero, false)
+		end
+	end)
 
 	pcall(function()
 		if humanoid then
@@ -1130,6 +1134,7 @@ function farming.farmSprout(field, id)
 				if v:IsA("BasePart")
 					and v.Parent
 					and not handled[v]
+					and v.Transparency <= 0
 				then
 					local d = (v.Position - hrp.Position).Magnitude
 					if d <= 100 and (not targetDist or d < targetDist) then
@@ -1269,7 +1274,11 @@ local function isPuffLoot(v)
 	if v.Name == "PuffballStem" or v.Name == "Puffball" then
 		return false
 	end
-	
+
+	if v.Transparency > 0 then
+		return false
+	end
+
 	return v.Parent == workspace:FindFirstChild("Collectibles") and v:FindFirstChildWhichIsA("Decal") ~= nil
 end
 
@@ -1458,7 +1467,10 @@ function farming.farmPuffshroom(field, id)
 	local breakStart = tick()
 	local breakTimeout = 30
 	
+	task.wait(.4)
 	farming.autosprinkler(true)
+
+	local currentAngle = nil
 
 	while enabled() and puff.Parent == pf and (tick() - breakStart) < breakTimeout do
 		character = find.player.Character
@@ -1471,35 +1483,35 @@ function farming.farmPuffshroom(field, id)
 		if not centerPart then break end
 
 		local center = centerPart.Position
-		local offset = Vector3.new(
-			hrp.Position.X - center.X, 0,
-			hrp.Position.Z - center.Z
-		)
-		local dist = offset.Magnitude
-		if dist < 0.1 then
-			offset = Vector3.new(1, 0, 0)
-			dist = 1
+		local dx = hrp.Position.X - center.X
+		local dz = hrp.Position.Z - center.Z
+		local dist = math.sqrt(dx * dx + dz * dz)
+
+		if not currentAngle then
+			if dist > 0.5 then
+				currentAngle = math.atan2(dz, dx)
+			else
+				currentAngle = find.random:NextNumber(0, math.pi * 2)
+			end
 		end
 
-		local radial = offset.Unit
-		local tangent = Vector3.new(
-			-radial.Z * circleDirection, 0,
-			radial.X * circleDirection
-		)
+		currentAngle = currentAngle + 0.35 * circleDirection
 
-		if dist > circleRadius + 1.5 then
-			local correction = (
-				Vector3.new(center.X, hrp.Position.Y, center.Z) - hrp.Position
-			).Unit
-			humanoid:Move(correction, false)
-		elseif dist < circleRadius - 1.5 then
-			humanoid:Move(radial, false)
-		else
-			humanoid:Move(tangent, false)
+		if dist > circleRadius + 2 or dist < circleRadius - 2 then
+			currentAngle = math.atan2(dz, dx)
 		end
+
+		local target = Vector3.new(
+			center.X + math.cos(currentAngle) * circleRadius,
+			hrp.Position.Y,
+			center.Z + math.sin(currentAngle) * circleRadius
+		)
 
 		humanoid.WalkSpeed = speed
-		task.wait(0.01)
+		pcall(function()
+			humanoid:MoveTo(target)
+		end)
+		task.wait(0.08)
 	end
 
 	character = find.player.Character
@@ -3454,6 +3466,7 @@ function farming.farm(...)
 				if rt then
 					for _, v in ipairs(c:GetChildren()) do
 						if v:IsA("BasePart")
+							and v.Transparency <= 0
 							and i(v, field)
 							and (rt.Position - v.Position).Magnitude > 4
 						then
@@ -3499,7 +3512,7 @@ function farming.farm(...)
 				local function getNextToken()
 					while #queue["tokens"] > 0 do
 						local t = queue["tokens"][1]
-						if t and t.Parent then return t end
+						if t and t.Parent and t.Transparency <= 0 then return t end
 						table.remove(queue["tokens"], 1)
 					end
 					return nil
@@ -3787,6 +3800,7 @@ function farming.farm(...)
 				if rt then
 					for _, v in ipairs(c:GetChildren()) do
 						if v:IsA("BasePart")
+							and v.Transparency <= 0
 							and isTokenInField(v, field)
 							and (rt.Position - v.Position).Magnitude > 2
 						then
@@ -3840,7 +3854,7 @@ function farming.farm(...)
 				do
 					while #queue["tokens"] > 0 do
 						local first = queue["tokens"][1]
-						if first and first.Parent then break end
+						if first and first.Parent and first.Transparency <= 0 then break end
 						table.remove(queue["tokens"], 1)
 					end
 					if #queue["tokens"] == 0 then break end
@@ -3943,6 +3957,9 @@ function farming.farm(...)
 		if not f then return end
 		if afarm then afarm:Disconnect() afarm = nil end
 
+		-- Флаг: первая проверка после прилёта на поле
+		local didArrivalCheck = false
+
 		afarm = farming.conAF(
 			find.prerender, 4,
 			function(delta)
@@ -3963,15 +3980,25 @@ function farming.farm(...)
 					if mod.data.actives["converting"] then return end
 					local info = farming.get_pollen_info()
 					local threshold = mod.data.actives["backpack"] or 80
-					
+
+					-- === Прилёт на поле: решает ТОЛЬКО процент рюкзака ===
+					if not didArrivalCheck and mod.data.actives["move"] == false then
+						didArrivalCheck = true
+						if not (info and info.percent >= threshold) then
+							-- Рюкзак пустой/неполный — сбрасываем таймер,
+							-- чтобы он не сработал сразу после прилёта
+							mod.data.actives["last_time_convert"] = tick()
+						end
+					end
+
 					local shouldConvert = false
 					local reason = ""
-					
+
 					if info and info.percent >= threshold then
 						shouldConvert = true
 						reason = "backpack " .. math.floor(info.percent) .. "% >= " .. threshold .. "%"
 					end
-					
+
 					if not shouldConvert then
 						local autoMin = mod.data.actives["auto_convert"] or 20
 						local lastTime = mod.data.actives["last_time_convert"] or tick()
@@ -3982,7 +4009,7 @@ function farming.farm(...)
 							reason = "timer " .. math.floor(elapsed) .. "m >= " .. autoMin .. "m"
 						end
 					end
-					
+
 					if shouldConvert and mod.data.actives["move"] == false then
 						local hasPollen = false
 						local coreStats = find.player:FindFirstChild("CoreStats")
@@ -4034,7 +4061,7 @@ function farming.farm(...)
 							and find.player.Character:FindFirstChild("HumanoidRootPart")
 						if rt then
 							for _, v in ipairs(collectibles:GetChildren()) do
-								if v:IsA("BasePart") then
+								if v:IsA("BasePart") and v.Transparency <= 0 then
 									local p = checkField.CFrame:PointToObjectSpace(v.Position)
 									local s = checkField.Size / 2
 									if math.abs(p.X) <= s.X
