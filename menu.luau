@@ -1801,6 +1801,19 @@ function menu.dop_create()
 							end,
 						},
 						{
+							type = "addlistchose",
+							text = "Farm In",
+							key = "position_field",
+							list = mod.data.positions,
+							allow_none = false,
+							header_icon = true,
+							changed = function()
+								if mod.data.actives.auto_farm then
+									mod.farming.farm()
+								end
+							end,
+						},
+						{
 							type = "tokenpriority",
 							text = "Token Priority",
 							key = "token_priorities",
