@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.521")
+print("loaded 0.1.524")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -978,9 +978,18 @@ function farming.farmMondo(field, id)
 
 	-- ===== Возврат на поле =====
 	local returnField = field
-	if not (returnField and returnField.Parent) then
+
+	if not returnField then
 		local zones = workspace:FindFirstChild("FlowerZones")
 		local sel = mod.data.actives["selected_field"]
+
+		if zones and sel and sel ~= "" then
+			returnField = zones:FindFirstChild(sel)
+		end
+	elseif not returnField.Parent then
+		local zones = workspace:FindFirstChild("FlowerZones")
+		local sel = mod.data.actives["selected_field"]
+
 		if zones and sel and sel ~= "" then
 			returnField = zones:FindFirstChild(sel)
 		end
@@ -990,6 +999,7 @@ function farming.farmMondo(field, id)
 		farming.move("flowerzones", speed, returnField.Name)
 
 		local retStart = tick()
+
 		while id == farmId
 			and mod.data.actives["auto_farm"] == true
 			and not mod.data.actives["converting"]
@@ -998,7 +1008,7 @@ function farming.farmMondo(field, id)
 		do
 			task.wait()
 		end
-		
+
 		mod.data.actives["move"] = false
 	end
 
@@ -1352,7 +1362,6 @@ local function getPuffRarity(puff)
 	end
 	return nil
 end
-
 
 local function getPuffRoot(puff)
 	return puff.PrimaryPart
