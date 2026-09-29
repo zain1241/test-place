@@ -1910,6 +1910,7 @@ function menu.dop_create()
 					opened = true,
 					items = {
 						{ type = "button", text = "Wealth Clock", key = "weatlh_clock", callback = farming.wealthClock},
+						{ type = "button", text = "Mondo", key = "mondo" },
 					},
 				},
 			},
