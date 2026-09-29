@@ -26,6 +26,12 @@ data.other = {
 	{name = "Tween", image = "rbxassetid://15460472736"},
 }
 
+data.positions = {
+	{name = "center", image = "rbxassetid://15617969456"},
+	{name = "left",   image = "rbxassetid://15617968922"},
+	{name = "right",  image = "rbxassetid://15617968590"},
+}
+
 data.mask = {
 	{name = "Diamond Mask", image = "rbxassetid://2557828875"},
 	{name = "Demon Mask", image = "rbxassetid://2557829605"},
@@ -197,7 +203,7 @@ data.actives = {
 	move_speed = 100,
 
 	--other
-	script_name = "Nectar 0.0.2",
+	script_name = "Nectar 0.0.3",
 	position_script = UDim2.new(0.22, 0, 0.5, 0),
 	walkspeed = 40,
 	autohive = true,
