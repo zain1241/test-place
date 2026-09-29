@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.52")
+print("loaded 0.1.521")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -1003,7 +1003,6 @@ function farming.farmMondo(field, id)
 	end
 
 	return true
-end
 end
 
 function farming.farmSprout(field, id)
