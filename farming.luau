@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.441")
+print("loaded 0.1.442")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -486,6 +486,28 @@ function farming.farmPetalBloom(field, id)
 	return true
 end
 
+local function getMondoRadius(mondo)
+	if not mondo then return 15 end
+	local ok, _, size = pcall(function()
+		return mondo:GetBoundingBox()
+	end)
+	if ok and size then
+		return math.max(size.X, size.Z) / 2
+	end
+	return 15
+end
+
+local function getMondoField()
+	local zones = workspace:FindFirstChild("FlowerZones")
+	if not zones then return nil end
+	for _, z in ipairs(zones:GetChildren()) do
+		if string.find(z.Name, "Mountain Top Field", 1, true) then
+			return z
+		end
+	end
+	return nil
+end
+
 function farming.farmMondo(field, id)
 	local function enabled()
 		return id == farmId
@@ -515,6 +537,41 @@ function farming.farmMondo(field, id)
 	local mondoPos = getMondoPosition(mondo)
 	if not mondoPos then return false end
 
+	-- Границы Mountain Top
+	local mondoField = getMondoField()
+	local fieldCF, fieldSize
+	if mondoField then
+		if mondoField:IsA("BasePart") then
+			fieldCF = mondoField.CFrame
+			fieldSize = mondoField.Size
+		elseif mondoField:IsA("Model") then
+			local ok, cf, sz = pcall(function() return mondoField:GetBoundingBox() end)
+			if ok then fieldCF, fieldSize = cf, sz end
+		end
+	end
+
+	local FIELD_MARGIN = 8
+
+	local function inMondoField(pos)
+		if not fieldCF or not fieldSize then return true end
+		local p = fieldCF:PointToObjectSpace(pos)
+		return math.abs(p.X) <= fieldSize.X / 2 - FIELD_MARGIN
+			and math.abs(p.Z) <= fieldSize.Z / 2 - FIELD_MARGIN
+	end
+
+	local function clampToMondoField(pos)
+		if not fieldCF or not fieldSize then return pos end
+		local p = fieldCF:PointToObjectSpace(pos)
+		local limX = fieldSize.X / 2 - FIELD_MARGIN
+		local limZ = fieldSize.Z / 2 - FIELD_MARGIN
+		p = Vector3.new(
+			math.clamp(p.X, -limX, limX),
+			p.Y,
+			math.clamp(p.Z, -limZ, limZ)
+		)
+		return fieldCF:PointToWorldSpace(p)
+	end
+
 	mod.data.actives["move"] = true
 
 	character = find.player.Character
@@ -529,14 +586,17 @@ function farming.farmMondo(field, id)
 
 	local startRoot = hrp
 	local startPosition = startRoot.Position
-	
+
+	-- Точка прилёта — случайная вокруг чикена, но зажатая в поле
 	local angle = find.random:NextNumber(0, math.pi * 2)
-	local r = find.random:NextNumber(MONDO_SAFE_DIST + 5, MONDO_FARM_RADIUS)
-	local target = Vector3.new(
+	local r = find.random:NextNumber(30, 45)
+	local rawTarget = Vector3.new(
 		mondoPos.X + math.cos(angle) * r,
-		mondoPos.Y + 3,
+		mondoPos.Y + 5,
 		mondoPos.Z + math.sin(angle) * r
 	)
+	local clampedTarget = clampToMondoField(rawTarget)
+	local target = Vector3.new(clampedTarget.X, rawTarget.Y, clampedTarget.Z)
 
 	local distance = (startRoot.Position - target).Magnitude
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
@@ -593,11 +653,12 @@ function farming.farmMondo(field, id)
 
 	if not enabled() then return false end
 	task.wait(0.05)
-	
+
+	-- ===== Основной цикл =====
 	local farmStart = tick()
 	local farmTimeout = 400
 	local lastRandom = 0
-	local randomInterval = 0.7
+	local randomInterval = 0.6
 	local currentTarget = nil
 
 	while enabled() and mondo.Parent ~= nil and (tick() - farmStart) < farmTimeout do
@@ -609,39 +670,84 @@ function farming.farmMondo(field, id)
 		local mp = getMondoPosition(mondo)
 		if not mp then break end
 
-		local toPlayer = hrp.Position - mp
-		local dist = toPlayer.Magnitude
-		
-		if dist < MONDO_SAFE_DIST then
-			local away = toPlayer.Unit * 25
+		-- Динамический радиус чикена
+		local mondoR = getMondoRadius(mondo)
+		local dist = (hrp.Position - mp).Magnitude
+		local realDist = dist - mondoR  -- расстояние до края чикена
+
+		local safeDist = mondoR + 14
+		local avoidDist = mondoR + 20
+		local farmMin = mondoR + 16
+		local farmMax = mondoR + 32
+
+		-- 🔴 Жёсткая защита: если внутри чикена — срочно отбегаем
+		if realDist < safeDist then
+			local away
+			if dist > 0.1 then
+				away = (hrp.Position - mp).Unit
+			else
+				away = Vector3.new(1, 0, 0)
+			end
+
+			local rawTarget2 = hrp.Position + away * 30
+			local safeTarget2 = clampToMondoField(rawTarget2)
+
+			-- если упёрлись в границу поля — уходим по касательной
+			if (safeTarget2 - hrp.Position).Magnitude < 5 then
+				local tangent = Vector3.new(-away.Z, 0, away.X)
+				local toCenter = (mp - hrp.Position)
+				toCenter = Vector3.new(toCenter.X, 0, toCenter.Z)
+				if toCenter.Magnitude > 0.1 and tangent:Dot(toCenter.Unit) < 0 then
+					tangent = -tangent
+				end
+				rawTarget2 = hrp.Position + tangent * 25
+				safeTarget2 = clampToMondoField(rawTarget2)
+			end
+
 			humanoid.WalkSpeed = speed
 			humanoid:MoveTo(Vector3.new(
-				hrp.Position.X + away.X,
+				safeTarget2.X,
 				hrp.Position.Y,
-				hrp.Position.Z + away.Z
+				safeTarget2.Z
 				))
 			currentTarget = nil
 			lastRandom = tick()
 			task.wait(0.05)
 			continue
 		end
-		
-		local mv = Vector3.zero
-		if mondo:IsA("Model") and mondo.PrimaryPart then
-			mv = mondo.PrimaryPart.AssemblyLinearVelocity
-		elseif mondo:IsA("BasePart") then
-			mv = mondo.AssemblyLinearVelocity
-		end
 
-		if mv.Magnitude > 1 and dist < MONDO_AVOID_DIST then
-			local toMe = (hrp.Position - mp).Unit
-			if mv.Unit:Dot(toMe) > 0.4 then
-				local away = toMe * 25
+		-- 🟡 Мягкая защита: чикен движется к нам
+		local mv = Vector3.zero
+		pcall(function()
+			if mondo:IsA("Model") then
+				local pp = mondo.PrimaryPart or mondo:FindFirstChildWhichIsA("BasePart", true)
+				if pp then mv = pp.AssemblyLinearVelocity end
+			elseif mondo:IsA("BasePart") then
+				mv = mondo.AssemblyLinearVelocity
+			end
+		end)
+
+		if mv.Magnitude > 0.5 and realDist < avoidDist then
+			local toMe = (hrp.Position - mp)
+			toMe = Vector3.new(toMe.X, 0, toMe.Z)
+			if toMe.Magnitude > 0.1 and mv.Unit:Dot(toMe.Unit) > 0.1 then
+				-- чикен бежит на нас
+				local away = toMe.Unit
+				local rawTarget3 = hrp.Position + away * 25
+				local safeTarget3 = clampToMondoField(rawTarget3)
+
+				if (safeTarget3 - hrp.Position).Magnitude < 5 then
+					-- некуда бежать напрямую — обходим сбоку
+					local tangent = Vector3.new(-away.Z, 0, away.X)
+					rawTarget3 = hrp.Position + tangent * 22
+					safeTarget3 = clampToMondoField(rawTarget3)
+				end
+
 				humanoid.WalkSpeed = speed
 				humanoid:MoveTo(Vector3.new(
-					hrp.Position.X + away.X,
+					safeTarget3.X,
 					hrp.Position.Y,
-					hrp.Position.Z + away.Z
+					safeTarget3.Z
 					))
 				currentTarget = nil
 				lastRandom = tick()
@@ -649,20 +755,35 @@ function farming.farmMondo(field, id)
 				continue
 			end
 		end
-		
+
+		-- Рандомный бег в безопасной зоне
 		local needNew = (not currentTarget)
 			or (tick() - lastRandom > randomInterval)
 			or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 3)
 
 		if needNew then
 			local a2 = find.random:NextNumber(0, math.pi * 2)
-			local rr = find.random:NextNumber(MONDO_SAFE_DIST + 5, MONDO_FARM_RADIUS)
-			currentTarget = Vector3.new(
+			local rr = find.random:NextNumber(farmMin, farmMax)
+			local rawTarget4 = Vector3.new(
 				mp.X + math.cos(a2) * rr,
 				hrp.Position.Y,
 				mp.Z + math.sin(a2) * rr
 			)
+			local safeTarget4 = clampToMondoField(rawTarget4)
+			currentTarget = Vector3.new(
+				safeTarget4.X,
+				hrp.Position.Y,
+				safeTarget4.Z
+			)
 			lastRandom = tick()
+		end
+
+		-- Дополнительная проверка: если цель стала небезопасной — сброс
+		local distToCurrent = (Vector3.new(currentTarget.X, 0, currentTarget.Z) - Vector3.new(mp.X, 0, mp.Z)).Magnitude
+		if distToCurrent < farmMin or distToCurrent > farmMax + 10 then
+			currentTarget = nil
+			task.wait(0.05)
+			continue
 		end
 
 		humanoid.WalkSpeed = speed
@@ -672,6 +793,8 @@ function farming.farmMondo(field, id)
 
 	safeCleanup(nil)
 	mod.data.actives["move"] = true
+
+	-- ===== Сбор токенов 40 сек =====
 	local collectStart = tick()
 	local handled = {}
 
@@ -724,7 +847,8 @@ function farming.farmMondo(field, id)
 	end
 
 	mod.data.actives["move"] = false
-	
+
+	-- ===== Возврат на поле =====
 	if field and field.Parent then
 		farming.move("flowerzones", speed, field.Name)
 		while id == farmId
