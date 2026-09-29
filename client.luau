@@ -35,12 +35,61 @@ assert(type(home) == "table", "client: home not loaded")
 
 local CONFIG_FILE = "Nectar_config.json"
 
+--local function saveConfig()
+--	if not writefile then return end
+
+--	local saveData = {
+--		actives = data.actives,
+--	}
+
+--	local ok, encoded = pcall(function()
+--		return game:GetService("HttpService"):JSONEncode(saveData)
+--	end)
+
+--	if ok then
+--		pcall(function()
+--			writefile(CONFIG_FILE, encoded)
+--		end)
+--	end
+--end
+
+--local function loadConfig()
+--	if not (isfile and readfile) then return end
+--	if not isfile(CONFIG_FILE) then return end
+
+--	local ok, content = pcall(function()
+--		return readfile(CONFIG_FILE)
+--	end)
+
+--	if not ok or not content or content == "" then return end
+
+--	local ok2, decoded = pcall(function()
+--		return game:GetService("HttpService"):JSONDecode(content)
+--	end)
+
+--	if not ok2 or type(decoded) ~= "table" then return end
+
+--	if type(decoded.actives) == "table" then
+--		for key, value in pairs(decoded.actives) do
+--			if key ~= "position_script" then
+--				data.actives[key] = value
+--			end
+--		end
+--	end
+--end
+
 local function saveConfig()
 	if not writefile then return end
 
 	local saveData = {
-		actives = data.actives,
+		actives = {},
 	}
+
+	for key, value in pairs(data.actives) do
+		if key ~= "script_name" and key ~= "position_script" then
+			saveData.actives[key] = value
+		end
+	end
 
 	local ok, encoded = pcall(function()
 		return game:GetService("HttpService"):JSONEncode(saveData)
@@ -71,7 +120,7 @@ local function loadConfig()
 
 	if type(decoded.actives) == "table" then
 		for key, value in pairs(decoded.actives) do
-			if key ~= "position_script" then
+			if key ~= "script_name" and key ~= "position_script" then
 				data.actives[key] = value
 			end
 		end
