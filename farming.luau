@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.524")
+print("loaded 0.1.54")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -4322,5 +4322,78 @@ task.spawn(function()
 		farming.farm()
 	end
 end)
+
+local function onCharacterRespawn(character)
+	-- Даём игре чуть-чуть времени на инициализацию
+	task.wait(0.8)
+
+	-- Полный сброс всего, что было привязано к старому персонажу/состоянию
+	if adig then
+		pcall(function() adig:Disconnect() end)
+		adig = nil
+	end
+
+	-- resetFarmMovement снимает afarm/aconvert/tween/atween/invc/noclip,
+	-- чистит очереди и линии, ставит move/point/converting = false
+	pcall(function()
+		resetFarmMovement(false)
+	end)
+
+	-- Дополнительно на всякий случай
+	mod.data.actives["point"] = false
+	mod.data.actives["move"] = false
+	mod.data.actives["converting"] = false
+
+	-- Ждём Humanoid у нового персонажа
+	local humanoid = character:WaitForChild("Humanoid", 10)
+	local hrp = character:WaitForChild("HumanoidRootPart", 10)
+
+	if not humanoid or not hrp then
+		return
+	end
+
+	-- Восстанавливаем ходьбу
+	local ws = tonumber(mod.data.actives["walkspeed"]) or 16
+	humanoid.WalkSpeed = ws
+
+	-- Восстанавливаем физ. свойства рута
+	pcall(function()
+		hrp.Massless = false
+		local p = hrp.CurrentPhysicalProperties
+		hrp.CustomPhysicalProperties = PhysicalProperties.new(
+			20, p.Friction, p.Elasticity, p.FrictionWeight, p.ElasticityWeight
+		)
+	end)
+
+	-- Заново запускаем forceWalkSpeed — он переустановит speed-коннект
+	pcall(function()
+		farming.forceWalkSpeed(ws)
+	end)
+
+	-- Если Auto Farm был включён — перезапускаем
+	if mod.data.actives["auto_farm"] == true then
+		task.wait(0.5)
+
+		-- ещё раз сбрасываем, чтобы farm() не увидел залипший move
+		mod.data.actives["move"] = false
+		mod.data.actives["point"] = false
+		mod.data.actives["converting"] = false
+
+		pcall(function()
+			farming.farm()
+		end)
+	end
+end
+
+-- Подключаемся один раз к событию респауна
+find.player.CharacterAdded:Connect(onCharacterRespawn)
+
+-- Если персонаж уже есть на момент загрузки модуля — обработаем как «респаун»
+if find.player.Character then
+	task.spawn(function()
+		task.wait(0.5)
+		onCharacterRespawn(find.player.Character)
+	end)
+end
 
 return farming
