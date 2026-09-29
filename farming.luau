@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.51")
+print("loaded 0.1.52")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -977,18 +977,33 @@ function farming.farmMondo(field, id)
 	mod.data.actives["move"] = false
 
 	-- ===== Возврат на поле =====
-	if field and field.Parent then
-		farming.move("flowerzones", speed, field.Name)
+	local returnField = field
+	if not (returnField and returnField.Parent) then
+		local zones = workspace:FindFirstChild("FlowerZones")
+		local sel = mod.data.actives["selected_field"]
+		if zones and sel and sel ~= "" then
+			returnField = zones:FindFirstChild(sel)
+		end
+	end
+
+	if returnField and returnField.Parent then
+		farming.move("flowerzones", speed, returnField.Name)
+
+		local retStart = tick()
 		while id == farmId
 			and mod.data.actives["auto_farm"] == true
 			and not mod.data.actives["converting"]
 			and mod.data.actives["move"] == true
+			and (tick() - retStart) < 30
 		do
 			task.wait()
 		end
+		
+		mod.data.actives["move"] = false
 	end
 
 	return true
+end
 end
 
 function farming.farmSprout(field, id)
@@ -3513,15 +3528,18 @@ function farming.farm(...)
 			local ch = find.player.Character
 			local root = ch and ch:FindFirstChild("HumanoidRootPart")
 			local field
-			
+			if mod.data.actives["selected_field"] == false then
+				field = nil
+			else
+				field = f and f:FindFirstChild(mod.data.actives["selected_field"])
+			end
+
 			if mod.data.actives["mondo"] == true then
 				local mondoFound = getMondo()
 				if mondoFound then
 					farming.farmMondo(field, id)
 				end
 			end
-
-			if mod.data.actives["selected_field"] == false then field = nil else field = f:FindFirstChild(mod.data.actives["selected_field"]) end
 			
 			if mod.data.actives["sprouts"] == true
 				and field
@@ -3834,19 +3852,23 @@ function farming.farm(...)
 			local c = workspace:FindFirstChild("Collectibles")
 			local f = workspace:FindFirstChild("FlowerZones")
 			local field
-			
-			if mod.data.actives["mondo"] == true then
-				local mondoFound = getMondo()
-				if mondoFound then
-					farming.farmMondo(field, id)
-					continue
-				end
-			end
-
 			if mod.data.actives["selected_field"] == false then
 				field = nil
 			else
 				field = f and f:FindFirstChild(mod.data.actives["selected_field"])
+			end
+
+			if mod.data.actives["mondo"] == true then
+				local mondoFound = getMondo()
+				if mondoFound then
+					farming.farmMondo(field, id)
+					if id ~= farmId
+						or mod.data.actives["auto_farm"] ~= true
+						or mod.data.actives["converting"]
+					then
+						continue
+					end
+				end
 			end
 			
 			if mod.data.actives["sprouts"] == true
