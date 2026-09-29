@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.5")
+print("loaded 0.1.51")
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -658,13 +658,19 @@ function farming.farmMondo(field, id)
 
 	if not enabled() then return false end
 	task.wait(0.05)
-
+	
 	-- ===== Основной цикл =====
 	local farmStart = tick()
 	local farmTimeout = 400
 	local lastRandom = 0
 	local randomInterval = 0.6
 	local currentTarget = nil
+
+	-- Дистанции считаем ОТ КРАЯ чикена
+	local SAFE_EDGE = 10   -- ближе этого — срочно отбегаем
+	local AVOID_EDGE = 16   -- ближе этого + чикен движется к нам — тоже отбегаем
+	local FARM_MIN_EDGE = 18   -- минимальный отступ от края во время бега
+	local FARM_MAX_EDGE = 32   -- максимальный отступ от края во время бега
 
 	while enabled() and mondo.Parent ~= nil and (tick() - farmStart) < farmTimeout do
 		character = find.player.Character
@@ -678,15 +684,31 @@ function farming.farmMondo(field, id)
 		-- Динамический радиус чикена
 		local mondoR = getMondoRadius(mondo)
 		local dist = (hrp.Position - mp).Magnitude
-		local realDist = dist - mondoR  -- расстояние до края чикена
+		local realDist = dist - mondoR   -- расстояние от края чикена
 
-		local safeDist = mondoR + 14
-		local avoidDist = mondoR + 20
-		local farmMin = mondoR + 16
-		local farmMax = mondoR + 32
+		-- Скорость чикена
+		local mv = Vector3.zero
+		pcall(function()
+			if mondo:IsA("Model") then
+				local pp = mondo.PrimaryPart or mondo:FindFirstChildWhichIsA("BasePart", true)
+				if pp then mv = pp.AssemblyLinearVelocity end
+			elseif mondo:IsA("BasePart") then
+				mv = mondo.AssemblyLinearVelocity
+			end
+		end)
 
-		-- 🔴 Жёсткая защита: если внутри чикена — срочно отбегаем
-		if realDist < safeDist then
+		-- 🟡 чикен бежит на нас?
+		local chickenChasing = false
+		if mv.Magnitude > 0.5 and realDist < AVOID_EDGE then
+			local toMe = (hrp.Position - mp)
+			toMe = Vector3.new(toMe.X, 0, toMe.Z)
+			if toMe.Magnitude > 0.1 and mv.Unit:Dot(toMe.Unit) > 0.1 then
+				chickenChasing = true
+			end
+		end
+
+		-- 🔴 Жёсткая защита: близко к краю ИЛИ чикен бежит на нас в опасной зоне
+		if realDist < SAFE_EDGE or chickenChasing then
 			local away
 			if dist > 0.1 then
 				away = (hrp.Position - mp).Unit
@@ -694,10 +716,12 @@ function farming.farmMondo(field, id)
 				away = Vector3.new(1, 0, 0)
 			end
 
-			local rawTarget2 = hrp.Position + away * 30
+			-- Сила отталкивания зависит от того, насколько мы близко
+			local pushStrength = math.max(SAFE_EDGE - realDist, 0) + 18
+			local rawTarget2 = hrp.Position + away * pushStrength
 			local safeTarget2 = clampToMondoField(rawTarget2)
 
-			-- если упёрлись в границу поля — уходим по касательной
+			-- Если упёрлись в границу поля — уходим по касательной
 			if (safeTarget2 - hrp.Position).Magnitude < 5 then
 				local tangent = Vector3.new(-away.Z, 0, away.X)
 				local toCenter = (mp - hrp.Position)
@@ -705,7 +729,7 @@ function farming.farmMondo(field, id)
 				if toCenter.Magnitude > 0.1 and tangent:Dot(toCenter.Unit) < 0 then
 					tangent = -tangent
 				end
-				rawTarget2 = hrp.Position + tangent * 25
+				rawTarget2 = hrp.Position + tangent * 22
 				safeTarget2 = clampToMondoField(rawTarget2)
 			end
 
@@ -721,54 +745,15 @@ function farming.farmMondo(field, id)
 			continue
 		end
 
-		-- 🟡 Мягкая защита: чикен движется к нам
-		local mv = Vector3.zero
-		pcall(function()
-			if mondo:IsA("Model") then
-				local pp = mondo.PrimaryPart or mondo:FindFirstChildWhichIsA("BasePart", true)
-				if pp then mv = pp.AssemblyLinearVelocity end
-			elseif mondo:IsA("BasePart") then
-				mv = mondo.AssemblyLinearVelocity
-			end
-		end)
-
-		if mv.Magnitude > 0.5 and realDist < avoidDist then
-			local toMe = (hrp.Position - mp)
-			toMe = Vector3.new(toMe.X, 0, toMe.Z)
-			if toMe.Magnitude > 0.1 and mv.Unit:Dot(toMe.Unit) > 0.1 then
-				-- чикен бежит на нас
-				local away = toMe.Unit
-				local rawTarget3 = hrp.Position + away * 25
-				local safeTarget3 = clampToMondoField(rawTarget3)
-
-				if (safeTarget3 - hrp.Position).Magnitude < 5 then
-					-- некуда бежать напрямую — обходим сбоку
-					local tangent = Vector3.new(-away.Z, 0, away.X)
-					rawTarget3 = hrp.Position + tangent * 22
-					safeTarget3 = clampToMondoField(rawTarget3)
-				end
-
-				humanoid.WalkSpeed = speed
-				humanoid:MoveTo(Vector3.new(
-					safeTarget3.X,
-					hrp.Position.Y,
-					safeTarget3.Z
-					))
-				currentTarget = nil
-				lastRandom = tick()
-				task.wait(0.05)
-				continue
-			end
-		end
-
-		-- Рандомный бег в безопасной зоне
+		-- 🟢 Рандомный бег в безопасной зоне
 		local needNew = (not currentTarget)
 			or (tick() - lastRandom > randomInterval)
 			or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 3)
 
 		if needNew then
 			local a2 = find.random:NextNumber(0, math.pi * 2)
-			local rr = find.random:NextNumber(farmMin, farmMax)
+			-- Радиус от центра = mondoR + отступ от края
+			local rr = find.random:NextNumber(mondoR + FARM_MIN_EDGE, mondoR + FARM_MAX_EDGE)
 			local rawTarget4 = Vector3.new(
 				mp.X + math.cos(a2) * rr,
 				hrp.Position.Y,
@@ -783,9 +768,10 @@ function farming.farmMondo(field, id)
 			lastRandom = tick()
 		end
 
-		-- Дополнительная проверка: если цель стала небезопасной — сброс
-		local distToCurrent = (Vector3.new(currentTarget.X, 0, currentTarget.Z) - Vector3.new(mp.X, 0, mp.Z)).Magnitude
-		if distToCurrent < farmMin or distToCurrent > farmMax + 10 then
+		-- Проверяем, что цель в допустимой зоне ОТ КРАЯ, а не от центра
+		local distToCurrentCenter = (Vector3.new(currentTarget.X, 0, currentTarget.Z) - Vector3.new(mp.X, 0, mp.Z)).Magnitude
+		local currentEdge = distToCurrentCenter - mondoR
+		if currentEdge < FARM_MIN_EDGE - 4 or currentEdge > FARM_MAX_EDGE + 10 then
 			currentTarget = nil
 			task.wait(0.05)
 			continue
@@ -795,6 +781,143 @@ function farming.farmMondo(field, id)
 		humanoid:MoveTo(currentTarget)
 		task.wait(0.05)
 	end
+
+	---- ===== Основной цикл =====
+	--local farmStart = tick()
+	--local farmTimeout = 400
+	--local lastRandom = 0
+	--local randomInterval = 0.6
+	--local currentTarget = nil
+
+	--while enabled() and mondo.Parent ~= nil and (tick() - farmStart) < farmTimeout do
+	--	character = find.player.Character
+	--	humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	--	hrp = character and character:FindFirstChild("HumanoidRootPart")
+	--	if not humanoid or not hrp or hrp.Anchored then break end
+
+	--	local mp = getMondoPosition(mondo)
+	--	if not mp then break end
+
+	--	-- Динамический радиус чикена
+	--	local mondoR = getMondoRadius(mondo)
+	--	local dist = (hrp.Position - mp).Magnitude
+	--	local realDist = dist - mondoR  -- расстояние до края чикена
+
+	--	local safeDist = mondoR + 14
+	--	local avoidDist = mondoR + 20
+	--	local farmMin = mondoR + 16
+	--	local farmMax = mondoR + 32
+
+	--	-- 🔴 Жёсткая защита: если внутри чикена — срочно отбегаем
+	--	if realDist < safeDist then
+	--		local away
+	--		if dist > 0.1 then
+	--			away = (hrp.Position - mp).Unit
+	--		else
+	--			away = Vector3.new(1, 0, 0)
+	--		end
+
+	--		local rawTarget2 = hrp.Position + away * 30
+	--		local safeTarget2 = clampToMondoField(rawTarget2)
+
+	--		-- если упёрлись в границу поля — уходим по касательной
+	--		if (safeTarget2 - hrp.Position).Magnitude < 5 then
+	--			local tangent = Vector3.new(-away.Z, 0, away.X)
+	--			local toCenter = (mp - hrp.Position)
+	--			toCenter = Vector3.new(toCenter.X, 0, toCenter.Z)
+	--			if toCenter.Magnitude > 0.1 and tangent:Dot(toCenter.Unit) < 0 then
+	--				tangent = -tangent
+	--			end
+	--			rawTarget2 = hrp.Position + tangent * 25
+	--			safeTarget2 = clampToMondoField(rawTarget2)
+	--		end
+
+	--		humanoid.WalkSpeed = speed
+	--		humanoid:MoveTo(Vector3.new(
+	--			safeTarget2.X,
+	--			hrp.Position.Y,
+	--			safeTarget2.Z
+	--			))
+	--		currentTarget = nil
+	--		lastRandom = tick()
+	--		task.wait(0.05)
+	--		continue
+	--	end
+
+	--	-- 🟡 Мягкая защита: чикен движется к нам
+	--	local mv = Vector3.zero
+	--	pcall(function()
+	--		if mondo:IsA("Model") then
+	--			local pp = mondo.PrimaryPart or mondo:FindFirstChildWhichIsA("BasePart", true)
+	--			if pp then mv = pp.AssemblyLinearVelocity end
+	--		elseif mondo:IsA("BasePart") then
+	--			mv = mondo.AssemblyLinearVelocity
+	--		end
+	--	end)
+
+	--	if mv.Magnitude > 0.5 and realDist < avoidDist then
+	--		local toMe = (hrp.Position - mp)
+	--		toMe = Vector3.new(toMe.X, 0, toMe.Z)
+	--		if toMe.Magnitude > 0.1 and mv.Unit:Dot(toMe.Unit) > 0.1 then
+	--			-- чикен бежит на нас
+	--			local away = toMe.Unit
+	--			local rawTarget3 = hrp.Position + away * 25
+	--			local safeTarget3 = clampToMondoField(rawTarget3)
+
+	--			if (safeTarget3 - hrp.Position).Magnitude < 5 then
+	--				-- некуда бежать напрямую — обходим сбоку
+	--				local tangent = Vector3.new(-away.Z, 0, away.X)
+	--				rawTarget3 = hrp.Position + tangent * 22
+	--				safeTarget3 = clampToMondoField(rawTarget3)
+	--			end
+
+	--			humanoid.WalkSpeed = speed
+	--			humanoid:MoveTo(Vector3.new(
+	--				safeTarget3.X,
+	--				hrp.Position.Y,
+	--				safeTarget3.Z
+	--				))
+	--			currentTarget = nil
+	--			lastRandom = tick()
+	--			task.wait(0.05)
+	--			continue
+	--		end
+	--	end
+
+	--	-- Рандомный бег в безопасной зоне
+	--	local needNew = (not currentTarget)
+	--		or (tick() - lastRandom > randomInterval)
+	--		or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 3)
+
+	--	if needNew then
+	--		local a2 = find.random:NextNumber(0, math.pi * 2)
+	--		local rr = find.random:NextNumber(farmMin, farmMax)
+	--		local rawTarget4 = Vector3.new(
+	--			mp.X + math.cos(a2) * rr,
+	--			hrp.Position.Y,
+	--			mp.Z + math.sin(a2) * rr
+	--		)
+	--		local safeTarget4 = clampToMondoField(rawTarget4)
+	--		currentTarget = Vector3.new(
+	--			safeTarget4.X,
+	--			hrp.Position.Y,
+	--			safeTarget4.Z
+	--		)
+	--		lastRandom = tick()
+	--	end
+
+	--	-- Дополнительная проверка: если цель стала небезопасной — сброс
+	--	local distToCurrent = (Vector3.new(currentTarget.X, 0, currentTarget.Z) - Vector3.new(mp.X, 0, mp.Z)).Magnitude
+	--	if distToCurrent < farmMin or distToCurrent > farmMax + 10 then
+	--		currentTarget = nil
+	--		task.wait(0.05)
+	--		continue
+	--	end
+
+	--	humanoid.WalkSpeed = speed
+	--	humanoid:MoveTo(currentTarget)
+	--	task.wait(0.05)
+	--end
 
 	safeCleanup(nil)
 	mod.data.actives["move"] = true
