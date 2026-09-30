@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.11")
+print("loaded 0.2.12")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -2844,10 +2844,30 @@ function farming.installAutoRejoin()
 		queued = true
 		
 		if queue_on_teleport then
-			local code = string.format(
-				'loadstring(game:HttpGet("%s"))()',
-				REJOIN_LOADER
-			)
+			local code = string.format([[
+local url = "%s"
+local src
+if request then
+    local ok, res = pcall(function()
+        return request({ Url = url, Method = "GET" }).Body
+    end)
+    if ok then src = res end
+elseif http_request then
+    local ok, res = pcall(function()
+        return http_request({ Url = url, Method = "GET" }).Body
+    end)
+    if ok then src = res end
+elseif game.HttpGet then
+    local ok, res = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if ok then src = res end
+end
+if src then
+    local fn = loadstring and loadstring(src) or load
+    if fn then pcall(fn) end
+end
+]], REJOIN_LOADER)
 			pcall(function() queue_on_teleport(code) end)
 		else
 			warn("queue_on_teleport not available — script won't auto-load")
