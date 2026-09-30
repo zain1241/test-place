@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.12")
+print("loaded 0.2.14")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -151,9 +151,9 @@ local function getSproutFolder()
 	return particles and particles:FindFirstChild("Folder2")
 end
 
-local function findMin(iter, score) -- find min obj in iter by score
+local function findMin(list, score)
 	local best, bestScore
-	for obj in iter do
+	for _, obj in pairs(list) do
 		local s = score(obj)
 		if s and (not bestScore or s < bestScore) then
 			best, bestScore = obj, s
@@ -232,7 +232,7 @@ local function getNearestSprout(field, hrp)
 	local sf = workspace:FindFirstChild("Sprouts")
 	if not sf then return nil end
 
-	return findMin(ipairs(sf:GetChildren()), function(obj)
+	return findMin(sf:GetChildren(), function(obj)
 		if obj.Name ~= "Sprout" or not obj:IsA("BasePart") then return nil end
 		return (obj.Position - hrp.Position).Magnitude
 	end)
@@ -241,7 +241,7 @@ end
 local function getNearestBubble(field, hrp)
 	initBubbles()
 	if not hrp then return nil end
-	return findMin(pairs(bubbles), function(bubble)
+	return findMin(bubbles, function(bubble)
 		if not bubble.Parent then bubbles[bubble] = nil return nil end
 		if not isInField(bubble.Position, field) then return nil end
 		return (bubble.Position - hrp.Position).Magnitude
@@ -255,7 +255,7 @@ local function getNearestBloom(field, hrp)
 	local folder = happenings and happenings:FindFirstChild("PoppablePlants")
 	if not folder then return nil end
 
-	return findMin(ipairs(folder:GetChildren()), function(bloom)
+	return findMin(folder:GetChildren(), function(bloom)
 		if not bloom:IsA("Model") or bloom.Name ~= "Bloom" then return nil end
 
 		local pos = getBloomPosition(bloom)
@@ -271,7 +271,7 @@ local function getNearestPuff(field, hrp, filter)
 	local pf = getPuffFolder()
 	if not pf or not hrp then return nil end
 
-	return findMin(ipairs(pf:GetChildren()), function(puff)
+	return findMin(pf:GetChildren(), function(puff)
 		if not puff:IsA("Model") then return nil end
 
 		local rarity = getPuffRarity(puff)
