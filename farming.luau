@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.1")
+print("loaded 0.2.11")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -3427,7 +3427,7 @@ function farming.farm(...)
 			
 			if mod.data.actives["sprouts"] == true
 				and field
-				and (tick() - lastSproutTime) >= find.data.actives["sprout_cooldown"]
+				and (tick() - lastSproutTime) >= mod.data.actives["sprout_cooldown"]
 			then
 				local sproutFound = getNearestSprout(
 					field,
@@ -3771,7 +3771,7 @@ function farming.farm(...)
 				end
 			end
 			
-			if mod.data.actives["sprouts"] == true and field and (tick() - lastSproutTime) >= find.data.actives["sprout_cooldown"] then
+			if mod.data.actives["sprouts"] == true and field and (tick() - lastSproutTime) >= mod.data.actives["sprout_cooldown"] then
 				local sproutFound = getNearestSprout(
 					field,
 					find.player.Character
