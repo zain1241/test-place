@@ -814,6 +814,7 @@ function menu.dop_create()
 		box.Position = UDim2.new(1, -8, 0.5, 0)
 		box.Size = UDim2.new(0.55, 0, 0.7, 0)
 		box.ZIndex = 1005
+		box.ClipsDescendants = true
 		box.Font = Enum.Font.BuilderSansMedium
 		box.Text = tostring(value)
 		box.PlaceholderText = tostring(d.placeholder or "")
