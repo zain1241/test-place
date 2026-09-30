@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.144")
+print("loaded 0.2.145")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
