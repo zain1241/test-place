@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.145")
+print("loaded 0.2.147")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -3268,12 +3268,13 @@ function farming.farm(...)
 		local z = a[1].Size.Z / 2 - marginZ
 
 		mod.data.actives["position_field"] = string.lower(mod.data.actives["position_field"] or "center")
+		local position = string.lower(mod.data.actives["position_field"] or "center")
 		local ix, ax
 
-		if mod.data.actives["position_field"] == "left" then
+		if position == "left" then
 			ix = -x
 			ax = 0
-		elseif mod.data.actives["position_field"] == "right" then
+		elseif position == "right" then
 			ix = 0
 			ax = x
 		else
