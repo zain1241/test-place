@@ -203,8 +203,8 @@ data.actives = {
 	save_mode = true,
 	
 	--server
-	auto_rejoin = false,
-	server_free = false,
+	auto_rejoin = true,
+	server_free = true,
 	server_private = false,
 	server_mode = nil,
 	private_server_link = "",
