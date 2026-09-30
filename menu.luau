@@ -355,6 +355,9 @@ function menu.main_nav()
 		clicked = true
 
 		if frame.Main.Visible == true then
+			local af = s:FindFirstChild("Nav") and s.Nav:FindFirstChild("NavAutoFarm")
+			if af then af.Visible = true end
+
 			find.tweenservice:Create(frame.Main, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
 				Size = UDim2.new(0, 0, mainsize.Y.Scale, mainsize.Y.Offset)
 			}):Play()
@@ -380,6 +383,9 @@ function menu.main_nav()
 				clicked = false
 			end)
 		else
+			local af = s:FindFirstChild("Nav") and s.Nav:FindFirstChild("NavAutoFarm")
+			if af then af.Visible = false end
+
 			frame.Main.Visible = true
 			frame.Main.Size = UDim2.new(0, 0, mainsize.Y.Scale, mainsize.Y.Offset)
 
@@ -423,6 +429,115 @@ function menu.main_nav()
 	nl.FillDirection = Enum.FillDirection.Vertical
 	nl.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	nl.VerticalAlignment = Enum.VerticalAlignment.Top
+	
+	local afButton = Instance.new("TextButton")
+	afButton.Name = "NavAutoFarm"
+	afButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	afButton.BackgroundTransparency = 0.85
+	afButton.BorderSizePixel = 0
+	afButton.Text = ""
+	afButton.Size = UDim2.new(0.954, 0,0.087, 0)
+	afButton.LayoutOrder = 100
+	afButton.ZIndex = 1004
+	afButton.Visible = false
+	afButton.Parent = n
+	
+	local gradient = Instance.new("UIGradient")
+	gradient.Color = ColorSequence.new(
+		Color3.fromRGB(194, 49, 142), -- #E72EFF
+		Color3.fromRGB(242, 96, 190)  -- #FF4294
+	)
+	gradient.Rotation = 0
+	gradient.Parent = afButton
+
+	gradient.Offset = Vector2.new(-1, 0)
+
+	local shimmer = find.tweenservice:Create(
+		gradient,
+		TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{Offset = Vector2.new(1, 0)}
+	)
+
+	shimmer:Play()
+
+	local afCorner = Instance.new("UICorner")
+	afCorner.CornerRadius = UDim.new(0, 7)
+	afCorner.Parent = afButton
+
+	local afText = Instance.new("TextLabel")
+	afText.Name = "TextLabel"
+	afText.BackgroundTransparency = 1
+	afText.BorderSizePixel = 0
+	afText.Position = UDim2.new(0, 10, 0, 0)
+	afText.Size = UDim2.new(0.62, -10, 1, 0)
+	afText.ZIndex = 1005
+	afText.Font = Enum.Font.BuilderSansBold
+	afText.Text = "Auto Farm"
+	afText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	afText.TextScaled = false
+	afText.TextSize = 15
+	afText.TextXAlignment = Enum.TextXAlignment.Left
+	afText.Parent = afButton
+
+	local afToggle = Instance.new("TextButton")
+	afToggle.Name = "TextButton"
+	afToggle.AnchorPoint = Vector2.new(1, 0.5)
+	afToggle.BackgroundColor3 = Color3.fromRGB(30, 12, 26)
+	afToggle.Interactable = false
+	afToggle.BackgroundTransparency = 0
+	afToggle.AutoButtonColor = false
+	afToggle.BorderSizePixel = 0
+	afToggle.Position = UDim2.new(1, -7, 0.5, 0)
+	afToggle.Size = UDim2.new(0, 18, 0, 18)
+	afToggle.ZIndex = 1005
+	afToggle.Text = ""
+	afToggle.Parent = afButton
+
+	local afToggleCorner = Instance.new("UICorner")
+	afToggleCorner.CornerRadius = UDim.new(0.3, 0)
+	afToggleCorner.Parent = afToggle
+
+	local afCheck = Instance.new("ImageLabel")
+	afCheck.Name = "ImageLabel"
+	afCheck.AnchorPoint = Vector2.new(0.5, 0.5)
+	afCheck.BackgroundTransparency = 1
+	afCheck.BorderSizePixel = 0
+	afCheck.Position = UDim2.new(0.5, 0, 0.5, 0)
+	afCheck.Size = UDim2.new(0.721, 0, 0.721, 0)
+	afCheck.ZIndex = 1006
+	afCheck.Image = "rbxassetid://3642321726"
+	afCheck.ScaleType = Enum.ScaleType.Fit
+	afCheck.Visible = false
+	afCheck.Parent = afToggle
+
+	local function afUpdate()
+		afCheck.Visible = mod.data.actives["auto_farm"] == true
+	end
+	afUpdate()
+
+	afButton.MouseButton1Click:Connect(function()
+		mod.data.actives["auto_farm"] = not (mod.data.actives["auto_farm"] == true)
+		afUpdate()
+		if mod.farming and mod.farming.farm then
+			mod.farming.farm()
+		end
+	end)
+	
+	task.spawn(function()
+		while afButton.Parent do
+			afUpdate()
+			task.wait(0.15)
+		end
+	end)
+	
+	local mainFrame = find.player.PlayerGui:FindFirstChild("ScreenGui")
+		:FindFirstChild("EggHuntLayerVisualOnly")
+		:FindFirstChild("Main")
+
+	afButton.Visible = mainFrame.Visible == false
+	mainFrame:GetPropertyChangedSignal("Visible"):Connect(function()
+		afButton.Visible = mainFrame.Visible == false
+	end)
 
 	local function showsel(name)
 		activeSection = name
@@ -2294,7 +2409,7 @@ function menu.dop_create()
 		end
 	end)
 
-	activeSection = "Home"
+	--activeSection = "Farming"
 
 	for name, page in pairs(sections) do
 		page.Visible = name == activeSection
