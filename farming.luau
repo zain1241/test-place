@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.14")
+print("loaded 0.2.144")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -1832,12 +1832,12 @@ function farming.move(...)
 	end
 
 	local function r(...)
-		if mod.data.actives["auto_farm"] == false then
-			return
-		end
-
 		local a = {...}
 		local part = a[1]
+
+		if part == nil then
+			return
+		end
 
 		if typeof(part) == "string" then
 			local f = workspace:FindFirstChild("FlowerZones")
@@ -1860,14 +1860,16 @@ function farming.move(...)
 		local ix, ax
 
 		if position == "left" then
+			local band = math.max(x * 0.06, 3)
 			ix = -x
-			ax = 0
+			ax = -x + band
 		elseif position == "right" then
-			ix = 0
+			local band = math.max(x * 0.06, 3)
+			ix = x - band
 			ax = x
 		else
-			ix = -x / 3
-			ax = x / 3
+			ix = 0
+			ax = 0
 		end
 
 		local l = Vector3.new(
@@ -1878,7 +1880,6 @@ function farming.move(...)
 
 		return part.CFrame:PointToWorldSpace(l)
 	end
-
 	local function b(...)
 		local a = {...}
 		--print(a[1],a[2],a[3])
