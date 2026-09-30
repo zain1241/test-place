@@ -187,12 +187,27 @@ data.actives = {
 	collect_bubbles = false,
 	bubble_priority = 49,
 	petals = false,
-	wealth_clock = false,
+	wealth_clock = true,
 	mondo = false,
+	sprout_cooldown = 30,
+	hive_choice = "Random",
+	petal_colors = {__init = true, Red = true, Blue = true, White = true, Green = true, Black = true, Yellow = true, Scarlet = true, Cyan = true,
+		Grey = true, Violet = true, Pink = true, Merigold = true, Periwinkle = true,},
+	
 	--pushrooms = false,
 	pushrooms_enabled = false,
 	pushrooms = "All Pushrooms",
 	sprouts = false,
+	mondo_collect_time = 40,
+	mondo_collect_drop = true,
+	save_mode = true,
+	
+	--server
+	auto_rejoin = false,
+	server_free = false,
+	server_private = false,
+	server_mode = nil,
+	private_server_link = "",
 
 	--options
 	hide_decorations = false,
@@ -203,7 +218,7 @@ data.actives = {
 	move_speed = 100,
 
 	--other
-	script_name = "Nectar 0.0.3",
+	script_name = "Nectar 0.0.4",
 	position_script = UDim2.new(0.22, 0, 0.5, 0),
 	walkspeed = 40,
 	autohive = true,
