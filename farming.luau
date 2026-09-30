@@ -15,7 +15,11 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.1.54")
+print("loaded 0.2.1")
+
+if mod.data.actives["hive_choice"] == nil then
+	mod.data.actives["hive_choice"] = "Random"
+end
 
 local find= {
 	renderstepped = game:GetService("RunService").RenderStepped,
@@ -37,30 +41,64 @@ local queue = {
 
 local happenings = workspace:FindFirstChild("Happenings")
 local bloomFolder = happenings and happenings:FindFirstChild("PoppablePlants")
+local invc, tween, afarm, adig, aconvert, atween, track, animwalk, humanoid_walk_speed, p, p1;
+local farmId = 0
 
-local function isOpaque(v)
-	return v ~= nil and v:IsA("BasePart") and v.Transparency <= 0
+local __noclipConn = nil; local PUFF_MAX_DISTANCE = nil; local bubblesReady = false; local lastSproutTime = 0; local MONDO_COLLECT_TIME = 40
+local bubbles = {}; local staticBubbles = {}; local __bboxCache = {}; local __bboxCacheTime = {}
+
+local PUFF_RARITY = {["Common"] = true, ["Rare"] = true, ["Epic"] = true, ["Legendary"] = true, ["Mythic"] = true}
+local PUFF_PRIORITY = {["Mythic"] = 5, ["Legendary"] = 4, ["Epic"] = 3, ["Rare"] = 2, ["Common"] = 1,}
+
+local MONSTER_SAFE_EDGE  = 80; local MONSTER_AVOID_EDGE = 18; local MONSTER_FLEE_DIST  = 22
+
+local PETAL_COLORS = {
+	Red = Color3.fromRGB(249, 34, 34),
+	Blue = Color3.fromRGB(33, 66, 249),
+	White = Color3.fromRGB(249, 249, 249),
+	Green = Color3.fromRGB(35, 232, 5),
+	Black = Color3.fromRGB(11, 11, 11),
+	Yellow = Color3.fromRGB(238, 204, 79),
+	Scarlet = Color3.fromRGB(171, 19, 19),
+	Cyan = Color3.fromRGB(29, 196, 222),
+	Grey = Color3.fromRGB(127, 127, 127),
+	Violet = Color3.fromRGB(94, 38, 177),
+	Pink = Color3.fromRGB(255, 130, 201),
+	Merigold = Color3.fromRGB(218, 168, 28),
+	Periwinkle = Color3.fromRGB(150, 156, 236),
+}
+
+local function getPetalColorName(petal)
+	if not petal or not petal:IsA("BasePart") then return nil end
+	
+	local c = petal.Color
+	for name, ref in pairs(PETAL_COLORS) do
+		if math.abs(c.R - ref.R) < 0.02
+			and math.abs(c.G - ref.G) < 0.02
+			and math.abs(c.B - ref.B) < 0.02
+		then
+			return name
+		end
+	end
+	
+	for name in pairs(PETAL_COLORS) do
+		if string.find(petal.Name, name, 1, true) then
+			return name
+		end
+	end
+
+	return nil
 end
 
-local function getHappenings()
-	return workspace:FindFirstChild("Happenings")
+local function petalAllowed(petal)
+	local filter = farming.getPetalColorFilter()
+	if not filter then return true end
+
+	local colorName = getPetalColorName(petal)
+	if not colorName then return true end
+
+	return filter[colorName] == true
 end
-
-local function getPuffFolder()
-	local h = getHappenings()
-	return h and h:FindFirstChild("Puffshrooms")
-end
-
-local function getSproutFolder()
-	local particles = workspace:FindFirstChild("Particles")
-	return particles and particles:FindFirstChild("Folder2")
-end
-
-local SPROUT_COOLDOWN = 20
-local lastSproutTime = 0
-
-local __bboxCache = {}
-local __bboxCacheTime = {}
 
 local function getFieldBox(field)
 	if not field then return end
@@ -89,74 +127,47 @@ local function isInField(pos, field)
 		and math.abs(p.Z) <= size.Z / 2
 end
 
-local MONDO_SAFE_DIST    = 24
-local MONDO_AVOID_DIST   = 26
-local MONDO_FARM_RADIUS  = 35
-local MONDO_COLLECT_TIME = 40
+function farming.getPetalColorFilter()
+	local f = mod.data.actives["petal_colors"]
+	if type(f) ~= "table" then return nil end
+	return f
+end
 
-local function getMondo()
-	local monsters = workspace:FindFirstChild("Monsters")
-	if not monsters then return nil end
-	for _, m in ipairs(monsters:GetChildren()) do
-		if string.find(m.Name, "Mondo", 1, true) then
-			return m
+local function isOpaque(v)
+	return v ~= nil and v:IsA("BasePart") and v.Transparency <= 0
+end
+
+local function getHappenings()
+	return workspace:FindFirstChild("Happenings")
+end
+
+local function getPuffFolder()
+	local h = getHappenings()
+	return h and h:FindFirstChild("Puffshrooms")
+end
+
+local function getSproutFolder()
+	local particles = workspace:FindFirstChild("Particles")
+	return particles and particles:FindFirstChild("Folder2")
+end
+
+local function findMin(iter, score) -- find min obj in iter by score
+	local best, bestScore
+	for obj in iter do
+		local s = score(obj)
+		if s and (not bestScore or s < bestScore) then
+			best, bestScore = obj, s
 		end
 	end
-	return nil
+	return best
 end
-
-local function getMondoPosition(mondo)
-	if not mondo then return nil end
-	if mondo:IsA("Model") then
-		if mondo.PrimaryPart then return mondo.PrimaryPart.Position end
-		local part = mondo:FindFirstChildWhichIsA("BasePart", true)
-		return part and part.Position
-	end
-	if mondo:IsA("BasePart") then return mondo.Position end
-	return nil
-end
-
-local function getNearestSprout(field, hrp)
-	if not hrp then
-		return nil
-	end
-
-	local sf = workspace:FindFirstChild("Sprouts")
-	if not sf then
-		return nil
-	end
-
-	local nearest
-	local nearestDist
-
-	for _, obj in ipairs(sf:GetChildren()) do
-		if obj.Name == "Sprout" and obj:IsA("BasePart") then
-			local d = (obj.Position - hrp.Position).Magnitude
-
-			if not nearestDist or d < nearestDist then
-				nearest = obj
-				nearestDist = d
-			end
-		end
-	end
-
-	return nearest
-end
-
-local invc, tween, afarm, adig, aconvert, atween, track, animwalk, humanoid_walk_speed, p, p1;
-local farmId = 0
-local __noclipConn = nil
-
-local bubbles = {}
-local staticBubbles = {}
-local bubblesReady = false
 
 local function initBubbles()
 	if bubblesReady then return end
 	local particles = workspace:FindFirstChild("Particles")
 	if not particles then return end
 	bubblesReady = true
-	
+
 	for _, v in ipairs(particles:GetChildren()) do
 		if v:IsA("BasePart") and (v.Name == "Bubble" or v.Name == "GoldBubble") then
 			staticBubbles[v] = true
@@ -186,27 +197,6 @@ local function initBubbles()
 	end)
 end
 
-local function getNearestBubble(field, hrp)
-	initBubbles()
-	if not hrp then return nil end
-
-	local nearest, nearestDistance
-	for bubble in pairs(bubbles) do
-		if not bubble.Parent then
-			bubbles[bubble] = nil
-			continue
-		end
-		if isInField(bubble.Position, field) then
-			local d = (bubble.Position - hrp.Position).Magnitude
-			if not nearestDistance or d < nearestDistance then
-				nearest = bubble
-				nearestDistance = d
-			end
-		end
-	end
-	return nearest
-end
-
 local function getBloomPosition(bloom)
 	local core = bloom and bloom:FindFirstChild("CorePart", true)
 	if core and core:IsA("BasePart") then
@@ -214,42 +204,245 @@ local function getBloomPosition(bloom)
 	end
 end
 
-local function getNearestBloom(field, hrp)
-	if not hrp then
-		return nil
+local function getPuffRarity(puff)
+	for rar in pairs(PUFF_RARITY) do
+		if string.find(puff.Name, rar, 1, true) then
+			return rar
+		end
 	end
+	local attr = puff:GetAttribute("Rarity") or puff:GetAttribute("rarity")
+	if type(attr) == "string" then
+		for rar in pairs(PUFF_RARITY) do
+			if string.find(attr, rar, 1, true) then
+				return rar
+			end
+		end
+	end
+	return nil
+end
+
+local function getPuffRoot(puff)
+	return puff.PrimaryPart or puff:FindFirstChild("PuffballStem", true) or puff:FindFirstChildWhichIsA("BasePart", true)
+end
+
+-------------------------------------------------------------
+
+local function getNearestSprout(field, hrp)
+	if not hrp then return nil end
+	local sf = workspace:FindFirstChild("Sprouts")
+	if not sf then return nil end
+
+	return findMin(ipairs(sf:GetChildren()), function(obj)
+		if obj.Name ~= "Sprout" or not obj:IsA("BasePart") then return nil end
+		return (obj.Position - hrp.Position).Magnitude
+	end)
+end
+
+local function getNearestBubble(field, hrp)
+	initBubbles()
+	if not hrp then return nil end
+	return findMin(pairs(bubbles), function(bubble)
+		if not bubble.Parent then bubbles[bubble] = nil return nil end
+		if not isInField(bubble.Position, field) then return nil end
+		return (bubble.Position - hrp.Position).Magnitude
+	end)
+end
+
+local function getNearestBloom(field, hrp)
+	if not hrp then return nil end
 
 	local happenings = getHappenings()
 	local folder = happenings and happenings:FindFirstChild("PoppablePlants")
+	if not folder then return nil end
 
-	if not folder then
-		return nil
+	return findMin(ipairs(folder:GetChildren()), function(bloom)
+		if not bloom:IsA("Model") or bloom.Name ~= "Bloom" then return nil end
+
+		local pos = getBloomPosition(bloom)
+		if not pos or not isInField(pos, field) then return nil end
+
+		local dx = pos.X - hrp.Position.X
+		local dz = pos.Z - hrp.Position.Z
+		return math.sqrt(dx * dx + dz * dz)
+	end)
+end
+
+local function getNearestPuff(field, hrp, filter)
+	local pf = getPuffFolder()
+	if not pf or not hrp then return nil end
+
+	return findMin(ipairs(pf:GetChildren()), function(puff)
+		if not puff:IsA("Model") then return nil end
+
+		local rarity = getPuffRarity(puff)
+		if filter ~= "All Pushrooms" and rarity ~= filter then return nil end
+
+		local root = getPuffRoot(puff)
+		if not root then return nil end
+
+		local d = (root.Position - hrp.Position).Magnitude
+		if PUFF_MAX_DISTANCE and d > PUFF_MAX_DISTANCE then return nil end
+
+		local priority = (rarity and PUFF_PRIORITY[rarity]) or 0
+		return d - priority * 1e6
+	end)
+end
+
+function farming.get_pollen_info()
+	local pg = find.player:FindFirstChild("PlayerGui")
+	if not pg then return nil end
+
+	local screenGui = pg:FindFirstChild("ScreenGui")
+	local meterHud = screenGui and screenGui:FindFirstChild("MeterHUD")
+	local pollenMeter = meterHud and meterHud:FindFirstChild("PollenMeter")
+	local bar = pollenMeter and pollenMeter:FindFirstChild("Bar")
+	local label = bar and bar:FindFirstChild("TextLabel")
+
+	if not label or not label:IsA("TextLabel") then return nil end
+
+	local current, max = string.match(label.Text, "([%d,]+)/([%d,]+)")
+	if not current or not max then return nil end
+
+	current = tonumber((string.gsub(current, ",", ""))) or 0
+	max = tonumber((string.gsub(max, ",", ""))) or 0
+
+	if max <= 0 then return nil end
+
+	return {
+		pollen = current,
+		max = max,
+		percent = (current / max) * 100,
+	}
+end
+
+farming.get_pollen_from_gui = farming.get_pollen_info -- deprecated
+
+local function safeCleanup(rootPart, clearMove)
+	if rootPart and rootPart.Parent then pcall(function() rootPart.Anchored = false end) end
+	pcall(function() farming.inv(false) end)
+	if clearMove ~= false then mod.data.actives["move"] = false end
+end
+
+local function getMondo()
+	local monsters = workspace:FindFirstChild("Monsters")
+	if not monsters then return nil end
+	for _, m in ipairs(monsters:GetChildren()) do
+		if string.find(m.Name, "Mondo", 1, true) then
+			return m
+		end
 	end
+	return nil
+end
 
-	local nearest, nearestDistance
+local function getMondoPosition(mondo)
+	if not mondo then return nil end
+	if mondo:IsA("Model") then
+		if mondo.PrimaryPart then return mondo.PrimaryPart.Position end
+		local part = mondo:FindFirstChildWhichIsA("BasePart", true)
+		return part and part.Position
+	end
+	if mondo:IsA("BasePart") then return mondo.Position end
+	return nil
+end
 
-	for _, bloom in ipairs(folder:GetChildren()) do
-		if bloom:IsA("Model") and bloom.Name == "Bloom" then
-			local pos = getBloomPosition(bloom)
-			if pos and isInField(pos, field) then
-				local target = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
-				local d = (target - hrp.Position).Magnitude
-				if not nearestDistance or d < nearestDistance then
-					nearest = bloom
-					nearestDistance = d
+local function getMonsterRadius(monster)
+	if not monster then return 15 end
+	local ok, _, size = pcall(function()
+		return monster:GetBoundingBox()
+	end)
+	if ok and size then
+		return math.max(size.X, size.Z) / 2
+	end
+	return 15
+end
+
+local function getMonsterPosition(monster)
+	if not monster then return nil end
+	if monster:IsA("Model") then
+		if monster.PrimaryPart then return monster.PrimaryPart.Position end
+		local p = monster:FindFirstChildWhichIsA("BasePart", true)
+		return p and p.Position
+	end
+	if monster:IsA("BasePart") then return monster.Position end
+	return nil
+end
+
+local function getThreateningMonster(hrp)
+	if not hrp then return nil end
+	local monsters = workspace:FindFirstChild("Monsters")
+	if not monsters then return nil end
+
+	local playerChar = find.player.Character
+	if not playerChar then return nil end
+
+	local best, bestEdge
+	for _, monster in ipairs(monsters:GetChildren()) do
+		local t = monster:FindFirstChild("Target")
+		if t and t:IsA("ObjectValue") and t.Value == playerChar then
+			local mp = getMonsterPosition(monster)
+			if mp then
+				local r = getMonsterRadius(monster)
+				local d = (hrp.Position - mp).Magnitude
+				local edge = d - r
+				if not bestEdge or edge < bestEdge then
+					bestEdge = edge
+					best = {
+						monster = monster,
+						mp = mp,
+						radius = r,
+						distance = d,
+						realDist = edge,
+					}
 				end
 			end
 		end
 	end
-	return nearest
+	return best
+end
+
+local function getFleeTarget(hrp)
+	if mod.data.actives["save_mode"] ~= true then return nil end
+	if not hrp then return nil end
+
+	local threat = getThreateningMonster(hrp)
+	if not threat then return nil end
+	if threat.realDist >= MONSTER_AVOID_EDGE then return nil end
+	
+	local mv = Vector3.zero
+	pcall(function()
+		local pp = threat.monster.PrimaryPart
+			or threat.monster:FindFirstChildWhichIsA("BasePart", true)
+		if pp then mv = pp.AssemblyLinearVelocity end
+	end)
+
+	local toMe = hrp.Position - threat.mp
+	toMe = Vector3.new(toMe.X, 0, toMe.Z)
+
+	local chasing = false
+	if mv.Magnitude > 0.5 and toMe.Magnitude > 0.1 then
+		if mv.Unit:Dot(toMe.Unit) > 0.1 then
+			chasing = true
+		end
+	end
+	
+	if threat.realDist > MONSTER_SAFE_EDGE and not chasing then
+		return nil
+	end
+
+	local away
+	if threat.distance > 0.1 then
+		away = (hrp.Position - threat.mp).Unit
+	else
+		away = Vector3.new(1, 0, 0)
+	end
+
+	local push = math.max(MONSTER_SAFE_EDGE - threat.realDist, 0) + MONSTER_FLEE_DIST
+	local raw = hrp.Position + away * push
+	return Vector3.new(raw.X, hrp.Position.Y, raw.Z)
 end
 
 local function isPetal(v)
-	return v
-		and v:IsA("BasePart")
-		and v.Name == "PetalPart"
-		and v.Parent == workspace:FindFirstChild("Particles")
-		and v.Transparency <= 0
+	return v and v:IsA("BasePart") and v.Name == "PetalPart" and v.Parent == workspace:FindFirstChild("Particles") and v.Transparency <= 0 and petalAllowed(v)
 end
 
 local function getBestPetal(tracked, hrp)
@@ -277,14 +470,13 @@ function farming.farmPetalBloom(field, id)
 	local character = find.player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
-	if not humanoid or not hrp then return false end
-
-	local bloom = getNearestBloom(field, hrp)
-	if not bloom then return false end
 	
-	if not isInField(hrp.Position, field) then
-		return false
-	end
+	if not humanoid or not hrp then return false end
+	
+	local bloom = getNearestBloom(field, hrp)
+	
+	if not bloom then return false end
+	if not isInField(hrp.Position, field) then return false end
 
 	local origin = getBloomPosition(bloom)
 	if not origin then return false end
@@ -300,19 +492,14 @@ function farming.farmPetalBloom(field, id)
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
 	
 	local function phaseEnabled()
-		return id == farmId
-			and mod.data.actives["auto_farm"] == true
-			and mod.data.actives["petals"] == true
-			and not mod.data.actives["converting"]
+		return id == farmId and mod.data.actives["auto_farm"] == true and mod.data.actives["petals"] == true and not mod.data.actives["converting"]
 	end
 	
 	local function bloomAlive()
 		local happenings = getHappenings()
 		local folder = happenings and happenings:FindFirstChild("PoppablePlants")
-
-		return phaseEnabled()
-			and folder ~= nil
-			and bloom.Parent == folder
+		
+		return phaseEnabled() and folder ~= nil and bloom.Parent == folder
 	end
 	
 	local approachStart = tick()
@@ -334,51 +521,26 @@ function farming.farmPetalBloom(field, id)
 		task.wait(0.01)
 	end
 	
-	local circleRadius = 7
-	local circleStart = tick()
-	local breakTimeout = 30
-	local spin = 1
-	local lastActivate = 0
+	local circleRadius = 7; local circleStart = tick(); local breakTimeout = 30; local spin = 1; local lastActivate = 0
 
 	while bloomAlive() and (tick() - circleStart) < breakTimeout do
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
 
-		if not humanoid or not hrp or hrp.Anchored then
-			break
-		end
+		if not humanoid or not hrp or hrp.Anchored then break end
 
 		local pos = getBloomPosition(bloom)
-		if not pos then
-			break
-		end
+		if not pos then break end
 
-		local center = Vector3.new(
-			pos.X,
-			hrp.Position.Y,
-			pos.Z
-		)
-
-		local offset = Vector3.new(
-			hrp.Position.X - center.X,
-			0,
-			hrp.Position.Z - center.Z
-		)
-
+		local center = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
+		local offset = Vector3.new(hrp.Position.X - center.X, 0, hrp.Position.Z - center.Z)
 		local dist = offset.Magnitude
 
-		if dist < 0.1 then
-			offset = Vector3.new(1, 0, 0)
-			dist = 1
-		end
+		if dist < 0.1 then offset = Vector3.new(1, 0, 0) dist = 1 end
 
 		local radial = offset.Unit
-		local tangent = Vector3.new(
-			-radial.Z * spin,
-			0,
-			radial.X * spin
-		)
+		local tangent = Vector3.new(-radial.Z * spin, 0, radial.X * spin)
 
 		local moveDir
 
@@ -391,12 +553,7 @@ function farming.farmPetalBloom(field, id)
 		end
 
 		local waypoint = hrp.Position + moveDir * 8
-		waypoint = Vector3.new(
-			waypoint.X,
-			hrp.Position.Y,
-			waypoint.Z
-		)
-
+		waypoint = Vector3.new(waypoint.X, hrp.Position.Y, waypoint.Z)
 		humanoid.WalkSpeed = speed
 
 		pcall(function()
@@ -412,9 +569,7 @@ function farming.farmPetalBloom(field, id)
 		end
 	end)
 	
-	local tracked = {}
-	local handled = {}
-	local lastSpawn = os.clock()
+	local tracked = {}; local handled = {}; local lastSpawn = os.clock()
 
 	local conn
 	conn = particles.ChildAdded:Connect(function(v)
@@ -428,8 +583,7 @@ function farming.farmPetalBloom(field, id)
 		end
 	end)
 
-	local petalStart = os.clock()
-	local petalTimeout = petalStart + 4
+	local petalStart = os.clock(); local petalTimeout = petalStart + 4
 
 	while phaseEnabled() and os.clock() < petalTimeout do
 		character = find.player.Character
@@ -515,20 +669,7 @@ end
 
 function farming.farmMondo(field, id)
 	local function enabled()
-		return id == farmId
-			and mod.data.actives["auto_farm"] == true
-			and mod.data.actives["mondo"] == true
-			and not mod.data.actives["converting"]
-	end
-
-	local function safeCleanup(rootPart)
-		if rootPart then
-			pcall(function()
-				if rootPart.Parent then rootPart.Anchored = false end
-			end)
-		end
-		pcall(function() farming.inv(false) end)
-		mod.data.actives["move"] = false
+		return id == farmId and mod.data.actives["auto_farm"] == true and mod.data.actives["mondo"] == true and not mod.data.actives["converting"]
 	end
 
 	local character = find.player.Character
@@ -541,8 +682,7 @@ function farming.farmMondo(field, id)
 
 	local mondoPos = getMondoPosition(mondo)
 	if not mondoPos then return false end
-
-	-- Границы Mountain Top
+	
 	local mondoField = getMondoField()
 	local fieldCF, fieldSize
 	if mondoField then
@@ -560,8 +700,7 @@ function farming.farmMondo(field, id)
 	local function inMondoField(pos)
 		if not fieldCF or not fieldSize then return true end
 		local p = fieldCF:PointToObjectSpace(pos)
-		return math.abs(p.X) <= fieldSize.X / 2 - FIELD_MARGIN
-			and math.abs(p.Z) <= fieldSize.Z / 2 - FIELD_MARGIN
+		return math.abs(p.X) <= fieldSize.X / 2 - FIELD_MARGIN and math.abs(p.Z) <= fieldSize.Z / 2 - FIELD_MARGIN
 	end
 
 	local function clampToMondoField(pos)
@@ -569,11 +708,7 @@ function farming.farmMondo(field, id)
 		local p = fieldCF:PointToObjectSpace(pos)
 		local limX = fieldSize.X / 2 - FIELD_MARGIN
 		local limZ = fieldSize.Z / 2 - FIELD_MARGIN
-		p = Vector3.new(
-			math.clamp(p.X, -limX, limX),
-			p.Y,
-			math.clamp(p.Z, -limZ, limZ)
-		)
+		p = Vector3.new(math.clamp(p.X, -limX, limX), p.Y, math.clamp(p.Z, -limZ, limZ))
 		return fieldCF:PointToWorldSpace(p)
 	end
 
@@ -591,15 +726,9 @@ function farming.farmMondo(field, id)
 
 	local startRoot = hrp
 	local startPosition = startRoot.Position
-
-	-- Точка прилёта — случайная вокруг чикена, но зажатая в поле
 	local angle = find.random:NextNumber(0, math.pi * 2)
 	local r = find.random:NextNumber(30, 45)
-	local rawTarget = Vector3.new(
-		mondoPos.X + math.cos(angle) * r,
-		mondoPos.Y + 5,
-		mondoPos.Z + math.sin(angle) * r
-	)
+	local rawTarget = Vector3.new(mondoPos.X + math.cos(angle) * r, mondoPos.Y + 5, mondoPos.Z + math.sin(angle) * r)
 	local clampedTarget = clampToMondoField(rawTarget)
 	local target = Vector3.new(clampedTarget.X, rawTarget.Y, clampedTarget.Z)
 
@@ -665,8 +794,7 @@ function farming.farmMondo(field, id)
 	local lastRandom = 0
 	local randomInterval = 0.6
 	local currentTarget = nil
-
-	-- Дистанции считаем ОТ КРАЯ чикена
+	
 	local SAFE_EDGE = 10   -- ближе этого — срочно отбегаем
 	local AVOID_EDGE = 16   -- ближе этого + чикен движется к нам — тоже отбегаем
 	local FARM_MIN_EDGE = 18   -- минимальный отступ от края во время бега
@@ -680,13 +808,10 @@ function farming.farmMondo(field, id)
 
 		local mp = getMondoPosition(mondo)
 		if not mp then break end
-
-		-- Динамический радиус чикена
+		
 		local mondoR = getMondoRadius(mondo)
 		local dist = (hrp.Position - mp).Magnitude
-		local realDist = dist - mondoR   -- расстояние от края чикена
-
-		-- Скорость чикена
+		local realDist = dist - mondoR
 		local mv = Vector3.zero
 		pcall(function()
 			if mondo:IsA("Model") then
@@ -696,8 +821,7 @@ function farming.farmMondo(field, id)
 				mv = mondo.AssemblyLinearVelocity
 			end
 		end)
-
-		-- 🟡 чикен бежит на нас?
+		
 		local chickenChasing = false
 		if mv.Magnitude > 0.5 and realDist < AVOID_EDGE then
 			local toMe = (hrp.Position - mp)
@@ -706,8 +830,7 @@ function farming.farmMondo(field, id)
 				chickenChasing = true
 			end
 		end
-
-		-- 🔴 Жёсткая защита: близко к краю ИЛИ чикен бежит на нас в опасной зоне
+		
 		if realDist < SAFE_EDGE or chickenChasing then
 			local away
 			if dist > 0.1 then
@@ -715,13 +838,11 @@ function farming.farmMondo(field, id)
 			else
 				away = Vector3.new(1, 0, 0)
 			end
-
-			-- Сила отталкивания зависит от того, насколько мы близко
+			
 			local pushStrength = math.max(SAFE_EDGE - realDist, 0) + 18
 			local rawTarget2 = hrp.Position + away * pushStrength
 			local safeTarget2 = clampToMondoField(rawTarget2)
-
-			-- Если упёрлись в границу поля — уходим по касательной
+			
 			if (safeTarget2 - hrp.Position).Magnitude < 5 then
 				local tangent = Vector3.new(-away.Z, 0, away.X)
 				local toCenter = (mp - hrp.Position)
@@ -744,31 +865,20 @@ function farming.farmMondo(field, id)
 			task.wait(0.05)
 			continue
 		end
-
-		-- 🟢 Рандомный бег в безопасной зоне
+		
 		local needNew = (not currentTarget)
 			or (tick() - lastRandom > randomInterval)
 			or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 3)
 
 		if needNew then
 			local a2 = find.random:NextNumber(0, math.pi * 2)
-			-- Радиус от центра = mondoR + отступ от края
 			local rr = find.random:NextNumber(mondoR + FARM_MIN_EDGE, mondoR + FARM_MAX_EDGE)
-			local rawTarget4 = Vector3.new(
-				mp.X + math.cos(a2) * rr,
-				hrp.Position.Y,
-				mp.Z + math.sin(a2) * rr
-			)
+			local rawTarget4 = Vector3.new(mp.X + math.cos(a2) * rr, hrp.Position.Y, mp.Z + math.sin(a2) * rr )
 			local safeTarget4 = clampToMondoField(rawTarget4)
-			currentTarget = Vector3.new(
-				safeTarget4.X,
-				hrp.Position.Y,
-				safeTarget4.Z
-			)
+			currentTarget = Vector3.new(safeTarget4.X, hrp.Position.Y, safeTarget4.Z)
 			lastRandom = tick()
 		end
 
-		-- Проверяем, что цель в допустимой зоне ОТ КРАЯ, а не от центра
 		local distToCurrentCenter = (Vector3.new(currentTarget.X, 0, currentTarget.Z) - Vector3.new(mp.X, 0, mp.Z)).Magnitude
 		local currentEdge = distToCurrentCenter - mondoR
 		if currentEdge < FARM_MIN_EDGE - 4 or currentEdge > FARM_MAX_EDGE + 10 then
@@ -782,151 +892,17 @@ function farming.farmMondo(field, id)
 		task.wait(0.05)
 	end
 
-	---- ===== Основной цикл =====
-	--local farmStart = tick()
-	--local farmTimeout = 400
-	--local lastRandom = 0
-	--local randomInterval = 0.6
-	--local currentTarget = nil
-
-	--while enabled() and mondo.Parent ~= nil and (tick() - farmStart) < farmTimeout do
-	--	character = find.player.Character
-	--	humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	--	hrp = character and character:FindFirstChild("HumanoidRootPart")
-	--	if not humanoid or not hrp or hrp.Anchored then break end
-
-	--	local mp = getMondoPosition(mondo)
-	--	if not mp then break end
-
-	--	-- Динамический радиус чикена
-	--	local mondoR = getMondoRadius(mondo)
-	--	local dist = (hrp.Position - mp).Magnitude
-	--	local realDist = dist - mondoR  -- расстояние до края чикена
-
-	--	local safeDist = mondoR + 14
-	--	local avoidDist = mondoR + 20
-	--	local farmMin = mondoR + 16
-	--	local farmMax = mondoR + 32
-
-	--	-- 🔴 Жёсткая защита: если внутри чикена — срочно отбегаем
-	--	if realDist < safeDist then
-	--		local away
-	--		if dist > 0.1 then
-	--			away = (hrp.Position - mp).Unit
-	--		else
-	--			away = Vector3.new(1, 0, 0)
-	--		end
-
-	--		local rawTarget2 = hrp.Position + away * 30
-	--		local safeTarget2 = clampToMondoField(rawTarget2)
-
-	--		-- если упёрлись в границу поля — уходим по касательной
-	--		if (safeTarget2 - hrp.Position).Magnitude < 5 then
-	--			local tangent = Vector3.new(-away.Z, 0, away.X)
-	--			local toCenter = (mp - hrp.Position)
-	--			toCenter = Vector3.new(toCenter.X, 0, toCenter.Z)
-	--			if toCenter.Magnitude > 0.1 and tangent:Dot(toCenter.Unit) < 0 then
-	--				tangent = -tangent
-	--			end
-	--			rawTarget2 = hrp.Position + tangent * 25
-	--			safeTarget2 = clampToMondoField(rawTarget2)
-	--		end
-
-	--		humanoid.WalkSpeed = speed
-	--		humanoid:MoveTo(Vector3.new(
-	--			safeTarget2.X,
-	--			hrp.Position.Y,
-	--			safeTarget2.Z
-	--			))
-	--		currentTarget = nil
-	--		lastRandom = tick()
-	--		task.wait(0.05)
-	--		continue
-	--	end
-
-	--	-- 🟡 Мягкая защита: чикен движется к нам
-	--	local mv = Vector3.zero
-	--	pcall(function()
-	--		if mondo:IsA("Model") then
-	--			local pp = mondo.PrimaryPart or mondo:FindFirstChildWhichIsA("BasePart", true)
-	--			if pp then mv = pp.AssemblyLinearVelocity end
-	--		elseif mondo:IsA("BasePart") then
-	--			mv = mondo.AssemblyLinearVelocity
-	--		end
-	--	end)
-
-	--	if mv.Magnitude > 0.5 and realDist < avoidDist then
-	--		local toMe = (hrp.Position - mp)
-	--		toMe = Vector3.new(toMe.X, 0, toMe.Z)
-	--		if toMe.Magnitude > 0.1 and mv.Unit:Dot(toMe.Unit) > 0.1 then
-	--			-- чикен бежит на нас
-	--			local away = toMe.Unit
-	--			local rawTarget3 = hrp.Position + away * 25
-	--			local safeTarget3 = clampToMondoField(rawTarget3)
-
-	--			if (safeTarget3 - hrp.Position).Magnitude < 5 then
-	--				-- некуда бежать напрямую — обходим сбоку
-	--				local tangent = Vector3.new(-away.Z, 0, away.X)
-	--				rawTarget3 = hrp.Position + tangent * 22
-	--				safeTarget3 = clampToMondoField(rawTarget3)
-	--			end
-
-	--			humanoid.WalkSpeed = speed
-	--			humanoid:MoveTo(Vector3.new(
-	--				safeTarget3.X,
-	--				hrp.Position.Y,
-	--				safeTarget3.Z
-	--				))
-	--			currentTarget = nil
-	--			lastRandom = tick()
-	--			task.wait(0.05)
-	--			continue
-	--		end
-	--	end
-
-	--	-- Рандомный бег в безопасной зоне
-	--	local needNew = (not currentTarget)
-	--		or (tick() - lastRandom > randomInterval)
-	--		or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 3)
-
-	--	if needNew then
-	--		local a2 = find.random:NextNumber(0, math.pi * 2)
-	--		local rr = find.random:NextNumber(farmMin, farmMax)
-	--		local rawTarget4 = Vector3.new(
-	--			mp.X + math.cos(a2) * rr,
-	--			hrp.Position.Y,
-	--			mp.Z + math.sin(a2) * rr
-	--		)
-	--		local safeTarget4 = clampToMondoField(rawTarget4)
-	--		currentTarget = Vector3.new(
-	--			safeTarget4.X,
-	--			hrp.Position.Y,
-	--			safeTarget4.Z
-	--		)
-	--		lastRandom = tick()
-	--	end
-
-	--	-- Дополнительная проверка: если цель стала небезопасной — сброс
-	--	local distToCurrent = (Vector3.new(currentTarget.X, 0, currentTarget.Z) - Vector3.new(mp.X, 0, mp.Z)).Magnitude
-	--	if distToCurrent < farmMin or distToCurrent > farmMax + 10 then
-	--		currentTarget = nil
-	--		task.wait(0.05)
-	--		continue
-	--	end
-
-	--	humanoid.WalkSpeed = speed
-	--	humanoid:MoveTo(currentTarget)
-	--	task.wait(0.05)
-	--end
-
 	safeCleanup(nil)
 	mod.data.actives["move"] = true
-
-	-- ===== Сбор токенов 40 сек =====
+	
+	--collect tokens
 	local collectStart = tick()
 	local handled = {}
 
-	while enabled() and (tick() - collectStart) < MONDO_COLLECT_TIME do
+	local collectTime = tonumber(mod.data.actives["mondo_collect_time"]) or MONDO_COLLECT_TIME
+	local collectDrop = mod.data.actives["mondo_collect_drop"] ~= false
+
+	while collectDrop and enabled() and (tick() - collectStart) < collectTime do
 		character = find.player.Character
 		humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -976,7 +952,7 @@ function farming.farmMondo(field, id)
 
 	mod.data.actives["move"] = false
 
-	-- ===== Возврат на поле =====
+	--return to field
 	local returnField = field
 
 	if not returnField then
@@ -1000,45 +976,19 @@ function farming.farmMondo(field, id)
 
 		local retStart = tick()
 
-		while id == farmId
-			and mod.data.actives["auto_farm"] == true
-			and not mod.data.actives["converting"]
-			and mod.data.actives["move"] == true
-			and (tick() - retStart) < 30
-		do
+		while id == farmId and mod.data.actives["auto_farm"] == true and not mod.data.actives["converting"] and mod.data.actives["move"] == true and (tick() - retStart) < 30 do
 			task.wait()
 		end
 
 		mod.data.actives["move"] = false
 	end
-
+	
 	return true
 end
 
 function farming.farmSprout(field, id)
 	local function enabled()
-		return id == farmId
-			and mod.data.actives["auto_farm"] == true
-			and mod.data.actives["sprouts"] == true
-			and not mod.data.actives["converting"]
-	end
-
-	local function safeCleanup(rootPart, clearMove)
-		if rootPart then
-			pcall(function()
-				if rootPart.Parent then
-					rootPart.Anchored = false
-				end
-			end)
-		end
-
-		pcall(function()
-			farming.inv(false)
-		end)
-
-		if clearMove ~= false then
-			mod.data.actives["move"] = false
-		end
+		return id == farmId and mod.data.actives["auto_farm"] == true and mod.data.actives["sprouts"] == true and not mod.data.actives["converting"]
 	end
 
 	local function safeCancelTween()
@@ -1055,7 +1005,6 @@ function farming.farmSprout(field, id)
 
 	local sprout = getNearestSprout(field, hrp)
 	if not sprout then return false end
-
 	if not sprout.Parent then return false end
 
 	mod.data.actives["move"] = true
@@ -1072,11 +1021,7 @@ function farming.farmSprout(field, id)
 
 	local startRoot = hrp
 	local startPosition = startRoot.Position
-	local target = sprout.Position + Vector3.new(
-		find.random:NextNumber(-3, 3),
-		2,
-		find.random:NextNumber(-3, 3)
-	)
+	local target = sprout.Position + Vector3.new(find.random:NextNumber(-3, 3), 2, find.random:NextNumber(-3, 3))
 
 	local distance = (startRoot.Position - target).Magnitude
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
@@ -1157,26 +1102,19 @@ function farming.farmSprout(field, id)
 	if not humanoid or not hrp then return false end
 
 	local pp = hrp.Position
-	if pp.X ~= pp.X or pp.Y ~= pp.Y or pp.Z ~= pp.Z
-		or math.abs(pp.X) == math.huge
-		or math.abs(pp.Y) == math.huge
-		or math.abs(pp.Z) == math.huge
-	then
+	if pp.X ~= pp.X or pp.Y ~= pp.Y or pp.Z ~= pp.Z or math.abs(pp.X) == math.huge or math.abs(pp.Y) == math.huge or math.abs(pp.Z) == math.huge then
 		pcall(function() hrp.CFrame = CFrame.new(startPosition) end)
 		safeCleanup(nil)
 		return false
 	end
 	
-	--local tool = character:FindFirstChildOfClass("Tool")
 	local circleRadius = 7
 	local circleStart = tick()
 	local breakTimeout = 30
 	local spin = 1
-	--local lastActivate = 0
 	
 	task.wait(.4)
 	farming.autosprinkler(true)
-
 	local currentAngle = nil
 
 	while enabled() and sprout.Parent ~= nil and (tick() - circleStart) < breakTimeout do
@@ -1188,17 +1126,12 @@ function farming.farmSprout(field, id)
 			break
 		end
 
-		local center = Vector3.new(
-			sprout.Position.X,
-			hrp.Position.Y,
-			sprout.Position.Z
-		)
+		local center = Vector3.new(sprout.Position.X, hrp.Position.Y, sprout.Position.Z)
 
 		local dx = hrp.Position.X - center.X
 		local dz = hrp.Position.Z - center.Z
 		local dist = math.sqrt(dx * dx + dz * dz)
-
-		-- Инициализация угла: либо из текущей позиции, либо случайно
+		
 		if not currentAngle then
 			if dist > 0.5 then
 				currentAngle = math.atan2(dz, dx)
@@ -1206,23 +1139,16 @@ function farming.farmSprout(field, id)
 				currentAngle = find.random:NextNumber(0, math.pi * 2)
 			end
 		end
-
-		-- Плавный advance по кругу
+		
 		currentAngle = currentAngle + 0.35 * spin
-
-		-- Если слишком далеко от круга — сначала вернуться на окружность
+		
 		if dist > circleRadius + 2 then
 			currentAngle = math.atan2(dz, dx)
 		elseif dist < circleRadius - 2 then
 			currentAngle = math.atan2(dz, dx)
 		end
 
-		local target = Vector3.new(
-			center.X + math.cos(currentAngle) * circleRadius,
-			hrp.Position.Y,
-			center.Z + math.sin(currentAngle) * circleRadius
-		)
-
+		local target = Vector3.new(center.X + math.cos(currentAngle) * circleRadius, hrp.Position.Y, center.Z + math.sin(currentAngle) * circleRadius)
 		humanoid.WalkSpeed = speed
 
 		pcall(function()
@@ -1238,11 +1164,11 @@ function farming.farmSprout(field, id)
 		end
 	end)
 
-	pcall(function()
-		if humanoid then
-			humanoid:Move(Vector3.zero, false)
-		end
-	end)
+	--pcall(function()
+	--	if humanoid then
+	--		humanoid:Move(Vector3.zero, false)
+	--	end
+	--end)
 
 	character = find.player.Character
 	humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -1315,11 +1241,7 @@ function farming.farmSprout(field, id)
 
 	if field and field.Parent then
 		farming.move("flowerzones", speed, field.Name)
-		while id == farmId
-			and mod.data.actives["auto_farm"] == true
-			and not mod.data.actives["converting"]
-			and mod.data.actives["move"] == true
-		do
+		while id == farmId and mod.data.actives["auto_farm"] == true and not mod.data.actives["converting"] and mod.data.actives["move"] == true do
 			task.wait()
 		end
 	end
@@ -1328,126 +1250,24 @@ function farming.farmSprout(field, id)
 	return true
 end
 
-local PUFF_RARITY = {
-	["Common"] = true,
-	["Rare"] = true,
-	["Epic"] = true,
-	["Legendary"] = true,
-	["Mythic"] = true,
-}
-
-local PUFF_PRIORITY = {
-	["Mythic"]    = 5,
-	["Legendary"] = 4,
-	["Epic"]      = 3,
-	["Rare"]      = 2,
-	["Common"]    = 1,
-}
-
-local PUFF_MAX_DISTANCE = nil
-
-local function getPuffRarity(puff)
-	for rar in pairs(PUFF_RARITY) do
-		if string.find(puff.Name, rar, 1, true) then
-			return rar
-		end
-	end
-	local attr = puff:GetAttribute("Rarity") or puff:GetAttribute("rarity")
-	if type(attr) == "string" then
-		for rar in pairs(PUFF_RARITY) do
-			if string.find(attr, rar, 1, true) then
-				return rar
-			end
-		end
-	end
-	return nil
-end
-
-local function getPuffRoot(puff)
-	return puff.PrimaryPart
-		or puff:FindFirstChild("PuffballStem", true)
-		or puff:FindFirstChildWhichIsA("BasePart", true)
-end
-
-local function getNearestPuff(field, hrp, filter)
-	local pf = getPuffFolder()
-	if not pf or not hrp then
-		return nil
-	end
-	
-	local candidates = {}
-
-	for _, puff in ipairs(pf:GetChildren()) do
-		if puff:IsA("Model") then
-			local rarity = getPuffRarity(puff)
-			local accept = (filter == "All Pushrooms") or (rarity == filter)
-			if accept then
-				local root = getPuffRoot(puff)
-				if root then
-					local d = (root.Position - hrp.Position).Magnitude
-					if not PUFF_MAX_DISTANCE or d <= PUFF_MAX_DISTANCE then
-						table.insert(candidates, {
-							puff = puff,
-							dist = d,
-							priority = rarity and PUFF_PRIORITY[rarity] or 0,
-							rarity = rarity,
-						})
-					end
-				end
-			end
-		end
-	end
-
-	if #candidates == 0 then
-		return nil
-	end
-	
-	table.sort(candidates, function(a, b)
-		if a.priority ~= b.priority then
-			return a.priority > b.priority
-		end
-		return a.dist < b.dist
-	end)
-
-	return candidates[1].puff
-end
-
 local function isPuffLoot(v)
-	if not v or not v:IsA("BasePart") then
-		return false
-	end
-
-	if v.Name == "PuffballStem" or v.Name == "Puffball" then
-		return false
-	end
-
-	if v.Transparency > 0 then
-		return false
-	end
+	if not v or not v:IsA("BasePart") then return false end
+	if v.Name == "PuffballStem" or v.Name == "Puffball" then return false end
+	if v.Transparency > 0 then return false end
 
 	return v.Parent == workspace:FindFirstChild("Collectibles") and v:FindFirstChildWhichIsA("Decal") ~= nil
 end
 
 local function findLootNear(pos, radius, ignored)
-	if not pos then
-		return nil
-	end
+	if not pos then return nil end
 
 	local collectibles = workspace:FindFirstChild("Collectibles")
-	if not collectibles then
-		return nil
-	end
-
-	local best
-	local bestDist
+	if not collectibles then return nil end
+	local best; local bestDist
 
 	for _, v in ipairs(collectibles:GetChildren()) do
-		if isPuffLoot(v)
-			and not (ignored and ignored[v])
-			and v.Parent
-		then
+		if isPuffLoot(v) and not (ignored and ignored[v]) and v.Parent then
 			local d = (v.Position - pos).Magnitude
-
 			if d <= radius and (not bestDist or d < bestDist) then
 				best = v
 				bestDist = d
@@ -1460,10 +1280,7 @@ end
 
 function farming.farmPuffshroom(field, id)
 	local function enabled()
-		return id == farmId
-			and mod.data.actives["auto_farm"] == true
-			and mod.data.actives["pushrooms_enabled"] == true
-			and not mod.data.actives["converting"]
+		return id == farmId and mod.data.actives["auto_farm"] == true and mod.data.actives["pushrooms_enabled"] == true and not mod.data.actives["converting"]
 	end
 	
 	local function safeCleanup(rootPart)
@@ -1512,11 +1329,7 @@ function farming.farmPuffshroom(field, id)
 
 	local startRoot = hrp
 	local startPosition = startRoot.Position
-	local target = rootPart.Position + Vector3.new(
-		find.random:NextNumber(-3, 3),
-		2,
-		find.random:NextNumber(-3, 3)
-	)
+	local target = rootPart.Position + Vector3.new(find.random:NextNumber(-3, 3), 2, find.random:NextNumber(-3, 3))
 
 	local distance = (startRoot.Position - target).Magnitude
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
@@ -1556,14 +1369,9 @@ function farming.farmPuffshroom(field, id)
 		if tween == flyTween then tween = nil end
 	end)
 	
-	local flyStart = tick()
-	local flyTimeout = duration + 3
+	local flyStart = tick(); local flyTimeout = duration + 3
 
-	while enabled()
-		and puff.Parent == pf
-		and not finished
-		and (tick() - flyStart) < flyTimeout
-	do
+	while enabled() and puff.Parent == pf and not finished and (tick() - flyStart) < flyTimeout do
 		task.wait()
 	end
 	
@@ -1596,11 +1404,7 @@ function farming.farmPuffshroom(field, id)
 	if not humanoid or not hrp then return false end
 	
 	local p = hrp.Position
-	if p.X ~= p.X or p.Y ~= p.Y or p.Z ~= p.Z
-		or math.abs(p.X) == math.huge
-		or math.abs(p.Y) == math.huge
-		or math.abs(p.Z) == math.huge
-	then
+	if p.X ~= p.X or p.Y ~= p.Y or p.Z ~= p.Z or math.abs(p.X) == math.huge or math.abs(p.Y) == math.huge or math.abs(p.Z) == math.huge then
 		pcall(function()
 			hrp.CFrame = CFrame.new(startPosition)
 		end)
@@ -1608,10 +1412,7 @@ function farming.farmPuffshroom(field, id)
 		return false
 	end
 	
-	local circleRadius = 5
-	local circleDirection = 1
-	local breakStart = tick()
-	local breakTimeout = 30
+	local circleRadius = 5; local circleDirection = 1; local breakStart = tick(); local breakTimeout = 30
 	
 	task.wait(.4)
 	farming.autosprinkler(true)
@@ -1647,11 +1448,7 @@ function farming.farmPuffshroom(field, id)
 			currentAngle = math.atan2(dz, dx)
 		end
 
-		local target = Vector3.new(
-			center.X + math.cos(currentAngle) * circleRadius,
-			hrp.Position.Y,
-			center.Z + math.sin(currentAngle) * circleRadius
-		)
+		local target = Vector3.new(center.X + math.cos(currentAngle) * circleRadius, hrp.Position.Y, center.Z + math.sin(currentAngle) * circleRadius)
 
 		humanoid.WalkSpeed = speed
 		pcall(function()
@@ -1671,9 +1468,7 @@ function farming.farmPuffshroom(field, id)
 		return false
 	end
 	
-	local lootTimeout = tick() + 7
-	local lastLootTime = tick()
-	local handledLoot = {}
+	local lootTimeout = tick() + 7; local lastLootTime = tick(); local handledLoot = {}
 
 	while enabled() and tick() < lootTimeout do
 		character = find.player.Character
@@ -1700,11 +1495,7 @@ function farming.farmPuffshroom(field, id)
 
 		lastLootTime = tick()
 
-		local targetPos = Vector3.new(
-			loot.Position.X,
-			hrp.Position.Y,
-			loot.Position.Z
-		)
+		local targetPos = Vector3.new(loot.Position.X, hrp.Position.Y, loot.Position.Z)
 		local d = (targetPos - hrp.Position).Magnitude
 		
 		if d <= 3.5 then
@@ -1736,10 +1527,7 @@ local function returnToField(field, id)
 		return false
 	end
 
-	if id ~= farmId
-		or mod.data.actives["auto_farm"] ~= true
-		or mod.data.actives["converting"]
-	then
+	if id ~= farmId or mod.data.actives["auto_farm"] ~= true or mod.data.actives["converting"] then
 		return false
 	end
 
@@ -1755,12 +1543,8 @@ local function returnToField(field, id)
 		return false
 	end
 	
-	while id == farmId
-		and mod.data.actives["auto_farm"] == true
-		and not mod.data.actives["converting"]
-		and mod.data.actives["move"] == true
-	do
-		task.wait()
+	while id == farmId and mod.data.actives["auto_farm"] == true and not mod.data.actives["converting"] and mod.data.actives["move"] == true do
+		task.wait(0.001)
 	end
 
 	return true
@@ -1768,10 +1552,7 @@ end
 
 local function clearFarmLines()
 	local lines = workspace:FindFirstChild("Lines_Cub")
-
-	if lines then
-		lines:ClearAllChildren()
-	end
+	if lines then lines:ClearAllChildren() end
 
 	local character = find.player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -2150,9 +1931,11 @@ function farming.move(...)
 					return
 				end
 				
-				local target = v.CFrame:PointToWorldSpace(
-					Vector3.new(0, v.Size.Y / 2 + 2, 0)
-				)
+				--local target = v.CFrame:PointToWorldSpace(
+				--	Vector3.new(0, v.Size.Y / 2 + 2, 0)
+				--)
+				local target = r(v)
+				if not target then return end
 				local d1 = (root.Position - target).Magnitude / math.max(a[2], .001)
 				root.Anchored = true
 
@@ -2363,7 +2146,7 @@ function farming.move(...)
 		--print(actives["move"])
 
 		local target = a[3]
-		print(target)
+		--print(target)
 		if typeof(target) ~= "Vector3" then return end
 		if tween then tween:Cancel() tween = nil end
 		if not workspace:FindFirstChild(find.player.Name) then return end
@@ -2717,7 +2500,7 @@ function farming.convert(...)
 		return
 	end
 
-	print("make honey started")
+	--print("make honey started")
 
 	local startTime = tick()
 	local pollenZeroSince = nil
@@ -2778,7 +2561,7 @@ function farming.convert(...)
 				return
 			end
 
-			print("convert completed")
+			--print("convert completed")
 
 			if aconvert then
 				aconvert:Disconnect()
@@ -2825,14 +2608,14 @@ function farming.convert(...)
 					end
 
 					if balloon then
-						print("balloon found, waiting pop")
+						--print("balloon found, waiting pop")
 						local popStart = tick()
 						while balloon.Parent and tick() - popStart < 300 do
 							if not mod.data.actives["auto_farm"] then return end
 							task.wait(1)
 						end
 						if not balloon.Parent then
-							print("balloon converted")
+							--print("balloon converted")
 						else
 							print("balloon timeout")
 						end
@@ -2860,41 +2643,6 @@ function farming.convert(...)
 	)
 end
 
-function farming.get_pollen_from_gui() -- ai
-	local player = find.player
-	local pg = player:FindFirstChild("PlayerGui")
-	if not pg then return nil end
-
-	local screenGui = pg:FindFirstChild("ScreenGui")
-	local meterHud = screenGui and screenGui:FindFirstChild("MeterHUD")
-	local pollenMeter = meterHud and meterHud:FindFirstChild("PollenMeter")
-	local bar = pollenMeter and pollenMeter:FindFirstChild("Bar")
-	local label = bar and bar:FindFirstChild("TextLabel")
-
-	if not label or not label:IsA("TextLabel") then
-		return nil
-	end
-
-	local text = label.Text
-	local current, max = string.match(text, "([%d,]+)/([%d,]+)")
-	if not current or not max then
-		return nil
-	end
-
-	current = tonumber(string.gsub(current, ",", "")) or 0
-	max = tonumber(string.gsub(max, ",", "")) or 0
-
-	if max <= 0 then
-		return nil
-	end
-
-	return {
-		pollen = current,
-		max = max,
-		percent = (current / max) * 100,
-	}
-end
-
 function farming.autosprinkler(force)
 	if mod.data.actives["auto_sprinkler"] ~= true then return end
 	if not force and mod.data.actives["move"] == true then return end
@@ -2911,40 +2659,111 @@ function farming.autosprinkler(force)
 end
 
 function farming.wealthClock()
-	if farming.__wealthConn then
-		farming.__wealthConn = nil
+	if farming.__wealthRunning then
+		return
 	end
-
-	local startTime = tick()
-	local nextTrigger = startTime + 3600
+	farming.__wealthRunning = true
 
 	task.spawn(function()
-		while mod.data.actives["auto_farm"] == true do
-			task.wait(1)
-			if mod.data.actives["weatlh_clock"] ~= true then
-				startTime = tick()
-				nextTrigger = startTime + 3600
-				continue
-			end
+		local nextTrigger = tick() + 3602
 
+		while true do
+			task.wait(1)
 			if tick() < nextTrigger then
 				continue
 			end
 			
-			local events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
-			local toyEvent = events and events:FindFirstChild("ToyEvent")
+			if mod.data.actives["auto_farm"] ~= true or mod.data.actives["weatlh_clock"] ~= true then
+				nextTrigger = nextTrigger + 3602
+				continue
+			end
+			
+			local toys = workspace:FindFirstChild("Toys")
+			local wc = toys and toys:FindFirstChild("Wealth Clock")
+			local platform = wc and wc:FindFirstChild("Platform")
+			local alert = platform and platform:FindFirstChild("AlertPos")
 
-			if toyEvent and toyEvent:IsA("RemoteEvent") then
-				for i = 1, 3 do
+			if not (alert and alert:IsA("Attachment")) then
+				task.wait(60)
+				continue
+			end
+			
+			local waitStart = tick()
+			while tick() - waitStart < 120 and mod.data.actives["auto_farm"] == true and mod.data.actives["weatlh_clock"] == true and mod.data.actives["move"] == true do
+				task.wait(0.2)
+			end
+
+			if mod.data.actives["auto_farm"] ~= true or mod.data.actives["weatlh_clock"] ~= true or mod.data.actives["move"] == true then
+				nextTrigger = nextTrigger + 3602
+				continue
+			end
+
+			local speed = tonumber(mod.data.actives["walkspeed"]) or 40
+			local targetPos = alert.WorldPosition
+			local returnPos = farming.getHive()
+
+			local ok = farming.move("goto", speed, targetPos)
+			if not ok then
+				nextTrigger = nextTrigger + 3602
+				continue
+			end
+			
+			local flyStart = tick()
+			while mod.data.actives["move"] == true and mod.data.actives["auto_farm"] == true and tick() - flyStart < 90 do
+				task.wait()
+			end
+
+			if mod.data.actives["auto_farm"] ~= true then
+				nextTrigger = nextTrigger + 3602
+				continue
+			end
+			
+			mod.data.actives["move"] = true
+			mod.data.actives["point"] = true
+
+			do
+				local ch = find.player.Character
+				local rt = ch and ch:FindFirstChild("HumanoidRootPart")
+				local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+
+				if rt then
+					pcall(function() rt.Anchored = false end)
 					pcall(function()
-						toyEvent:FireServer("Wealth Clock")
+						rt.AssemblyLinearVelocity = Vector3.zero
+						rt.AssemblyAngularVelocity = Vector3.zero
 					end)
-					--print("[wealth clock] attempt", i)
-					task.wait(3)
+				end
+
+				if hum then
+					pcall(function() hum:Move(Vector3.zero, false) end)
 				end
 			end
 
-			nextTrigger = tick() + 3600
+			task.wait(1)
+			local c1 = activateButton()
+			task.wait(1)
+			local c2 = activateButton()
+
+			if not c1 and not c2 then
+				warn("wealth clock failed")
+			end
+
+			task.wait(0.5)
+
+			mod.data.actives["move"] = false
+			mod.data.actives["point"] = false
+			
+			if mod.data.actives["auto_farm"] == true and mod.data.actives["weatlh_clock"] == true and returnPos then
+				local backOk = farming.move("goto", speed, returnPos)
+				if backOk then
+					local backStart = tick()
+					while mod.data.actives["move"] == true and tick() - backStart < 90 do
+						task.wait()
+					end
+				end
+			end
+			
+			nextTrigger = nextTrigger + 3602
 		end
 	end)
 end
@@ -2987,44 +2806,96 @@ function farming.honey_mask()
 	return farming.equip_mask("Honey Mask")
 end
 
-function farming.get_pollen_info() -- ai
-	local player = find.player
-	local pg = player:FindFirstChild("PlayerGui")
-	if not pg then return nil end
+function farming.getHiveList()
+	local honeycombs = workspace:FindFirstChild("Honeycombs")
+	local list = { "Random" }
 
-	local screenGui = pg:FindFirstChild("ScreenGui")
-	local meterHud = screenGui and screenGui:FindFirstChild("MeterHUD")
-	local pollenMeter = meterHud and meterHud:FindFirstChild("PollenMeter")
-	local bar = pollenMeter and pollenMeter:FindFirstChild("Bar")
-	local label = bar and bar:FindFirstChild("TextLabel")
-
-	if not label or not label:IsA("TextLabel") then
-		return nil
+	if not honeycombs then return list end
+	for _, hive in ipairs(honeycombs:GetChildren()) do
+		table.insert(list, hive.Name)
 	end
 
-	local text = label.Text
-	local current, max = string.match(text, "([%d,]+)/([%d,]+)")
-	if not current or not max then
-		return nil
+	return list
+end
+
+function farming.installAutoRejoin()
+	if env.__nectar_autorejoin_installed then return end
+	env.__nectar_autorejoin_installed = true
+
+	local LP = find.player
+	local TS = game:GetService("TeleportService")
+	local queued = false
+
+	local function parsePrivateLink(link)
+		if type(link) ~= "string" or link == "" then return nil, nil end
+		link = link:match("^%s*(.-)%s*$")
+
+		local placeId = link:match("games/(%d+)") or link:match("places/(%d+)")
+		local code = link:match("privateServerLinkCode=([%w%-_]+)")
+			or link:match("[?&]code=([%w%-_]+)")
+
+		return tonumber(placeId), code
 	end
 
-	current = tonumber((string.gsub(current, ",", ""))) or 0
-	max = tonumber((string.gsub(max, ",", ""))) or 0
+	local REJOIN_LOADER = "https://raw.githubusercontent.com/zain1241/test-place/main/loader.luau"
 
-	if max <= 0 then
-		return nil
+	local function doRejoin()
+		if queued then return end
+		queued = true
+		
+		if queue_on_teleport then
+			local code = string.format(
+				'loadstring(game:HttpGet("%s"))()',
+				REJOIN_LOADER
+			)
+			pcall(function() queue_on_teleport(code) end)
+		else
+			warn("queue_on_teleport not available — script won't auto-load")
+		end
+		
+		local mode = mod.data.actives["server_mode"]
+
+		if mode == "private" then
+			local pid, code = parsePrivateLink(mod.data.actives["private_server_link"])
+			if pid and code then
+				pcall(function()
+					TS:TeleportToPrivateServer(pid, code, { LP })
+				end)
+				return
+			end
+			warn("private link invalid, fallback to free server")
+		end
+
+		pcall(function()
+			TS:Teleport(game.PlaceId, LP)
+		end)
 	end
-
-	return {
-		pollen = current,
-		max = max,
-		percent = (current / max) * 100,
-	}
+	
+	if hookfunction then
+		pcall(function()
+			local oldKick = LP.Kick
+			hookfunction(LP.Kick, function(self, ...)
+				if self == LP and mod.data.actives["auto_rejoin"] == true then
+					doRejoin()
+				end
+				return oldKick(self, ...)
+			end)
+		end)
+	end
+	
+	LP.AncestryChanged:Connect(function(_, parent)
+		if not parent and mod.data.actives["auto_rejoin"] == true then
+			doRejoin()
+		end
+	end)
 end
 
 function farming.getHive(...)
 	local honeycombs = workspace:FindFirstChild("Honeycombs")
-	if not honeycombs then return end
+	
+	if not honeycombs then
+		return { "Random", "Hive1", "Hive2", "Hive3", "Hive4", "Hive5" }
+	end
 
 	local pos = nil
 
@@ -3119,6 +2990,19 @@ function farming.autoHive(...)
 		["free"] = true,
 		["n/a"] = true,
 	}
+	
+	local function extractSpawnPos(container)
+		local sp = container:FindFirstChild("SpawnPos")
+		if not sp then return nil end
+		if sp:IsA("BasePart") then return sp.Position end
+		if sp:IsA("CFrameValue") then return sp.Value.Position end
+		if sp:IsA("Attachment") then return sp.WorldPosition end
+		if sp:IsA("Vector3Value") then return sp.Value end
+		return nil
+	end
+
+	local myHivePos = nil
+	local freeHives = {}   -- { { hive = Instance, name = "Hive1", pos = Vector3 }, ... }
 
 	for _, hive in ipairs(honeycombs:GetChildren()) do
 		local display = hive:FindFirstChild("Display")
@@ -3127,56 +3011,48 @@ function farming.autoHive(...)
 		local name = frame and frame:FindFirstChild("OwnerName")
 
 		if name and name:IsA("TextLabel") then
-			local trimmed =
-				string.match(name.Text, "^%s*(.-)%s*$") or ""
-
+			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
 			local lower = string.lower(trimmed)
-
+			
 			if lower == myName then
-				local spawnPos = hive:FindFirstChild("SpawnPos")
-
-				if spawnPos then
-					if spawnPos:IsA("BasePart") then
-						myHivePos = spawnPos.Position
-					elseif spawnPos:IsA("CFrameValue") then
-						myHivePos = spawnPos.Value.Position
-					elseif spawnPos:IsA("Attachment") then
-						myHivePos = spawnPos.WorldPosition
-					elseif spawnPos:IsA("Vector3Value") then
-						myHivePos = spawnPos.Value
-					end
-				end
-
-				if myHivePos then
-					break
-				end
+				myHivePos = extractSpawnPos(hive)
+				if myHivePos then break end
 			end
-
-			if not freeHivePos and lower ~= myName then
-				local isFree =
-					EMPTY[lower] == true
-					or not activeNames[lower]
-
-				if isFree then
-					local spawnPos = hive:FindFirstChild("SpawnPos")
-
-					if spawnPos then
-						if spawnPos:IsA("BasePart") then
-							freeHivePos = spawnPos.Position
-						elseif spawnPos:IsA("CFrameValue") then
-							freeHivePos = spawnPos.Value.Position
-						elseif spawnPos:IsA("Attachment") then
-							freeHivePos = spawnPos.WorldPosition
-						elseif spawnPos:IsA("Vector3Value") then
-							freeHivePos = spawnPos.Value
-						end
-					end
+			
+			local isFree = EMPTY[lower] == true or not activeNames[lower]
+			if isFree and lower ~= myName then
+				local pos = extractSpawnPos(hive)
+				if pos then
+					table.insert(freeHives, {
+						hive = hive,
+						name = hive.Name,
+						pos = pos,
+					})
 				end
 			end
 		end
 	end
 
-	local targetPos = myHivePos or freeHivePos
+	local hiveChoice = mod.data.actives["hive_choice"] or "Random"
+	local targetPos = myHivePos
+
+	if not targetPos then
+		if #freeHives > 0 then
+			if hiveChoice ~= "Random" then
+				for _, entry in ipairs(freeHives) do
+					if entry.name == hiveChoice then
+						targetPos = entry.pos
+						break
+					end
+				end
+			end
+
+			if not targetPos then
+				local pick = freeHives[find.random:NextInteger(1, #freeHives)]
+				targetPos = pick.pos
+			end
+		end
+	end
 
 	if not targetPos then
 		mod.data.actives["move"] = false
@@ -3315,7 +3191,7 @@ function farming.farm(...)
 	end
 	
 	local pos = hivePos
-	print(pos)
+	--print(pos)
 
 	local selected = mod.data.actives["selected_field"]
 	local fields = workspace:FindFirstChild("FlowerZones")
@@ -3551,7 +3427,7 @@ function farming.farm(...)
 			
 			if mod.data.actives["sprouts"] == true
 				and field
-				and (tick() - lastSproutTime) >= SPROUT_COOLDOWN
+				and (tick() - lastSproutTime) >= find.data.actives["sprout_cooldown"]
 			then
 				local sproutFound = getNearestSprout(
 					field,
@@ -3669,16 +3545,14 @@ function farming.farm(...)
 
 				local target = getNextToken()
 
-				while id == farmId
-					and mod.data.actives["auto_farm"] == true
-					and not mod.data.actives["converting"]
-					and target
-				do
+				while id == farmId and mod.data.actives["auto_farm"] == true and not mod.data.actives["converting"] and target do
 					local char = find.player.Character
 					local hum = char and char:FindFirstChildOfClass("Humanoid")
 					local rt = char and char:FindFirstChild("HumanoidRootPart")
 					if not hum or not rt or rt.Anchored then break end
-					
+
+					local fled = false
+
 					local lp = field.CFrame:PointToObjectSpace(target.Position)
 					local hip = hum.HipHeight
 					local p = field.CFrame:PointToWorldSpace(
@@ -3730,9 +3604,21 @@ function farming.farm(...)
 							return
 						end
 
-						local rt2 = find.player.Character
-							and find.player.Character:FindFirstChild("HumanoidRootPart")
+						local rt2 = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
 						if not rt2 then break end
+
+						local flee3 = getFleeTarget(rt2)
+						if flee3 then
+							pcall(function() currentTween:Cancel() end)
+							local c2 = find.player.Character
+							local h2 = c2 and c2:FindFirstChildOfClass("Humanoid")
+							if h2 then
+								h2.WalkSpeed = speed
+								h2:MoveTo(flee3)
+							end
+							fled = true
+							break
+						end
 
 						local curFlat = Vector3.new(rt2.Position.X, 0, rt2.Position.Z)
 						if (targetFlat - curFlat).Magnitude <= 2.5 then
@@ -3745,7 +3631,13 @@ function farming.farm(...)
 
 					if atween == currentTween then atween = nil end
 					if id ~= farmId then break end
-					
+
+					if fled then
+						task.wait()
+						target = getNextToken()
+						continue
+					end
+
 					table.remove(queue["tokens"], 1)
 					target = getNextToken()
 				end
@@ -3879,10 +3771,7 @@ function farming.farm(...)
 				end
 			end
 			
-			if mod.data.actives["sprouts"] == true
-				and field
-				and (tick() - lastSproutTime) >= SPROUT_COOLDOWN
-			then
+			if mod.data.actives["sprouts"] == true and field and (tick() - lastSproutTime) >= find.data.actives["sprout_cooldown"] then
 				local sproutFound = getNearestSprout(
 					field,
 					find.player.Character
@@ -4018,6 +3907,14 @@ function farming.farm(...)
 					local rt = char and char:FindFirstChild("HumanoidRootPart")
 					if not hum or not rt or rt.Anchored then break end
 
+					local flee = getFleeTarget(rt)
+					if flee then
+						hum.WalkSpeed = speed
+						hum:MoveTo(flee)
+						task.wait()
+						continue
+					end
+
 					local tp = Vector3.new(target.Position.X, rt.Position.Y, target.Position.Z)
 					local dist = (tp - rt.Position).Magnitude
 
@@ -4065,6 +3962,14 @@ function farming.farm(...)
 							local hum2 = char2 and char2:FindFirstChildOfClass("Humanoid")
 							local rt2 = char2 and char2:FindFirstChild("HumanoidRootPart")
 							if not hum2 or not rt2 or rt2.Anchored then break end
+
+							local flee2 = getFleeTarget(rt2)
+							if flee2 then
+								hum2.WalkSpeed = a.Speed
+								hum2:MoveTo(flee2)
+								task.wait()
+								continue
+							end
 
 							local flat = Vector3.new(targetPos.X, rt2.Position.Y, targetPos.Z)
 							if (flat - rt2.Position).Magnitude <= 1.5 then break end
@@ -4314,49 +4219,42 @@ task.spawn(function()
 	if mod.data.actives["auto_dig"] == true then
 		farming.autoDig(true)
 	end
-
+	
 	farming.forceWalkSpeed(mod.data.actives["walkspeed"] or 16)
 	farming.wealthClock()
-
+	farming.installAutoRejoin()
+	
 	if mod.data.actives["auto_farm"] == true then
 		farming.farm()
 	end
 end)
 
 local function onCharacterRespawn(character)
-	-- Даём игре чуть-чуть времени на инициализацию
 	task.wait(0.8)
-
-	-- Полный сброс всего, что было привязано к старому персонажу/состоянию
+	
 	if adig then
 		pcall(function() adig:Disconnect() end)
 		adig = nil
 	end
-
-	-- resetFarmMovement снимает afarm/aconvert/tween/atween/invc/noclip,
-	-- чистит очереди и линии, ставит move/point/converting = false
+	
 	pcall(function()
 		resetFarmMovement(false)
 	end)
-
-	-- Дополнительно на всякий случай
+	
 	mod.data.actives["point"] = false
 	mod.data.actives["move"] = false
 	mod.data.actives["converting"] = false
-
-	-- Ждём Humanoid у нового персонажа
+	
 	local humanoid = character:WaitForChild("Humanoid", 10)
 	local hrp = character:WaitForChild("HumanoidRootPart", 10)
 
 	if not humanoid or not hrp then
 		return
 	end
-
-	-- Восстанавливаем ходьбу
+	
 	local ws = tonumber(mod.data.actives["walkspeed"]) or 16
 	humanoid.WalkSpeed = ws
-
-	-- Восстанавливаем физ. свойства рута
+	
 	pcall(function()
 		hrp.Massless = false
 		local p = hrp.CurrentPhysicalProperties
@@ -4364,17 +4262,15 @@ local function onCharacterRespawn(character)
 			20, p.Friction, p.Elasticity, p.FrictionWeight, p.ElasticityWeight
 		)
 	end)
-
-	-- Заново запускаем forceWalkSpeed — он переустановит speed-коннект
+	
 	pcall(function()
 		farming.forceWalkSpeed(ws)
 	end)
-
-	-- Если Auto Farm был включён — перезапускаем
+	
+	
 	if mod.data.actives["auto_farm"] == true then
 		task.wait(0.5)
-
-		-- ещё раз сбрасываем, чтобы farm() не увидел залипший move
+		
 		mod.data.actives["move"] = false
 		mod.data.actives["point"] = false
 		mod.data.actives["converting"] = false
@@ -4385,10 +4281,8 @@ local function onCharacterRespawn(character)
 	end
 end
 
--- Подключаемся один раз к событию респауна
 find.player.CharacterAdded:Connect(onCharacterRespawn)
 
--- Если персонаж уже есть на момент загрузки модуля — обработаем как «респаун»
 if find.player.Character then
 	task.spawn(function()
 		task.wait(0.5)
