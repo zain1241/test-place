@@ -506,13 +506,13 @@ function menu.main_nav()
 		navigationButtons[name] = b
 	end
 
-	addNavigation("Home", "rbxassetid://13060262529", 1)
+	--addNavigation("Home", "rbxassetid://13060262529", 1)
 	addNavigation("Farming", "rbxassetid://15332137726", 2)
 	addNavigation("Toys", "rbxassetid://102597526078163", 3)
-	addNavigation("Combat", "rbxassetid://4391741881", 4)
+	--addNavigation("Combat", "rbxassetid://4391741881", 4)
 	addNavigation("Config", "rbxassetid://4857706689", 5)
 
-	showsel("Home")
+	showsel("Farming")
 end
 
 function menu.dop_create()
@@ -566,11 +566,14 @@ function menu.dop_create()
 
 		if a[1].key ~= nil then
 			mod.data.actives[a[1].key] = a[2]
-			--print(mod.data.actives[a[1].key])
 		end
 
 		if a[1].callback ~= nil then
-			a[1].callback(a[2], a[3], a[4])
+			local cb = a[1].callback
+			local v1, v2, v3 = a[2], a[3], a[4]
+			task.spawn(function()
+				cb(v1, v2, v3)
+			end)
 		end
 	end
 
@@ -742,10 +745,10 @@ function menu.dop_create()
 		r.MouseButton1Click:Connect(function()
 			if toggle == true then
 				value = not value
-				save(d, value, b, r)
 				update()
+				save(d, value, b, r)
 
-				print(d.key, "=", mod.data.actives[d.key])
+				--print(d.key, "=", mod.data.actives[d.key])
 			else
 				if d.key ~= nil and d.value ~= nil then
 					mod.data.actives[d.key] = d.value
@@ -758,6 +761,86 @@ function menu.dop_create()
 		end)
 
 		update()
+
+		if d.id ~= nil then
+			menu.dop_objects[d.id] = o
+		end
+
+		return o
+	end
+	
+	local function addinput(parent, d, order)
+		if parent == nil or type(d) ~= "table" then return end
+
+		local key = d.key or "input"
+		local value = mod.data.actives[key]
+		if value == nil then
+			value = d.value or ""
+			mod.data.actives[key] = value
+		end
+
+		local r = Instance.new("Frame")
+		r.Name = d.name or "Input"
+		r.BackgroundColor3 = Color3.fromRGB(26, 24, 29)
+		r.BackgroundTransparency = 0.2
+		r.BorderSizePixel = 0
+		r.Size = UDim2.new(1.025, -12, 0, 30)
+		r.LayoutOrder = order or 0
+		r.ZIndex = 1004
+		r.Parent = parent
+
+		r:SetAttribute("search_text", string.lower(tostring(d.text or "")))
+
+		corner(r, UDim.new(0, 7))
+
+		local t = Instance.new("TextLabel")
+		t.Name = "Label"
+		t.BackgroundTransparency = 1
+		t.Position = UDim2.new(0.02, 0, 0, 0)
+		t.Size = UDim2.new(0.4, 0, 1, 0)
+		t.ZIndex = 1005
+		t.Font = Enum.Font.BuilderSansBold
+		t.Text = tostring(d.text or "Input")
+		t.TextColor3 = Color3.fromRGB(255, 255, 255)
+		t.TextSize = 14
+		t.TextXAlignment = Enum.TextXAlignment.Left
+		t.Parent = r
+
+		local box = Instance.new("TextBox")
+		box.Name = "TextBox"
+		box.AnchorPoint = Vector2.new(1, 0.5)
+		box.BackgroundColor3 = Color3.fromRGB(42, 40, 45)
+		box.BorderSizePixel = 0
+		box.Position = UDim2.new(1, -8, 0.5, 0)
+		box.Size = UDim2.new(0.55, 0, 0.7, 0)
+		box.ZIndex = 1005
+		box.Font = Enum.Font.BuilderSansMedium
+		box.Text = tostring(value)
+		box.PlaceholderText = tostring(d.placeholder or "")
+		box.PlaceholderColor3 = Color3.fromRGB(120, 120, 125)
+		box.TextColor3 = Color3.fromRGB(255, 255, 255)
+		box.TextSize = 13
+		box.TextXAlignment = Enum.TextXAlignment.Center
+		box.ClearTextOnFocus = false
+		box.Parent = r
+
+		corner(box, UDim.new(0, 6))
+
+		local o = { frame = r, text = t, box = box }
+
+		function o.set(...)
+			local a = {...}
+			box.Text = tostring(a[1] or "")
+			mod.data.actives[key] = box.Text
+		end
+
+		function o.get()
+			return box.Text
+		end
+
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			mod.data.actives[key] = box.Text
+		end)
 
 		if d.id ~= nil then
 			menu.dop_objects[d.id] = o
@@ -947,30 +1030,15 @@ function menu.dop_create()
 	end
 
 	local function addlistChose(parent, d, order)
-		if parent == nil or type(d) ~= "table" then
-			return
-		end
-
 		local list = d.list or mod.data.zones
 		local key = d.key or "selected_field"
 		local opened = d.opened == true
-
-		local selected = d.value
-
-		if selected == nil then
-			selected = mod.data.actives[key]
-		end
-
-		if selected == false or selected == "" then
-			selected = nil
-		end
-
+		local multi = d.multi == true
+		
 		local fields = table.create(#list)
 		local cards = {}
 		local valid = {}
-		local search = {
-			tostring(d.text or "Field"),
-		}
+		local search = { tostring(d.text or "Field") }
 
 		for _, v in ipairs(list) do
 			local name
@@ -984,27 +1052,49 @@ function menu.dop_create()
 				image = ""
 			end
 
-			if type(name) == "string" and name ~= ""then
-				if name == "Ant Field" then
-					print(name)
-				else
+			if type(name) == "string" and name ~= "" then
+				if name ~= "Ant Field" then
 					local field = {
 						name = name,
 						image = tostring(image or ""),
 					}
-
 					fields[#fields + 1] = field
 					valid[name] = true
 					search[#search + 1] = name
 				end
 			end
 		end
+		
+		local selected
+		local selectedSet = nil
 
-		if selected ~= nil and valid[selected] ~= true then
-			selected = nil
+		if multi then
+			if type(mod.data.actives[key]) ~= "table" then
+				mod.data.actives[key] = {}
+			end
+			selectedSet = mod.data.actives[key]
+
+			if selectedSet.__init ~= true then
+				for _, field in ipairs(fields) do
+					selectedSet[field.name] = true
+				end
+				selectedSet.__init = true
+			end
+		else
+			selected = d.value
+			if selected == nil then
+				selected = mod.data.actives[key]
+			end
+			if selected == false or selected == "" then
+				selected = nil
+			end
+
+			if selected ~= nil and valid[selected] ~= true then
+				selected = nil
+			end
+
+			mod.data.actives[key] = selected or false
 		end
-
-		mod.data.actives[key] = selected or false
 
 		local r = Instance.new("Frame")
 		r.Name = d.name or "Preview"
@@ -1150,24 +1240,26 @@ function menu.dop_create()
 		--end
 		
 		local function updateHeader()
-			--h.Text = "          " .. tostring(d.text or "Field")
-			--	.. ": "
-			--	.. tostring(selected or "NONE")
-			
-			if headerIcon then
-				h.TextXAlignment = Enum.TextXAlignment.Left
-				h.Size = UDim2.new(0.962, 0,0, 32)
+			local label
 
-				h.Text = "          " .. tostring(d.text or "Field")
-					.. ": "
-					.. tostring(selected or "NONE")
+			if multi then
+				local total = #fields
+				local count = 0
+				for _, f in ipairs(fields) do
+					if selectedSet[f.name] then count = count + 1 end
+				end
+				label = tostring(d.text or "Field") .. ": " .. count .. "/" .. total
 			else
-				h.TextXAlignment = Enum.TextXAlignment.Left
-				h.Size = UDim2.new(0.962, 0,0, 32)
+				label = tostring(d.text or "Field") .. ": " .. tostring(selected or "NONE")
+			end
 
-				h.Text = tostring(d.text or "Field")
-					.. ": "
-					.. tostring(selected or "NONE")
+			h.TextXAlignment = Enum.TextXAlignment.Left
+			h.Size = UDim2.new(0.962, 0, 0, 32)
+
+			if headerIcon then
+				h.Text = "          " .. label
+			else
+				h.Text = label
 			end
 
 			if not useHeaderIcon or not headerIcon then return end
@@ -1222,33 +1314,25 @@ function menu.dop_create()
 		end
 
 		local function selectField(name)
-			local old = selected
-			local new = name
-
-			if selected == name and d.allow_none ~= false then
-				new = nil
-			end
-
-			if old == new then
+			if multi then
+				selectedSet[name] = not selectedSet[name]
+				updateCard(cards[name], selectedSet[name] == true)
+				updateHeader()
+				if type(d.changed) == "function" then d.changed(selectedSet) end
 				return
 			end
+			
+			local old = selected
+			local new = name
+			if selected == name and d.allow_none ~= false then new = nil end
+			if old == new then return end
 
 			selected = new
 			mod.data.actives[key] = selected or false
-
-			if old ~= nil then
-				updateCard(cards[old], false)
-			end
-
-			if selected ~= nil then
-				updateCard(cards[selected], true)
-			end
-
+			if old ~= nil then updateCard(cards[old], false) end
+			if selected ~= nil then updateCard(cards[selected], true) end
 			updateHeader()
-
-			if type(d.changed) == "function" then
-				d.changed(selected)
-			end
+			if type(d.changed) == "function" then d.changed(selected) end
 		end
 
 		local function create(field, layout)
@@ -1335,7 +1419,7 @@ function menu.dop_create()
 
 			updateCard(
 				card,
-				selected == field.name
+				(multi and selectedSet[field.name] == true) or (not multi and selected == field.name)
 			)
 
 			b.MouseButton1Click:Connect(function()
@@ -1613,6 +1697,8 @@ function menu.dop_create()
 			return addlistChose(a[1], a[2], a[3])
 		elseif type == "tokenpriority" then
 			return addtokenpriority(a[1], a[2], a[3])
+		elseif type == "input" then
+			return addinput(a[1], a[2], a[3])
 		else
 			return addtext(a[1], a[2], a[3])
 		end
@@ -1865,8 +1951,14 @@ function menu.dop_create()
 					opened = true,
 					items = {
 						{ type = "button", text = "Collect Bubbles", key = "collect_bubbles"},
-						{ type = "button", text = "Petals", key = "petals"},
+					},
+				},
+				{
+					name = "More AUTO",
+					opened = true,
+					items = {
 						{ type = "button", text = "Pushrooms", key = "pushrooms_enabled"},
+						{ type = "button", text = "Petals", key = "petals"},
 						{ type = "button", text = "Sprouts", key = "sprouts"},
 						{
 							type = "addlistchose",
@@ -1875,7 +1967,20 @@ function menu.dop_create()
 							list = mod.data.pushrooms,
 							allow_none = false,
 						},
-						--{ type = "button", text = "Wealth Clock", key = "weatlh_clock"},
+						{
+							type = "addlistchose",
+							text = "Petal Colors",
+							key = "petal_colors",
+							multi = true,
+							allow_none = true,
+							header_icon = false,
+							list = {
+								{ name = "Red" }, { name = "Blue" }, { name = "White" }, { name = "Green" },
+								{ name = "Black" }, { name = "Yellow" }, { name = "Scarlet" }, { name = "Cyan" },
+								{ name = "Grey" }, { name = "Violet" }, { name = "Pink" }, { name = "Merigold" },
+								{ name = "Periwinkle" },
+							},
+						},
 					},
 				},
 			},
@@ -1884,11 +1989,79 @@ function menu.dop_create()
 			name = "Config",
 			lists = {
 				{
-					name = "Config",
+					name = "Server Settings",
+					opened = true,
+					items = {
+						{ type = "button", text = "Auto Rejoin", key = "auto_rejoin" },
+						{
+							type = "button",
+							text = "Free Server",
+							key = "server_free",
+							id = "server_free",
+							callback = function(v)
+								if v == true then
+									local other = menu.dop_objects and menu.dop_objects["server_private"]
+									if other and other.get() then other.set(false) end
+									mod.data.actives["server_mode"] = "free"
+								else
+									if mod.data.actives["server_mode"] == "free" then
+										mod.data.actives["server_mode"] = nil
+									end
+								end
+							end,
+						},
+						{
+							type = "button",
+							text = "Private Server",
+							key = "server_private",
+							id = "server_private",
+							callback = function(v)
+								if v == true then
+									local other = menu.dop_objects and menu.dop_objects["server_free"]
+									if other and other.get() then other.set(false) end
+									mod.data.actives["server_mode"] = "private"
+								else
+									if mod.data.actives["server_mode"] == "private" then
+										mod.data.actives["server_mode"] = nil
+									end
+								end
+							end,
+						},
+						{
+							type = "input",
+							text = "Private URL",
+							key = "private_server_link",
+							placeholder = "your URL private server",
+						},
+					},
+				},
+				{
+					name = "Hive Settings",
 					opened = true,
 					items = {
 						{ type = "button", text = "Auto Hive", key = "autohive", callback = mod.farming.autoHive},
 						{ type = "button", text = "Anti AFK", key = "anti_afk" },
+						{
+							type = "addlistchose",
+							text = "Hive Target",
+							key = "hive_choice",
+							list = mod.farming.getHiveList(),
+							allow_none = false,
+							header_icon = false,
+							changed = function()
+								if mod.data.actives["auto_farm"] == true
+									and mod.farming.getHive() == nil
+								then
+									mod.farming.autoHive()
+								end
+							end,
+						},
+					},
+				},
+				{
+					name = "Farm",
+					opened = true,
+					items = {
 						{
 							type = "addlistchose",
 							text = "Movement Method",
@@ -1913,17 +2086,41 @@ function menu.dop_create()
 						},
 					},
 				},
+				--{
+				--	name = "Plus",
+				--	opened = true,
+				--	items = {
+				--		{ type = "button", text = "Anti AFK", key = "anti_afk" },
+				--	},
+				--},
 			},
 		},
 		{
 			name = "Toys",
 			lists = {
 				{
+					name = "Mondo Chicken",
+					opened = true,
+					items = {
+						{ type = "button", text = "Kill Mondo", key = "mondo" },
+						{ type = "button", text = "Collect Drop", key = "mondo_collect_drop", value = true },
+						{
+							type = "slider",
+							text = "Drop Time Collect(s)",
+							key = "mondo_collect_time",
+							value = 40,
+							min = 1,
+							max = 60,
+							step = 1,
+						},
+					},
+				},
+				{
 					name = "Other",
 					opened = true,
 					items = {
 						{ type = "button", text = "Wealth Clock", key = "weatlh_clock", callback = farming.wealthClock},
-						{ type = "button", text = "Mondo", key = "mondo" },
+						{ type = "button", text = "Save Mode", key = "save_mode"},
 					},
 				},
 			},
