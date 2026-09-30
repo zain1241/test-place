@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.147")
+print("loaded 0.2.2")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -1530,9 +1530,9 @@ local function returnToField(field, id)
 	if id ~= farmId or mod.data.actives["auto_farm"] ~= true or mod.data.actives["converting"] then
 		return false
 	end
-
+	
+	mod.data.actives["move"] = false
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
-
 	local currentTween = farming.move(
 		"flowerzones",
 		speed,
@@ -1835,50 +1835,52 @@ function farming.move(...)
 		local a = {...}
 		local part = a[1]
 
-		if part == nil then
-			return
-		end
+		if part == nil then return end
 
 		if typeof(part) == "string" then
 			local f = workspace:FindFirstChild("FlowerZones")
 			part = f and f:FindFirstChild(part)
 		end
 
-		if not part or not part:IsA("BasePart") then
-			warn("r: поле не найдено или не BasePart:", part)
+		if not part then
+			warn("field not found")
+			return
+		end
+
+		local cf, size
+		if part:IsA("BasePart") then
+			cf, size = part.CFrame, part.Size
+		elseif part:IsA("Model") then
+			cf, size = part:GetBoundingBox()
+		else
+			warn("r: field is not BasePart/Model")
 			return
 		end
 
 		local h = .4
-
-		local marginX = math.min(6, part.Size.X * .15)
-		local marginZ = math.min(6, part.Size.Z * .15)
-		local x = part.Size.X / 2 - marginX
-		local z = part.Size.Z / 2 - marginZ
+		local marginX = math.min(6, size.X * .15)
+		local marginZ = math.min(6, size.Z * .15)
+		local x = size.X / 2 - marginX
+		local z = size.Z / 2 - marginZ
 
 		local position = string.lower(mod.data.actives["position_field"] or "center")
 		local ix, ax
 
 		if position == "left" then
-			local band = math.max(x * 0.06, 3)
-			ix = -x
-			ax = -x + band
+			ix = -x; ax = 0
 		elseif position == "right" then
-			local band = math.max(x * 0.06, 3)
-			ix = x - band
-			ax = x
+			ix = 0; ax = x
 		else
-			ix = 0
-			ax = 0
+			ix = -x / 3; ax = x / 3
 		end
 
 		local l = Vector3.new(
 			find.random:NextNumber(ix, ax),
-			part.Size.Y / 2 + h,
+			size.Y / 2 + h,
 			find.random:NextNumber(-z, z)
 		)
 
-		return part.CFrame:PointToWorldSpace(l)
+		return cf:PointToWorldSpace(l)
 	end
 	local function b(...)
 		local a = {...}
@@ -1922,21 +1924,15 @@ function farming.move(...)
 				local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 				if not root or not humanoid then return end
 
+				local target = r(v)
+				if not target then return end
+
 				humanoid:MoveTo(root.Position)
 				humanoid:Move(Vector3.zero)
 				humanoid.WalkSpeed = 0
 				root.AssemblyLinearVelocity = Vector3.zero
 				root.AssemblyAngularVelocity = Vector3.zero
 
-				if not workspace:FindFirstChild(find.player.Name) then
-					return
-				end
-				
-				--local target = v.CFrame:PointToWorldSpace(
-				--	Vector3.new(0, v.Size.Y / 2 + 2, 0)
-				--)
-				local target = r(v)
-				if not target then return end
 				local d1 = (root.Position - target).Magnitude / math.max(a[2], .001)
 				root.Anchored = true
 
@@ -3145,7 +3141,7 @@ local function resetFarmMovement(enabled)
 	lastSproutTime = 0
 
 	farming.cornl(enabled)
-	farming.inv(enabled)
+	--farming.inv(enabled)
 	farming.noclip(false)
 end
 
@@ -3230,14 +3226,24 @@ function farming.farm(...)
 		return
 	end
 	
-	farming.move(
+	if mod.data.actives["selected_field"] == "" then
+		mod.data.actives["auto_farm"] = false
+		return
+	end
+	
+	local ok = farming.move(
 		"flowerzones",
 		mod.data.actives["walkspeed"],
 		selected
 	)
 
-	if mod.data.actives["selected_field"] == "" then
-		mod.data.actives["auto_farm"] = false
+	if not ok then
+		warn("farm initial fly failed, retrying in 1s")
+		task.delay(1, function()
+			if mod.data.actives["auto_farm"] == true then
+				farming.farm()
+			end
+		end)
 		return
 	end
 
@@ -3255,35 +3261,43 @@ function farming.farm(...)
 
 	local function r(...)
 		local a = {...}
+		local part = a[1]
 
-		if a[1] == nil then
+		if part == nil then return end
+
+		local cf, size
+		if typeof(part) == "BasePart" then
+			cf, size = part.CFrame, part.Size
+		elseif typeof(part) == "Model" then
+			cf, size = part:GetBoundingBox()
+		else
 			return
 		end
 
 		local h = .4
+		local marginX = math.min(6, size.X * .15)
+		local marginZ = math.min(6, size.Z * .15)
+		local x = size.X / 2 - marginX
+		local z = size.Z / 2 - marginZ
 
-		local marginX = math.min(6, a[1].Size.X * .15)
-		local marginZ = math.min(6, a[1].Size.Z * .15)
-		local x = a[1].Size.X / 2 - marginX
-		local z = a[1].Size.Z / 2 - marginZ
-
-		mod.data.actives["position_field"] = string.lower(mod.data.actives["position_field"] or "center")
 		local position = string.lower(mod.data.actives["position_field"] or "center")
 		local ix, ax
 
 		if position == "left" then
-			ix = -x
-			ax = 0
+			ix = -x; ax = 0
 		elseif position == "right" then
-			ix = 0
-			ax = x
+			ix = 0; ax = x
 		else
-			ix = -x / 3
-			ax = x / 3
+			ix = -x / 3; ax = x / 3
 		end
 
-		local l = Vector3.new(find.random:NextNumber(ix, ax), a[1].Size.Y / 2 + h, find.random:NextNumber(-z, z))
-		return a[1].CFrame:PointToWorldSpace(l)
+		local l = Vector3.new(
+			find.random:NextNumber(ix, ax),
+			size.Y / 2 + h,
+			find.random:NextNumber(-z, z)
+		)
+
+		return cf:PointToWorldSpace(l)
 	end
 	
 	local textureToPriority = {}
@@ -3911,11 +3925,7 @@ function farming.farm(...)
 				local lastPos = rt0.Position
 				local stuckCount = 0
 
-				while id == farmId
-					and mod.data.actives["auto_farm"] == true
-					and #queue["tokens"] > 0
-					and not mod.data.actives["converting"]
-				do
+				while id == farmId and mod.data.actives["auto_farm"] == true and #queue["tokens"] > 0 and not mod.data.actives["converting"] do
 					while #queue["tokens"] > 0 do
 						local first = queue["tokens"][1]
 						if first and first.Parent and first.Transparency <= 0 then break end
@@ -4106,6 +4116,8 @@ function farming.farm(...)
 						else
 							local targetPos = farming.getHive()
 							if targetPos then
+								mod.data.actives["move"] = false
+								mod.data.actives["point"] = false
 								local ok = farming.move("convert", mod.data.actives["walkspeed"], targetPos)
 								if ok then
 									mod.data.actives["converting"] = true
@@ -4128,8 +4140,10 @@ function farming.farm(...)
 				end
 				
 				if mod.data.actives["move"] == false then
-					farming.inv(false)
-					farming.hardUninv()
+					if invc then
+						farming.inv(false)
+						farming.hardUninv()
+					end
 					local hasTokens = false
 					local collectibles = workspace:FindFirstChild("Collectibles")
 					local flowerZones = workspace:FindFirstChild("FlowerZones")
