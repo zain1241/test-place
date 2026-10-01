@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.22")
+print("loaded 0.2.221")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -2118,18 +2118,34 @@ function farming.move(...)
 			
 			local hiveRes = farming.getHive()
 			if type(hiveRes) ~= "Vector3" then
-				task.wait(0.6)
-
-				for _try = 1, 3 do
-					activateButton()
-					task.wait(0.5)
+				task.wait(0.8)
+				
+				for _try = 1, 5 do
+					local clicked = activateButton()
+					task.wait(0.6)
 					if type(farming.getHive()) == "Vector3" then break end
+					if not clicked then
+						pcall(function()
+							find.virtual:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+							task.wait(0.1)
+							find.virtual:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+						end)
+						task.wait(0.4)
+					end
 				end
 
 				if type(farming.getHive()) ~= "Vector3" then
-					warn("hive failed to occupy hive")
+					warn("hive failed to occupy hive retrying autoHive in 3s")
 					mod.data.actives["move"] = false
 					mod.data.actives["converting"] = false
+					
+					task.delay(3, function()
+						if mod.data.actives["auto_farm"] == true
+							and mod.data.actives["autohive"] ~= false
+						then
+							pcall(farming.autoHive)
+						end
+					end)
 					return
 				end
 			end
@@ -2612,18 +2628,21 @@ function farming.convert(...)
 
 					if balloon then
 						local popStart = tick()
-						local POP_TIMEOUT = 60
+						local POP_TIMEOUT = 600
 						while balloon.Parent
 							and mod.data.actives["auto_farm"]
 							and (tick() - popStart) < POP_TIMEOUT
 						do
-							task.wait(1)
+							task.wait(0.25)
 						end
+
 						if balloon.Parent then
-							warn("balloon did not pop in " .. POP_TIMEOUT .. "s")
+							warn("convert balloon did not pop in " .. POP_TIMEOUT .. "s (timeout)")
+						else
+							task.wait(3)
 						end
 					else
-						warn("balloon not found in 3s")
+						warn("convert balloon not found in 3s")
 					end
 				end
 
