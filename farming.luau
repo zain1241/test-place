@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.2")
+print("loaded 0.2.21")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -2226,16 +2226,19 @@ function farming.move(...)
 		tween = currentTween
 		currentTween:Play()
 		farming.inv(true)
+		j(true)
 
 		currentTween.Completed:Once(function(state)
 			if tween == currentTween then tween = nil end
 
 			if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+				pcall(function() j(false) end)
 				root.Anchored = false
 				mod.data.actives["move"] = false
 				return
 			end
 
+			pcall(function() j(false) end)
 			farming.inv(false)
 			root.Anchored = false
 			mod.data.actives["move"] = false
@@ -3265,12 +3268,23 @@ function farming.farm(...)
 
 		if part == nil then return end
 
+		if typeof(part) == "string" then
+			local f = workspace:FindFirstChild("FlowerZones")
+			part = f and f:FindFirstChild(part)
+		end
+
+		if not part then
+			warn("field not found")
+			return
+		end
+
 		local cf, size
-		if typeof(part) == "BasePart" then
+		if part:IsA("BasePart") then
 			cf, size = part.CFrame, part.Size
-		elseif typeof(part) == "Model" then
+		elseif part:IsA("Model") then
 			cf, size = part:GetBoundingBox()
 		else
+			warn("r: field is not BasePart/Model")
 			return
 		end
 
