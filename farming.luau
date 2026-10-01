@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.224")
+print("loaded 0.2.244")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -521,7 +521,13 @@ function farming.farmPetalBloom(field, id)
 		task.wait(0.01)
 	end
 	
-	local circleRadius = 7; local circleStart = tick(); local breakTimeout = 30; local spin = 1; local lastActivate = 0
+	local circleRadius = 7
+	local circleMinRadius = 4
+	local circleStart = tick()
+	local breakTimeout = 30
+	local currentTarget = nil
+	local lastRandom = 0
+	local randomInterval = 0.7
 
 	while bloomAlive() and (tick() - circleStart) < breakTimeout do
 		character = find.player.Character
@@ -534,30 +540,26 @@ function farming.farmPetalBloom(field, id)
 		if not pos then break end
 
 		local center = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
-		local offset = Vector3.new(hrp.Position.X - center.X, 0, hrp.Position.Z - center.Z)
-		local dist = offset.Magnitude
 
-		if dist < 0.1 then offset = Vector3.new(1, 0, 0) dist = 1 end
+		local needNew = (not currentTarget)
+			or (tick() - lastRandom > randomInterval)
+			or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 1.5)
 
-		local radial = offset.Unit
-		local tangent = Vector3.new(-radial.Z * spin, 0, radial.X * spin)
-
-		local moveDir
-
-		if dist > circleRadius + 1.5 then
-			moveDir = -radial
-		elseif dist < circleRadius - 1.5 then
-			moveDir = radial
-		else
-			moveDir = tangent
+		if needNew then
+			local angle = find.random:NextNumber(0, math.pi * 2)
+			local r = find.random:NextNumber(circleMinRadius, circleRadius)
+			currentTarget = Vector3.new(
+				center.X + math.cos(angle) * r,
+				hrp.Position.Y,
+				center.Z + math.sin(angle) * r
+			)
+			lastRandom = tick()
 		end
 
-		local waypoint = hrp.Position + moveDir * 8
-		waypoint = Vector3.new(waypoint.X, hrp.Position.Y, waypoint.Z)
 		humanoid.WalkSpeed = speed
 
 		pcall(function()
-			humanoid:MoveTo(waypoint)
+			humanoid:MoveTo(currentTarget)
 		end)
 
 		task.wait(0.08)
@@ -1109,13 +1111,16 @@ function farming.farmSprout(field, id)
 	end
 	
 	local circleRadius = 7
+	local circleMinRadius = 4
 	local circleStart = tick()
 	local breakTimeout = 30
-	local spin = 1
-	
+
 	task.wait(.4)
 	farming.autosprinkler(true)
-	local currentAngle = nil
+
+	local currentTarget = nil
+	local lastRandom = 0
+	local randomInterval = 0.7
 
 	while enabled() and sprout.Parent ~= nil and (tick() - circleStart) < breakTimeout do
 		character = find.player.Character
@@ -1128,31 +1133,25 @@ function farming.farmSprout(field, id)
 
 		local center = Vector3.new(sprout.Position.X, hrp.Position.Y, sprout.Position.Z)
 
-		local dx = hrp.Position.X - center.X
-		local dz = hrp.Position.Z - center.Z
-		local dist = math.sqrt(dx * dx + dz * dz)
-		
-		if not currentAngle then
-			if dist > 0.5 then
-				currentAngle = math.atan2(dz, dx)
-			else
-				currentAngle = find.random:NextNumber(0, math.pi * 2)
-			end
-		end
-		
-		currentAngle = currentAngle + 0.35 * spin
-		
-		if dist > circleRadius + 2 then
-			currentAngle = math.atan2(dz, dx)
-		elseif dist < circleRadius - 2 then
-			currentAngle = math.atan2(dz, dx)
+		local needNew = (not currentTarget)
+			or (tick() - lastRandom > randomInterval)
+			or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 1.5)
+
+		if needNew then
+			local angle = find.random:NextNumber(0, math.pi * 2)
+			local r = find.random:NextNumber(circleMinRadius, circleRadius)
+			currentTarget = Vector3.new(
+				center.X + math.cos(angle) * r,
+				hrp.Position.Y,
+				center.Z + math.sin(angle) * r
+			)
+			lastRandom = tick()
 		end
 
-		local target = Vector3.new(center.X + math.cos(currentAngle) * circleRadius, hrp.Position.Y, center.Z + math.sin(currentAngle) * circleRadius)
 		humanoid.WalkSpeed = speed
 
 		pcall(function()
-			humanoid:MoveTo(target)
+			humanoid:MoveTo(currentTarget)
 		end)
 
 		task.wait(0.08)
@@ -1412,12 +1411,17 @@ function farming.farmPuffshroom(field, id)
 		return false
 	end
 	
-	local circleRadius = 5; local circleDirection = 1; local breakStart = tick(); local breakTimeout = 30
-	
+	local circleRadius = 5
+	local circleMinRadius = 3
+	local breakStart = tick()
+	local breakTimeout = 30
+
 	task.wait(.4)
 	farming.autosprinkler(true)
 
-	local currentAngle = nil
+	local currentTarget = nil
+	local lastRandom = 0
+	local randomInterval = 0.5
 
 	while enabled() and puff.Parent == pf and (tick() - breakStart) < breakTimeout do
 		character = find.player.Character
@@ -1430,29 +1434,25 @@ function farming.farmPuffshroom(field, id)
 		if not centerPart then break end
 
 		local center = centerPart.Position
-		local dx = hrp.Position.X - center.X
-		local dz = hrp.Position.Z - center.Z
-		local dist = math.sqrt(dx * dx + dz * dz)
 
-		if not currentAngle then
-			if dist > 0.5 then
-				currentAngle = math.atan2(dz, dx)
-			else
-				currentAngle = find.random:NextNumber(0, math.pi * 2)
-			end
+		local needNew = (not currentTarget)
+			or (tick() - lastRandom > randomInterval)
+			or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 1.5)
+
+		if needNew then
+			local angle = find.random:NextNumber(0, math.pi * 2)
+			local r = find.random:NextNumber(circleMinRadius, circleRadius)
+			currentTarget = Vector3.new(
+				center.X + math.cos(angle) * r,
+				hrp.Position.Y,
+				center.Z + math.sin(angle) * r
+			)
+			lastRandom = tick()
 		end
-
-		currentAngle = currentAngle + 0.35 * circleDirection
-
-		if dist > circleRadius + 2 or dist < circleRadius - 2 then
-			currentAngle = math.atan2(dz, dx)
-		end
-
-		local target = Vector3.new(center.X + math.cos(currentAngle) * circleRadius, hrp.Position.Y, center.Z + math.sin(currentAngle) * circleRadius)
 
 		humanoid.WalkSpeed = speed
 		pcall(function()
-			humanoid:MoveTo(target)
+			humanoid:MoveTo(currentTarget)
 		end)
 		task.wait(0.08)
 	end
@@ -2000,9 +2000,9 @@ function farming.move(...)
 						end
 						return
 					end
-
-					root.Anchored = false
 					
+					root.Anchored = false
+
 					if humanoid and humanoid.Parent then
 						humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
 					end
@@ -2010,17 +2010,64 @@ function farming.move(...)
 					mod.data.actives["move"] = false
 					mod.data.actives["point"] = false
 					
-					--farming.autosprinkler()
+					if currentFarmId == farmId and mod.data.actives["auto_farm"] == true then
+						task.spawn(function()
+							if currentFarmId ~= farmId then return end
+							if mod.data.actives["auto_farm"] ~= true then return end
+							if mod.data.actives["converting"] then return end
+							if mod.data.actives["move"] == true then return end
+
+							local info = farming.get_pollen_info()
+							local threshold = mod.data.actives["backpack"] or 80
+
+							if info and info.percent >= threshold then
+								local hivePos = farming.getHive()
+								if hivePos then
+									mod.data.actives["move"] = false
+									mod.data.actives["point"] = false
+									local okConv = farming.move(
+										"convert",
+										mod.data.actives["walkspeed"],
+										hivePos
+									)
+									if okConv then
+										mod.data.actives["converting"] = true
+									end
+								end
+							else
+								mod.data.actives["last_time_convert"] = tick()
+							end
+						end)
+					end
+
 					task.wait(.2)
 					farming.autosprinkler(true)
-					
-					--task.wait(1)
-					--farming.autosprinkler()
 				end)
-				
-				task.wait(1)
+
+				task.wait(0.15)
 
 				return currentTween
+
+				--	root.Anchored = false
+					
+				--	if humanoid and humanoid.Parent then
+				--		humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+				--	end
+
+				--	mod.data.actives["move"] = false
+				--	mod.data.actives["point"] = false
+					
+				--	--farming.autosprinkler()
+				--	task.wait(.2)
+				--	farming.autosprinkler(true)
+					
+				--	--task.wait(1)
+				--	--farming.autosprinkler()
+				--end)
+				
+				--task.wait(1)
+
+				--return currentTween
 			end
 		end
 	elseif a[1] == "hive" then
@@ -2626,7 +2673,7 @@ function farming.convert(...)
 							task.wait(3)
 						end
 					else
-						warn("convert balloon not found in 3s")
+						--warn("convert balloon not found in 3s")
 					end
 				end
 
@@ -3291,7 +3338,7 @@ function farming.farm(...)
 	if not ok then
 		farming.__farmFlyRetry = (farming.__farmFlyRetry or 0) + 1
 		if farming.__farmFlyRetry >= 5 then
-			warn("[farm] initial fly failed 5x — disabling auto_farm to avoid kick")
+			warn("farm initial fly failed 5x — disabling auto_farm to avoid kick")
 			farming.__farmFlyRetry = 0
 			mod.data.actives["auto_farm"] = false
 			resetFarmMovement(false)
@@ -3539,27 +3586,6 @@ function farming.farm(...)
 				end
 			end
 			
-			if mod.data.actives["sprouts"] == true
-				and field
-				and (tick() - lastSproutTime) >= mod.data.actives["sprout_cooldown"]
-			then
-				local sproutFound = getNearestSprout(
-					field,
-					find.player.Character
-						and find.player.Character:FindFirstChild("HumanoidRootPart")
-				)
-
-				if sproutFound then
-					--print("found:", sproutFound:GetFullName(), sproutFound.Position)
-					farming.farmSprout(field, id)
-					continue
-				end
-			end
-			
-			if mod.data.actives["petals"] == true and field then
-				farming.farmPetalBloom(field, id)
-			end
-			
 			if mod.data.actives["pushrooms_enabled"] == true and field then
 				local rt = find.player.Character
 					and find.player.Character:FindFirstChild("HumanoidRootPart")
@@ -3596,6 +3622,27 @@ function farming.farm(...)
 
 					continue
 				end
+			end
+			
+			if mod.data.actives["sprouts"] == true
+				and field
+				and (tick() - lastSproutTime) >= mod.data.actives["sprout_cooldown"]
+			then
+				local sproutFound = getNearestSprout(
+					field,
+					find.player.Character
+						and find.player.Character:FindFirstChild("HumanoidRootPart")
+				)
+
+				if sproutFound then
+					--print("found:", sproutFound:GetFullName(), sproutFound.Position)
+					farming.farmSprout(field, id)
+					continue
+				end
+			end
+			
+			if mod.data.actives["petals"] == true and field then
+				farming.farmPetalBloom(field, id)
 			end
 
 			table.clear(queue["tokens"])
@@ -3885,33 +3932,6 @@ function farming.farm(...)
 				end
 			end
 			
-			if mod.data.actives["sprouts"] == true and field and (tick() - lastSproutTime) >= mod.data.actives["sprout_cooldown"] then
-				local sproutFound = getNearestSprout(
-					field,
-					find.player.Character
-						and find.player.Character:FindFirstChild("HumanoidRootPart")
-				)
-
-				if sproutFound then
-					--print("found:", sproutFound:GetFullName(), sproutFound.Position)
-					farming.farmSprout(field, id)
-					continue
-				end
-			end
-			
-			if mod.data.actives["petals"] == true and field then
-				local bloomFound = getNearestBloom(
-					field,
-					find.player.Character
-						and find.player.Character:FindFirstChild("HumanoidRootPart")
-				)
-
-				if bloomFound then
-					farming.farmPetalBloom(field, id)
-					continue
-				end
-			end
-
 			if mod.data.actives["pushrooms_enabled"] == true and field then
 				local rt = find.player.Character
 					and find.player.Character:FindFirstChild("HumanoidRootPart")
@@ -3945,6 +3965,33 @@ function farming.farm(...)
 						returnToField(field, id)
 					end
 
+					continue
+				end
+			end
+			
+			if mod.data.actives["sprouts"] == true and field and (tick() - lastSproutTime) >= mod.data.actives["sprout_cooldown"] then
+				local sproutFound = getNearestSprout(
+					field,
+					find.player.Character
+						and find.player.Character:FindFirstChild("HumanoidRootPart")
+				)
+
+				if sproutFound then
+					--print("found:", sproutFound:GetFullName(), sproutFound.Position)
+					farming.farmSprout(field, id)
+					continue
+				end
+			end
+			
+			if mod.data.actives["petals"] == true and field then
+				local bloomFound = getNearestBloom(
+					field,
+					find.player.Character
+						and find.player.Character:FindFirstChild("HumanoidRootPart")
+				)
+
+				if bloomFound then
+					farming.farmPetalBloom(field, id)
 					continue
 				end
 			end
@@ -4124,8 +4171,7 @@ function farming.farm(...)
 		if not a then return end
 		if not f then return end
 		if afarm then afarm:Disconnect() afarm = nil end
-
-		-- Флаг: первая проверка после прилёта на поле
+		
 		local didArrivalCheck = false
 
 		afarm = farming.conAF(
@@ -4148,13 +4194,10 @@ function farming.farm(...)
 					if mod.data.actives["converting"] then return end
 					local info = farming.get_pollen_info()
 					local threshold = mod.data.actives["backpack"] or 80
-
-					-- === Прилёт на поле: решает ТОЛЬКО процент рюкзака ===
+					
 					if not didArrivalCheck and mod.data.actives["move"] == false then
 						didArrivalCheck = true
 						if not (info and info.percent >= threshold) then
-							-- Рюкзак пустой/неполный — сбрасываем таймер,
-							-- чтобы он не сработал сразу после прилёта
 							mod.data.actives["last_time_convert"] = tick()
 						end
 					end
