@@ -50,7 +50,7 @@ local bubbles = {}; local staticBubbles = {}; local __bboxCache = {}; local __bb
 local PUFF_RARITY = {["Common"] = true, ["Rare"] = true, ["Epic"] = true, ["Legendary"] = true, ["Mythic"] = true}
 local PUFF_PRIORITY = {["Mythic"] = 5, ["Legendary"] = 4, ["Epic"] = 3, ["Rare"] = 2, ["Common"] = 1,}
 
-local MONSTER_SAFE_EDGE  = 80; local MONSTER_AVOID_EDGE = 18; local MONSTER_FLEE_DIST  = 22
+local MONSTER_SAFE_EDGE  = 40; local MONSTER_AVOID_EDGE = 18; local MONSTER_FLEE_DIST  = 22
 
 local PETAL_COLORS = {
 	Red = Color3.fromRGB(249, 34, 34),
