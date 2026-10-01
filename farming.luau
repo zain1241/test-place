@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.21")
+print("loaded 0.2.22")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -1916,13 +1916,16 @@ function farming.move(...)
 				s.LineThickness = .04
 				s.SurfaceTransparency = .9
 				
-				if tween then tween:Cancel() tween = nil end
-				if atween then atween:Cancel() atween = nil end
+				if tween then pcall(function() tween:Cancel() end) tween = nil end
+				if atween then pcall(function() atween:Cancel() end) atween = nil end
 				
 				local char = find.player.Character
 				local root = char and char:FindFirstChild("HumanoidRootPart")
 				local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-				if not root or not humanoid then return end
+				if not root or not humanoid then
+					if s.Parent then s:Destroy() end
+					return
+				end
 
 				local target = r(v)
 				if not target then return end
@@ -2113,18 +2116,18 @@ function farming.move(...)
 				return
 			end
 			
-			if not farming.getHive() then
+			local hiveRes = farming.getHive()
+			if type(hiveRes) ~= "Vector3" then
 				task.wait(0.6)
 
-				local clicked = false
-				for try = 1, 3 do
-					clicked = activateButton()
+				for _try = 1, 3 do
+					activateButton()
 					task.wait(0.5)
-					if farming.getHive() then break end
+					if type(farming.getHive()) == "Vector3" then break end
 				end
 
-				if not farming.getHive() then
-					warn("[hive] не занялся после 3 попыток")
+				if type(farming.getHive()) ~= "Vector3" then
+					warn("hive failed to occupy hive")
 					mod.data.actives["move"] = false
 					mod.data.actives["converting"] = false
 					return
@@ -2145,7 +2148,7 @@ function farming.move(...)
 		local target = a[3]
 		--print(target)
 		if typeof(target) ~= "Vector3" then return end
-		if tween then tween:Cancel() tween = nil end
+		if tween then pcall(function() tween:Cancel() end) tween = nil end
 		if not workspace:FindFirstChild(find.player.Name) then return end
 
 		local character = find.player.Character
@@ -2207,8 +2210,8 @@ function farming.move(...)
 		local root = character:FindFirstChild("HumanoidRootPart")
 		if not root then return end
 
-		if tween then tween:Cancel() tween = nil end
-		if atween then atween:Cancel() atween = nil end
+		if tween then pcall(function() tween:Cancel() end) tween = nil end
+		if atween then pcall(function() atween:Cancel() end) atween = nil end
 
 		mod.data.actives["move"] = true
 		local currentFarmId = farmId
@@ -2608,19 +2611,19 @@ function farming.convert(...)
 					end
 
 					if balloon then
-						--print("balloon found, waiting pop")
 						local popStart = tick()
-						while balloon.Parent and tick() - popStart < 300 do
-							if not mod.data.actives["auto_farm"] then return end
+						local POP_TIMEOUT = 60
+						while balloon.Parent
+							and mod.data.actives["auto_farm"]
+							and (tick() - popStart) < POP_TIMEOUT
+						do
 							task.wait(1)
 						end
-						if not balloon.Parent then
-							--print("balloon converted")
-						else
-							print("balloon timeout")
+						if balloon.Parent then
+							warn("balloon did not pop in " .. POP_TIMEOUT .. "s")
 						end
 					else
-						print("balloon not found 3s")
+						warn("balloon not found in 3s")
 					end
 				end
 
@@ -2912,9 +2915,9 @@ end
 
 function farming.getHive(...)
 	local honeycombs = workspace:FindFirstChild("Honeycombs")
-	
+
 	if not honeycombs then
-		return { "Random", "Hive1", "Hive2", "Hive3", "Hive4", "Hive5" }
+		return nil
 	end
 
 	local pos = nil
@@ -2996,8 +2999,8 @@ function farming.autoHive(...)
 
 	local myName = string.lower(find.player.Name)
 
-	local myHivePos = nil
-	local freeHivePos = nil
+	--local myHivePos = nil
+	--local freeHivePos = nil
 
 	local EMPTY = {
 		[""] = true,
@@ -3166,7 +3169,7 @@ function farming.autoDig(enabled)
 	end
 
 	adig = farming.conAF(
-		find.prerender, 4,
+		find.prerender, 2,
 		function(delta)
 			if mod.data.actives["auto_dig"] == true and autoDigId == id then
 				collect:FireServer()
@@ -3186,8 +3189,10 @@ function farming.farm(...)
 	local enabled = mod.data.actives["auto_farm"] == true
 	
 	lastSproutTime = 0
-	
-	resetFarmMovement(enabled)
+
+	if not farming.__retrying then
+		resetFarmMovement(enabled)
+	end
 
 	if not enabled then
 		farming.noclip(false)
@@ -3231,6 +3236,17 @@ function farming.farm(...)
 	
 	if mod.data.actives["selected_field"] == "" then
 		mod.data.actives["auto_farm"] = false
+		resetFarmMovement(false)
+		return
+	end
+	
+	if not find.player.Character
+		or not find.player.Character:FindFirstChild("HumanoidRootPart")
+	then
+		task.wait(0.5)
+		if mod.data.actives["auto_farm"] == true then
+			task.defer(farming.farm)
+		end
 		return
 	end
 	
@@ -3241,15 +3257,31 @@ function farming.farm(...)
 	)
 
 	if not ok then
-		warn("farm initial fly failed, retrying in 1s")
-		task.delay(1, function()
+		farming.__farmFlyRetry = (farming.__farmFlyRetry or 0) + 1
+		if farming.__farmFlyRetry >= 5 then
+			warn("[farm] initial fly failed 5x — disabling auto_farm to avoid kick")
+			farming.__farmFlyRetry = 0
+			mod.data.actives["auto_farm"] = false
+			resetFarmMovement(false)
+			return
+		end
+		local delay = math.min(2 ^ (farming.__farmFlyRetry - 1), 15)
+		warn("initial fly failed, retry " .. farming.__farmFlyRetry .. "/5 in " .. delay .. "s")
+		task.delay(delay, function()
 			if mod.data.actives["auto_farm"] == true then
-				farming.farm()
+				farming.__retrying = true
+				local okRetry, errRetry = pcall(farming.farm)
+				farming.__retrying = nil
+				if not okRetry then
+					warn("farm retry error: " .. tostring(errRetry))
+				end
 			end
 		end)
 		return
 	end
-
+	
+	farming.__farmFlyRetry = 0
+	farming.__retrying = nil
 	local function j(a)
 		if a then
 			find.player.Character:FindFirstChildOfClass("Humanoid").Jump = true
@@ -4277,19 +4309,27 @@ task.spawn(function()
 	if mod.data.actives["auto_farm"] == true then
 		farming.farm()
 	end
+	farming.__initialFarmStarted = true
 end)
 
 local function onCharacterRespawn(character)
 	task.wait(0.8)
-	
+
 	if adig then
 		pcall(function() adig:Disconnect() end)
 		adig = nil
 	end
-	
+
 	pcall(function()
 		resetFarmMovement(false)
 	end)
+	
+	if mod.data.actives["auto_dig"] == true then
+		task.spawn(function()
+			task.wait(1)
+			pcall(function() farming.autoDig(true) end)
+		end)
+	end
 	
 	mod.data.actives["point"] = false
 	mod.data.actives["move"] = false
@@ -4317,10 +4357,9 @@ local function onCharacterRespawn(character)
 		farming.forceWalkSpeed(ws)
 	end)
 	
-	
-	if mod.data.actives["auto_farm"] == true then
+	if mod.data.actives["auto_farm"] == true and farming.__initialFarmStarted then
 		task.wait(0.5)
-		
+
 		mod.data.actives["move"] = false
 		mod.data.actives["point"] = false
 		mod.data.actives["converting"] = false
