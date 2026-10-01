@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.221")
+print("loaded 0.2.222")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -2118,7 +2118,7 @@ function farming.move(...)
 			
 			local hiveRes = farming.getHive()
 			if type(hiveRes) ~= "Vector3" then
-				task.wait(0.8)
+				task.wait(1.2)
 				
 				for _try = 1, 5 do
 					local clicked = activateButton()
@@ -2933,36 +2933,84 @@ end
 end
 
 function farming.getHive(...)
+	local spawnPos = find.player:FindFirstChild("SpawnPos")
+	if spawnPos and spawnPos:IsA("CFrameValue") then
+		local p = spawnPos.Value.Position
+		if p and p.Magnitude > 1 then
+			return p
+		end
+	end
+	
 	local honeycombs = workspace:FindFirstChild("Honeycombs")
+	if not honeycombs then return nil end
 
-	if not honeycombs then
+	local myName = string.lower(find.player.Name)
+	local myDisplay = string.lower(find.player.DisplayName or find.player.Name)
+
+	local function nameMatches(text)
+		if type(text) ~= "string" then return false end
+		local t = string.lower((string.match(text, "^%s*(.-)%s*$") or ""))
+		if t == "" then return false end
+		return t == myName or t == myDisplay
+	end
+
+	local function extractSpawnPos(hive)
+		local sp = hive:FindFirstChild("SpawnPos") or hive:FindFirstChild("SpawnPos", true)
+		if sp then
+			if sp:IsA("BasePart") then return sp.Position end
+			if sp:IsA("CFrameValue") then return sp.Value.Position end
+			if sp:IsA("Attachment") then return sp.WorldPosition end
+			if sp:IsA("Vector3Value") then return sp.Value end
+		end
 		return nil
 	end
 
-	local pos = nil
-
 	for _, hive in ipairs(honeycombs:GetChildren()) do
 		local display = hive:FindFirstChild("Display")
-		local gui = display and display:FindFirstChild("Gui")
-		local frame = gui and gui:FindFirstChild("Frame")
-		local name = frame and frame:FindFirstChild("OwnerName")
-
-		if name and name:IsA("TextLabel") then
-			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
-			if string.lower(trimmed) == string.lower(find.player.Name) then
-				local spawnPos = hive:FindFirstChild("SpawnPos")
-				if spawnPos then
-					if spawnPos:IsA("BasePart") then pos = spawnPos.Position
-					elseif spawnPos:IsA("CFrameValue") then pos = spawnPos.Value.Position
-					elseif spawnPos:IsA("Attachment") then pos = spawnPos.WorldPosition
-					elseif spawnPos:IsA("Vector3Value") then pos = spawnPos.Value end
+		if display then
+			for _, d in ipairs(display:GetDescendants()) do
+				if d.Name == "OwnerName" and d:IsA("TextLabel") and nameMatches(d.Text) then
+					local pos = extractSpawnPos(hive)
+					if pos then return pos end
 				end
 			end
 		end
 	end
 
-	return pos
+	return nil
 end
+
+--function farming.getHive(...)
+--	local honeycombs = workspace:FindFirstChild("Honeycombs")
+
+--	if not honeycombs then
+--		return nil
+--	end
+
+--	local pos = nil
+
+--	for _, hive in ipairs(honeycombs:GetChildren()) do
+--		local display = hive:FindFirstChild("Display")
+--		local gui = display and display:FindFirstChild("Gui")
+--		local frame = gui and gui:FindFirstChild("Frame")
+--		local name = frame and frame:FindFirstChild("OwnerName")
+
+--		if name and name:IsA("TextLabel") then
+--			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
+--			if string.lower(trimmed) == string.lower(find.player.Name) then
+--				local spawnPos = hive:FindFirstChild("SpawnPos")
+--				if spawnPos then
+--					if spawnPos:IsA("BasePart") then pos = spawnPos.Position
+--					elseif spawnPos:IsA("CFrameValue") then pos = spawnPos.Value.Position
+--					elseif spawnPos:IsA("Attachment") then pos = spawnPos.WorldPosition
+--					elseif spawnPos:IsA("Vector3Value") then pos = spawnPos.Value end
+--				end
+--			end
+--		end
+--	end
+
+--	return pos
+--end
 
 function farming.autoHive(...)
 	if mod.data.actives["autohive"] == false then
