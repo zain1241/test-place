@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.223")
+print("loaded 0.2.224")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -2116,35 +2116,21 @@ function farming.move(...)
 				return
 			end
 			
-			local hiveRes = farming.getHive()
-			if type(hiveRes) ~= "Vector3" then
-				-- DEBUG: покажет, что вообще есть в момент прилёта
-				local sp = find.player:FindFirstChild("SpawnPos")
-				warn("[hive dbg] arrive: SpawnPos=", sp and sp.ClassName or "nil",
-					" getHive=", tostring(hiveRes))
+			if not farming.getHive() then
+				task.wait(0.6)
 
-				task.wait(1.5)
+				local clicked = false
+				for try = 1, 3 do
+					clicked = activateButton()
+					task.wait(0.5)
+					if farming.getHive() then break end
+				end
 
-				for _try = 1, 5 do
-					local clicked = activateButton()
-					task.wait(0.7)
-
-					local nowHive = farming.getHive()
-					local spNow = find.player:FindFirstChild("SpawnPos")
-					warn("[hive dbg] try=", _try,
-						" clicked=", tostring(clicked),
-						" getHive=", tostring(nowHive),
-						" SpawnPos=", spNow and "yes" or "no")
-
-					if type(nowHive) == "Vector3" then break end
-					if not clicked then
-						pcall(function()
-							find.virtual:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-							task.wait(0.1)
-							find.virtual:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-						end)
-						task.wait(0.5)
-					end
+				if not farming.getHive() then
+					warn("hive not found 3s")
+					mod.data.actives["move"] = false
+					mod.data.actives["converting"] = false
+					return
 				end
 			end
 
@@ -2931,69 +2917,32 @@ end
 end
 
 function farming.getHive(...)
-	local sp = find.player:FindFirstChild("SpawnPos")
-	if not sp then
-		sp = find.player:FindFirstChild("SpawnPos", true)
-	end
-
-	if sp then
-		local p
-		if sp:IsA("CFrameValue") then
-			p = sp.Value and sp.Value.Position
-		elseif sp:IsA("Vector3Value") then
-			p = sp.Value
-		elseif sp:IsA("BasePart") then
-			p = sp.Position
-		elseif sp:IsA("Attachment") then
-			p = sp.WorldPosition
-		end
-		if p then
-			return p
-		end
-	end
-	
 	local honeycombs = workspace:FindFirstChild("Honeycombs")
-	if not honeycombs then return nil end
+	if not honeycombs then return end
 
-	local myName = string.lower(find.player.Name)
-	local myDisplay = string.lower(find.player.DisplayName or find.player.Name)
-
-	local function textContainsMe(text)
-		if type(text) ~= "string" then return false end
-		local t = string.lower(text)
-		return string.find(t, myName, 1, true) ~= nil
-			or string.find(t, myDisplay, 1, true) ~= nil
-	end
-
-	local function extractPos(hive)
-		local s = hive:FindFirstChild("SpawnPos") or hive:FindFirstChild("SpawnPos", true)
-		if s then
-			if s:IsA("BasePart") then return s.Position end
-			if s:IsA("CFrameValue") then return s.Value and s.Value.Position end
-			if s:IsA("Attachment") then return s.WorldPosition end
-			if s:IsA("Vector3Value") then return s.Value end
-		end
-		if hive:IsA("Model") then
-			if hive.PrimaryPart then return hive.PrimaryPart.Position end
-			local ok, pivot = pcall(function() return hive:GetPivot() end)
-			if ok and pivot then return pivot.Position end
-		end
-		return nil
-	end
+	local pos = nil
 
 	for _, hive in ipairs(honeycombs:GetChildren()) do
 		local display = hive:FindFirstChild("Display")
-		if display then
-			for _, d in ipairs(display:GetDescendants()) do
-				if d.Name == "OwnerName" and d:IsA("TextLabel") and textContainsMe(d.Text) then
-					local pos = extractPos(hive)
-					if pos then return pos end
+		local gui = display and display:FindFirstChild("Gui")
+		local frame = gui and gui:FindFirstChild("Frame")
+		local name = frame and frame:FindFirstChild("OwnerName")
+
+		if name and name:IsA("TextLabel") then
+			local trimmed = string.match(name.Text, "^%s*(.-)%s*$") or ""
+			if string.lower(trimmed) == string.lower(find.player.Name) then
+				local spawnPos = hive:FindFirstChild("SpawnPos")
+				if spawnPos then
+					if spawnPos:IsA("BasePart") then pos = spawnPos.Position
+					elseif spawnPos:IsA("CFrameValue") then pos = spawnPos.Value.Position
+					elseif spawnPos:IsA("Attachment") then pos = spawnPos.WorldPosition
+					elseif spawnPos:IsA("Vector3Value") then pos = spawnPos.Value end
 				end
 			end
 		end
 	end
 
-	return nil
+	return pos
 end
 
 --function farming.getHive(...)
