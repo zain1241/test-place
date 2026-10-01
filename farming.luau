@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.244")
+print("loaded 0.2.31")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -45,7 +45,7 @@ local invc, tween, afarm, adig, aconvert, atween, track, animwalk, humanoid_walk
 local farmId = 0
 
 local __noclipConn = nil; local PUFF_MAX_DISTANCE = nil; local bubblesReady = false; local lastSproutTime = 0; local MONDO_COLLECT_TIME = 40
-local bubbles = {}; local staticBubbles = {}; local __bboxCache = {}; local __bboxCacheTime = {}
+local bubbles = {}; local staticBubbles = {}; local __bboxCache = {}; local __bboxCacheTime = {};local __fleeTarget = nil; local __fleeUntil = 0
 
 local PUFF_RARITY = {["Common"] = true, ["Rare"] = true, ["Epic"] = true, ["Legendary"] = true, ["Mythic"] = true}
 local PUFF_PRIORITY = {["Mythic"] = 5, ["Legendary"] = 4, ["Epic"] = 3, ["Rare"] = 2, ["Common"] = 1,}
@@ -401,13 +401,30 @@ local function getThreateningMonster(hrp)
 end
 
 local function getFleeTarget(hrp)
-	if mod.data.actives["save_mode"] ~= true then return nil end
+	if mod.data.actives["save_mode"] ~= true then
+		__fleeTarget = nil
+		return nil
+	end
 	if not hrp then return nil end
 
+	local now = tick()
+	if __fleeTarget and now < __fleeUntil then
+		local d = (__fleeTarget - hrp.Position).Magnitude
+		if d > 3 then
+			return __fleeTarget
+		end
+	end
+
 	local threat = getThreateningMonster(hrp)
-	if not threat then return nil end
-	if threat.realDist >= MONSTER_AVOID_EDGE then return nil end
-	
+	if not threat then
+		__fleeTarget = nil
+		return nil
+	end
+	if threat.realDist >= MONSTER_AVOID_EDGE then
+		__fleeTarget = nil
+		return nil
+	end
+
 	local mv = Vector3.zero
 	pcall(function()
 		local pp = threat.monster.PrimaryPart
@@ -424,8 +441,9 @@ local function getFleeTarget(hrp)
 			chasing = true
 		end
 	end
-	
+
 	if threat.realDist > MONSTER_SAFE_EDGE and not chasing then
+		__fleeTarget = nil
 		return nil
 	end
 
@@ -438,7 +456,10 @@ local function getFleeTarget(hrp)
 
 	local push = math.max(MONSTER_SAFE_EDGE - threat.realDist, 0) + MONSTER_FLEE_DIST
 	local raw = hrp.Position + away * push
-	return Vector3.new(raw.X, hrp.Position.Y, raw.Z)
+	local result = Vector3.new(raw.X, hrp.Position.Y, raw.Z)
+	__fleeTarget = result
+	__fleeUntil = now + 0.7
+	return result
 end
 
 local function isPetal(v)
@@ -522,12 +543,14 @@ function farming.farmPetalBloom(field, id)
 	end
 	
 	local circleRadius = 7
-	local circleMinRadius = 4
+	local circleMinRadius = 3
 	local circleStart = tick()
 	local breakTimeout = 30
+
 	local currentTarget = nil
-	local lastRandom = 0
-	local randomInterval = 0.7
+	local nextPickAt = 0
+	local restDuration = 0.4
+	local moveSpeed = math.min(speed, 22)
 
 	while bloomAlive() and (tick() - circleStart) < breakTimeout do
 		character = find.player.Character
@@ -541,27 +564,32 @@ function farming.farmPetalBloom(field, id)
 
 		local center = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
 
-		local needNew = (not currentTarget)
-			or (tick() - lastRandom > randomInterval)
-			or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 1.5)
+		local needNew = false
+		if not currentTarget then
+			needNew = true
+		else
+			local d = (Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude
+			if d < 1.5 and tick() >= nextPickAt then
+				needNew = true
+			end
+		end
 
 		if needNew then
 			local angle = find.random:NextNumber(0, math.pi * 2)
-			local r = find.random:NextNumber(circleMinRadius, circleRadius)
+			local t = find.random:NextNumber() ^ 0.6
+			local r = circleMinRadius + (circleRadius - circleMinRadius) * t
 			currentTarget = Vector3.new(
 				center.X + math.cos(angle) * r,
 				hrp.Position.Y,
 				center.Z + math.sin(angle) * r
 			)
-			lastRandom = tick()
+			nextPickAt = tick() + restDuration
 		end
 
-		humanoid.WalkSpeed = speed
-
+		humanoid.WalkSpeed = moveSpeed
 		pcall(function()
 			humanoid:MoveTo(currentTarget)
 		end)
-
 		task.wait(0.08)
 	end
 
@@ -723,11 +751,12 @@ function farming.farmMondo(field, id)
 		safeCleanup(hrp)
 		return false
 	end
-
+	
 	if tween then pcall(function() tween:Cancel() end) tween = nil end
 
 	local startRoot = hrp
 	local startPosition = startRoot.Position
+	local startRot = startRoot.CFrame.Rotation
 	local angle = find.random:NextNumber(0, math.pi * 2)
 	local r = find.random:NextNumber(30, 45)
 	local rawTarget = Vector3.new(mondoPos.X + math.cos(angle) * r, mondoPos.Y + 5, mondoPos.Z + math.sin(angle) * r)
@@ -736,66 +765,112 @@ function farming.farmMondo(field, id)
 
 	local distance = (startRoot.Position - target).Magnitude
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
-	local duration = distance / math.max(speed, 1)
-
-	local anchorOk = pcall(function() startRoot.Anchored = true end)
-	if not anchorOk then
-		safeCleanup(startRoot)
-		return false
-	end
+	local duration = math.max(distance / math.max(speed, 1), 0.05)
+	local flyStart = tick()
 
 	pcall(function() farming.inv(true) end)
 
-	local flyTween
-	local tweenOk = pcall(function()
-		flyTween = find.tweenservice:Create(
-			startRoot,
-			TweenInfo.new(math.max(duration, 0.05), Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
-			{ CFrame = CFrame.new(target) }
-		)
-		tween = flyTween
-		flyTween:Play()
-	end)
+	local cancelled = false
+	while enabled() and mondo.Parent ~= nil do
+		local ch2 = find.player.Character
+		local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
+		if not rt2 or not rt2.Parent then
+			cancelled = true
+			break
+		end
 
-	if not tweenOk or not flyTween then
-		if tween then pcall(function() tween:Cancel() end) tween = nil end
-		safeCleanup(startRoot)
-		return false
-	end
+		local elapsed = tick() - flyStart
+		local alpha = math.clamp(elapsed / duration, 0, 1)
+		local newPos = startPosition:Lerp(target, alpha)
 
-	local finished = false
-	flyTween.Completed:Once(function()
-		finished = true
-		if tween == flyTween then tween = nil end
-	end)
+		rt2.CFrame = CFrame.new(newPos) * startRot
+		rt2.AssemblyLinearVelocity = Vector3.zero
+		rt2.AssemblyAngularVelocity = Vector3.zero
 
-	local flyStart = tick()
-	local flyTimeout = duration + 3
-
-	while enabled() and mondo.Parent ~= nil and not finished and (tick() - flyStart) < flyTimeout do
+		if alpha >= 1 then break end
 		task.wait()
 	end
 
-	if not finished then pcall(function() flyTween:Cancel() end) end
-	if tween == flyTween then tween = nil end
-
-	if not finished and startRoot and startRoot.Parent then
-		pcall(function() startRoot.CFrame = CFrame.new(startPosition) end)
-	end
-
-	pcall(function() startRoot.Anchored = false end)
-	safeCleanup(startRoot)
+	safeCleanup(nil)
 	mod.data.actives["move"] = true
 
-	if not enabled() then return false end
+	if cancelled or not enabled() then return false end
 	task.wait(0.05)
+
+	--if tween then pcall(function() tween:Cancel() end) tween = nil end
+
+	--local startRoot = hrp
+	--local startPosition = startRoot.Position
+	--local angle = find.random:NextNumber(0, math.pi * 2)
+	--local r = find.random:NextNumber(30, 45)
+	--local rawTarget = Vector3.new(mondoPos.X + math.cos(angle) * r, mondoPos.Y + 5, mondoPos.Z + math.sin(angle) * r)
+	--local clampedTarget = clampToMondoField(rawTarget)
+	--local target = Vector3.new(clampedTarget.X, rawTarget.Y, clampedTarget.Z)
+
+	--local distance = (startRoot.Position - target).Magnitude
+	--local speed = tonumber(mod.data.actives["walkspeed"]) or 40
+	--local duration = distance / math.max(speed, 1)
+
+	--local anchorOk = pcall(function() startRoot.Anchored = true end)
+	--if not anchorOk then
+	--	safeCleanup(startRoot)
+	--	return false
+	--end
+
+	--pcall(function() farming.inv(true) end)
+
+	--local flyTween
+	--local tweenOk = pcall(function()
+	--	flyTween = find.tweenservice:Create(
+	--		startRoot,
+	--		TweenInfo.new(math.max(duration, 0.05), Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+	--		{ CFrame = CFrame.new(target) }
+	--	)
+	--	tween = flyTween
+	--	flyTween:Play()
+	--end)
+
+	--if not tweenOk or not flyTween then
+	--	if tween then pcall(function() tween:Cancel() end) tween = nil end
+	--	safeCleanup(startRoot)
+	--	return false
+	--end
+
+	--local finished = false
+	--flyTween.Completed:Once(function()
+	--	finished = true
+	--	if tween == flyTween then tween = nil end
+	--end)
+
+	--local flyStart = tick()
+	--local flyTimeout = duration + 3
+
+	--while enabled() and mondo.Parent ~= nil and not finished and (tick() - flyStart) < flyTimeout do
+	--	task.wait()
+	--end
+
+	--if not finished then pcall(function() flyTween:Cancel() end) end
+	--if tween == flyTween then tween = nil end
+
+	--if not finished and startRoot and startRoot.Parent then
+	--	pcall(function() startRoot.CFrame = CFrame.new(startPosition) end)
+	--end
+
+	--pcall(function() startRoot.Anchored = false end)
+	--safeCleanup(startRoot)
+	--mod.data.actives["move"] = true
+
+	--if not enabled() then return false end
+	--task.wait(0.05)
 	
 	-- ===== Основной цикл =====
 	local farmStart = tick()
-	local farmTimeout = 400
-	local lastRandom = 0
-	local randomInterval = 0.6
+	local farmTimeout = 600
 	local currentTarget = nil
+	local nextPickAt = 0
+	local lastRandom = 0
+	local restDuration = 0.5
+	local moveSpeed = math.min(speed, 20)
 	
 	local SAFE_EDGE = 10   -- ближе этого — срочно отбегаем
 	local AVOID_EDGE = 16   -- ближе этого + чикен движется к нам — тоже отбегаем
@@ -868,17 +943,24 @@ function farming.farmMondo(field, id)
 			continue
 		end
 		
-		local needNew = (not currentTarget)
-			or (tick() - lastRandom > randomInterval)
-			or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 3)
+		local needNew = false
+		if not currentTarget then
+			needNew = true
+		else
+			local dCur = (Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude
+			if dCur < 1.5 and tick() >= nextPickAt then
+				needNew = true
+			end
+		end
 
 		if needNew then
 			local a2 = find.random:NextNumber(0, math.pi * 2)
-			local rr = find.random:NextNumber(mondoR + FARM_MIN_EDGE, mondoR + FARM_MAX_EDGE)
+			local t = find.random:NextNumber() ^ 0.6
+			local rr = (mondoR + FARM_MIN_EDGE) + ((FARM_MAX_EDGE - FARM_MIN_EDGE) * t)
 			local rawTarget4 = Vector3.new(mp.X + math.cos(a2) * rr, hrp.Position.Y, mp.Z + math.sin(a2) * rr )
 			local safeTarget4 = clampToMondoField(rawTarget4)
 			currentTarget = Vector3.new(safeTarget4.X, hrp.Position.Y, safeTarget4.Z)
-			lastRandom = tick()
+			nextPickAt = tick() + restDuration
 		end
 
 		local distToCurrentCenter = (Vector3.new(currentTarget.X, 0, currentTarget.Z) - Vector3.new(mp.X, 0, mp.Z)).Magnitude
@@ -889,7 +971,7 @@ function farming.farmMondo(field, id)
 			continue
 		end
 
-		humanoid.WalkSpeed = speed
+		humanoid.WalkSpeed = moveSpeed
 		humanoid:MoveTo(currentTarget)
 		task.wait(0.05)
 	end
@@ -1020,83 +1102,125 @@ function farming.farmSprout(field, id)
 	end
 
 	safeCancelTween()
-
+	
 	local startRoot = hrp
 	local startPosition = startRoot.Position
+	local startRot = startRoot.CFrame.Rotation
 	local target = sprout.Position + Vector3.new(find.random:NextNumber(-3, 3), 2, find.random:NextNumber(-3, 3))
 
 	local distance = (startRoot.Position - target).Magnitude
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
-	local duration = distance / math.max(speed, 1)
-
-	local anchorOk = pcall(function() startRoot.Anchored = true end)
-	if not anchorOk then
-		safeCleanup(startRoot)
-		return false
-	end
+	local duration = math.max(distance / math.max(speed, 1), 0.05)
+	local flyStart = tick()
 
 	pcall(function() farming.inv(true) end)
-	
-	local flyTween
-	local tweenOk = pcall(function()
-		flyTween = find.tweenservice:Create(
-			startRoot,
-			TweenInfo.new(
-				math.max(duration, 0.05),
-				Enum.EasingStyle.Linear,
-				Enum.EasingDirection.Out
-			),
-			{ CFrame = CFrame.new(target) }
-		)
-		tween = flyTween
-		flyTween:Play()
-	end)
 
-	if not tweenOk or not flyTween then
-		safeCancelTween()
-		safeCleanup(startRoot)
-		return false
-	end
+	local cancelled = false
+	while enabled() and sprout.Parent ~= nil do
+		local ch2 = find.player.Character
+		local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
+		if not rt2 or not rt2.Parent then
+			cancelled = true
+			break
+		end
 
-	local finished = false
-	flyTween.Completed:Once(function()
-		finished = true
-		if tween == flyTween then tween = nil end
-	end)
+		local elapsed = tick() - flyStart
+		local alpha = math.clamp(elapsed / duration, 0, 1)
+		local newPos = startPosition:Lerp(target, alpha)
 
-	local flyStart = tick()
-	local flyTimeout = duration + 3
+		rt2.CFrame = CFrame.new(newPos) * startRot
+		rt2.AssemblyLinearVelocity = Vector3.zero
+		rt2.AssemblyAngularVelocity = Vector3.zero
 
-	while enabled()
-		and sprout.Parent ~= nil
-		and not finished
-		and (tick() - flyStart) < flyTimeout
-	do
+		if alpha >= 1 then break end
 		task.wait()
 	end
 
-	if not finished then
-		pcall(function() flyTween:Cancel() end)
-	end
-	if tween == flyTween then tween = nil end
-
-	if not finished and startRoot and startRoot.Parent then
-		pcall(function()
-			startRoot.CFrame = CFrame.new(startPosition)
-		end)
-	end
-
-	pcall(function()
-		startRoot.Anchored = false
-	end)
-	safeCleanup(startRoot, false)
+	safeCleanup(nil, false)
 	mod.data.actives["move"] = true
 
-	if not enabled() then
+	if cancelled or not enabled() then
 		return false
 	end
 
 	task.wait(0.05)
+
+	--local startRoot = hrp
+	--local startPosition = startRoot.Position
+	--local target = sprout.Position + Vector3.new(find.random:NextNumber(-3, 3), 2, find.random:NextNumber(-3, 3))
+
+	--local distance = (startRoot.Position - target).Magnitude
+	--local speed = tonumber(mod.data.actives["walkspeed"]) or 40
+	--local duration = distance / math.max(speed, 1)
+
+	--local anchorOk = pcall(function() startRoot.Anchored = true end)
+	--if not anchorOk then
+	--	safeCleanup(startRoot)
+	--	return false
+	--end
+
+	--pcall(function() farming.inv(true) end)
+	
+	--local flyTween
+	--local tweenOk = pcall(function()
+	--	flyTween = find.tweenservice:Create(
+	--		startRoot,
+	--		TweenInfo.new(
+	--			math.max(duration, 0.05),
+	--			Enum.EasingStyle.Linear,
+	--			Enum.EasingDirection.Out
+	--		),
+	--		{ CFrame = CFrame.new(target) }
+	--	)
+	--	tween = flyTween
+	--	flyTween:Play()
+	--end)
+
+	--if not tweenOk or not flyTween then
+	--	safeCancelTween()
+	--	safeCleanup(startRoot)
+	--	return false
+	--end
+
+	--local finished = false
+	--flyTween.Completed:Once(function()
+	--	finished = true
+	--	if tween == flyTween then tween = nil end
+	--end)
+
+	--local flyStart = tick()
+	--local flyTimeout = duration + 3
+
+	--while enabled()
+	--	and sprout.Parent ~= nil
+	--	and not finished
+	--	and (tick() - flyStart) < flyTimeout
+	--do
+	--	task.wait()
+	--end
+
+	--if not finished then
+	--	pcall(function() flyTween:Cancel() end)
+	--end
+	--if tween == flyTween then tween = nil end
+
+	--if not finished and startRoot and startRoot.Parent then
+	--	pcall(function()
+	--		startRoot.CFrame = CFrame.new(startPosition)
+	--	end)
+	--end
+
+	--pcall(function()
+	--	startRoot.Anchored = false
+	--end)
+	--safeCleanup(startRoot, false)
+	--mod.data.actives["move"] = true
+
+	--if not enabled() then
+	--	return false
+	--end
+
+	--task.wait(0.05)
 
 	character = find.player.Character
 	humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -1111,7 +1235,7 @@ function farming.farmSprout(field, id)
 	end
 	
 	local circleRadius = 7
-	local circleMinRadius = 4
+	local circleMinRadius = 3
 	local circleStart = tick()
 	local breakTimeout = 30
 
@@ -1119,8 +1243,9 @@ function farming.farmSprout(field, id)
 	farming.autosprinkler(true)
 
 	local currentTarget = nil
-	local lastRandom = 0
-	local randomInterval = 0.7
+	local nextPickAt = 0
+	local restDuration = 0.7
+	local moveSpeed = math.min(speed, 22)
 
 	while enabled() and sprout.Parent ~= nil and (tick() - circleStart) < breakTimeout do
 		character = find.player.Character
@@ -1133,27 +1258,32 @@ function farming.farmSprout(field, id)
 
 		local center = Vector3.new(sprout.Position.X, hrp.Position.Y, sprout.Position.Z)
 
-		local needNew = (not currentTarget)
-			or (tick() - lastRandom > randomInterval)
-			or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 1.5)
+		local needNew = false
+		if not currentTarget then
+			needNew = true
+		else
+			local d = (Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude
+			if d < 1.5 and tick() >= nextPickAt then
+				needNew = true
+			end
+		end
 
 		if needNew then
 			local angle = find.random:NextNumber(0, math.pi * 2)
-			local r = find.random:NextNumber(circleMinRadius, circleRadius)
+			local t = find.random:NextNumber() ^ 0.6
+			local r = circleMinRadius + (circleRadius - circleMinRadius) * t
 			currentTarget = Vector3.new(
 				center.X + math.cos(angle) * r,
 				hrp.Position.Y,
 				center.Z + math.sin(angle) * r
 			)
-			lastRandom = tick()
+			nextPickAt = tick() + restDuration
 		end
 
-		humanoid.WalkSpeed = speed
-
+		humanoid.WalkSpeed = moveSpeed
 		pcall(function()
 			humanoid:MoveTo(currentTarget)
 		end)
-
 		task.wait(0.08)
 	end
 
@@ -1325,77 +1455,119 @@ function farming.farmPuffshroom(field, id)
 	end
 
 	safeCancelTween()
-
+	
 	local startRoot = hrp
 	local startPosition = startRoot.Position
+	local startRot = startRoot.CFrame.Rotation
 	local target = rootPart.Position + Vector3.new(find.random:NextNumber(-3, 3), 2, find.random:NextNumber(-3, 3))
 
 	local distance = (startRoot.Position - target).Magnitude
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
-	local duration = distance / math.max(speed, 1)
-	local anchorOk = pcall(function() startRoot.Anchored = true end)
-	if not anchorOk then
-		safeCleanup(startRoot)
-		return false
-	end
+	local duration = math.max(distance / math.max(speed, 1), 0.05)
+	local flyStart = tick()
 
 	pcall(function() farming.inv(true) end)
-	
-	local flyTween
-	local tweenOk = pcall(function()
-		flyTween = find.tweenservice:Create(
-			startRoot,
-			TweenInfo.new(
-				math.max(duration, 0.05),
-				Enum.EasingStyle.Linear,
-				Enum.EasingDirection.Out
-			),
-			{ CFrame = CFrame.new(target) }
-		)
-		tween = flyTween
-		flyTween:Play()
-	end)
 
-	if not tweenOk or not flyTween then
-		safeCancelTween()
-		safeCleanup(startRoot)
-		return false
-	end
+	local cancelled = false
+	while enabled() and puff.Parent == pf do
+		local ch2 = find.player.Character
+		local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
+		if not rt2 or not rt2.Parent then
+			cancelled = true
+			break
+		end
 
-	local finished = false
-	flyTween.Completed:Once(function()
-		finished = true
-		if tween == flyTween then tween = nil end
-	end)
-	
-	local flyStart = tick(); local flyTimeout = duration + 3
+		local elapsed = tick() - flyStart
+		local alpha = math.clamp(elapsed / duration, 0, 1)
+		local newPos = startPosition:Lerp(target, alpha)
 
-	while enabled() and puff.Parent == pf and not finished and (tick() - flyStart) < flyTimeout do
+		rt2.CFrame = CFrame.new(newPos) * startRot
+		rt2.AssemblyLinearVelocity = Vector3.zero
+		rt2.AssemblyAngularVelocity = Vector3.zero
+
+		if alpha >= 1 then break end
 		task.wait()
 	end
-	
-	if not finished then
-		pcall(function() flyTween:Cancel() end)
-	end
-	if tween == flyTween then tween = nil end
-	
-	if not finished and startRoot and startRoot.Parent then
-		pcall(function()
-			startRoot.CFrame = CFrame.new(startPosition)
-		end)
-	end
-	
-	pcall(function()
-		startRoot.Anchored = false
-	end)
-	safeCleanup(startRoot, false)
+
+	safeCleanup(nil, false)
 	mod.data.actives["move"] = true
 
-	if not enabled() then
+	if cancelled or not enabled() then
 		return false
 	end
 
 	task.wait(0.05)
+
+	--local startRoot = hrp
+	--local startPosition = startRoot.Position
+	--local target = rootPart.Position + Vector3.new(find.random:NextNumber(-3, 3), 2, find.random:NextNumber(-3, 3))
+
+	--local distance = (startRoot.Position - target).Magnitude
+	--local speed = tonumber(mod.data.actives["walkspeed"]) or 40
+	--local duration = distance / math.max(speed, 1)
+	--local anchorOk = pcall(function() startRoot.Anchored = true end)
+	--if not anchorOk then
+	--	safeCleanup(startRoot)
+	--	return false
+	--end
+
+	--pcall(function() farming.inv(true) end)
+	
+	--local flyTween
+	--local tweenOk = pcall(function()
+	--	flyTween = find.tweenservice:Create(
+	--		startRoot,
+	--		TweenInfo.new(
+	--			math.max(duration, 0.05),
+	--			Enum.EasingStyle.Linear,
+	--			Enum.EasingDirection.Out
+	--		),
+	--		{ CFrame = CFrame.new(target) }
+	--	)
+	--	tween = flyTween
+	--	flyTween:Play()
+	--end)
+
+	--if not tweenOk or not flyTween then
+	--	safeCancelTween()
+	--	safeCleanup(startRoot)
+	--	return false
+	--end
+
+	--local finished = false
+	--flyTween.Completed:Once(function()
+	--	finished = true
+	--	if tween == flyTween then tween = nil end
+	--end)
+	
+	--local flyStart = tick(); local flyTimeout = duration + 3
+
+	--while enabled() and puff.Parent == pf and not finished and (tick() - flyStart) < flyTimeout do
+	--	task.wait()
+	--end
+	
+	--if not finished then
+	--	pcall(function() flyTween:Cancel() end)
+	--end
+	--if tween == flyTween then tween = nil end
+	
+	--if not finished and startRoot and startRoot.Parent then
+	--	pcall(function()
+	--		startRoot.CFrame = CFrame.new(startPosition)
+	--	end)
+	--end
+	
+	--pcall(function()
+	--	startRoot.Anchored = false
+	--end)
+	--safeCleanup(startRoot, false)
+	--mod.data.actives["move"] = true
+
+	--if not enabled() then
+	--	return false
+	--end
+
+	--task.wait(0.05)
 
 	character = find.player.Character
 	humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -1412,7 +1584,7 @@ function farming.farmPuffshroom(field, id)
 	end
 	
 	local circleRadius = 5
-	local circleMinRadius = 3
+	local circleMinRadius = 2
 	local breakStart = tick()
 	local breakTimeout = 30
 
@@ -1420,8 +1592,9 @@ function farming.farmPuffshroom(field, id)
 	farming.autosprinkler(true)
 
 	local currentTarget = nil
-	local lastRandom = 0
-	local randomInterval = 0.5
+	local nextPickAt = 0
+	local restDuration = 0.6
+	local moveSpeed = math.min(speed, 22)
 
 	while enabled() and puff.Parent == pf and (tick() - breakStart) < breakTimeout do
 		character = find.player.Character
@@ -1435,22 +1608,29 @@ function farming.farmPuffshroom(field, id)
 
 		local center = centerPart.Position
 
-		local needNew = (not currentTarget)
-			or (tick() - lastRandom > randomInterval)
-			or ((Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude < 1.5)
+		local needNew = false
+		if not currentTarget then
+			needNew = true
+		else
+			local d = (Vector3.new(currentTarget.X, hrp.Position.Y, currentTarget.Z) - hrp.Position).Magnitude
+			if d < 1.5 and tick() >= nextPickAt then
+				needNew = true
+			end
+		end
 
 		if needNew then
 			local angle = find.random:NextNumber(0, math.pi * 2)
-			local r = find.random:NextNumber(circleMinRadius, circleRadius)
+			local t = find.random:NextNumber() ^ 0.6
+			local r = circleMinRadius + (circleRadius - circleMinRadius) * t
 			currentTarget = Vector3.new(
 				center.X + math.cos(angle) * r,
 				hrp.Position.Y,
 				center.Z + math.sin(angle) * r
 			)
-			lastRandom = tick()
+			nextPickAt = tick() + restDuration
 		end
 
-		humanoid.WalkSpeed = speed
+		humanoid.WalkSpeed = moveSpeed
 		pcall(function()
 			humanoid:MoveTo(currentTarget)
 		end)
@@ -1862,25 +2042,42 @@ function farming.move(...)
 		local marginZ = math.min(6, size.Z * .15)
 		local x = size.X / 2 - marginX
 		local z = size.Z / 2 - marginZ
-
+		
 		local position = string.lower(mod.data.actives["position_field"] or "center")
-		local ix, ax
-
+		
+		local spotX = 0
 		if position == "left" then
-			ix = -x; ax = 0
+			spotX = -x * 0.6
 		elseif position == "right" then
-			ix = 0; ax = x
-		else
-			ix = -x / 3; ax = x / 3
+			spotX = x * 0.6
 		end
 
 		local l = Vector3.new(
-			find.random:NextNumber(ix, ax),
+			spotX,
 			size.Y / 2 + h,
-			find.random:NextNumber(-z, z)
+			0
 		)
 
 		return cf:PointToWorldSpace(l)
+
+		--local position = string.lower(mod.data.actives["position_field"] or "center")
+		--local ix, ax
+
+		--if position == "left" then
+		--	ix = -x; ax = 0
+		--elseif position == "right" then
+		--	ix = 0; ax = x
+		--else
+		--	ix = -x / 3; ax = x / 3
+		--end
+
+		--local l = Vector3.new(
+		--	find.random:NextNumber(ix, ax),
+		--	size.Y / 2 + h,
+		--	find.random:NextNumber(-z, z)
+		--)
+
+		--return cf:PointToWorldSpace(l)
 	end
 	local function b(...)
 		local a = {...}
@@ -1929,124 +2126,232 @@ function farming.move(...)
 
 				local target = r(v)
 				if not target then return end
-
+				
 				humanoid:MoveTo(root.Position)
 				humanoid:Move(Vector3.zero)
 				humanoid.WalkSpeed = 0
 				root.AssemblyLinearVelocity = Vector3.zero
 				root.AssemblyAngularVelocity = Vector3.zero
 
-				local d1 = (root.Position - target).Magnitude / math.max(a[2], .001)
-				root.Anchored = true
-
 				local currentFarmId = farmId
-				local t = TweenInfo.new(d1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-				local currentTween = find.tweenservice:Create(root, t, {CFrame = CFrame.new(target)})
-				tween = currentTween
+				local startPos = root.Position
+				local startRot = root.CFrame.Rotation
+				local distance = (startPos - target).Magnitude
+				local flySpeed = math.max(tonumber(a[2]) or 40, 1)
+				local duration = math.max(distance / flySpeed, 0.05)
+				local flyStart = tick()
+
+				tween = nil
 				mod.data.actives["move"] = true
 
-				currentTween:Play()
 				farming.inv(true)
 				j(true)
 
-				currentTween.Completed:Once(function(state)
-					if tween == currentTween then
-						tween = nil
-					end
-					
-					if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
-						pcall(function()
-							root.Anchored = false
-						end)
-
-						pcall(function()
-							farming.inv(false)
-						end)
-
-						mod.data.actives["converting"] = false
-						mod.data.actives["move"] = false
-						return
+				local cancelled = false
+				while currentFarmId == farmId do
+					local ch2 = find.player.Character
+					local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
+					if not rt2 or not rt2.Parent then
+						cancelled = true
+						break
 					end
 
-					--if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
-					--	if s.Parent then
-					--		s:Destroy()
-					--	end
+					local elapsed = tick() - flyStart
+					local alpha = math.clamp(elapsed / duration, 0, 1)
+					local newPos = startPos:Lerp(target, alpha)
 
-					--	pcall(function()
-					--		root.Anchored = false
-					--	end)
+					rt2.CFrame = CFrame.new(newPos) * startRot
+					rt2.AssemblyLinearVelocity = Vector3.zero
+					rt2.AssemblyAngularVelocity = Vector3.zero
 
-					--	pcall(function()
-					--		farming.inv(false)
-					--	end)
+					if alpha >= 1 then break end
+					task.wait()
+				end
 
-					--	if humanoid and humanoid.Parent then
-					--		humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
-					--	end
-
-					--	mod.data.actives["move"] = false
-					--	return
-					--end
-
-					j(false)
+				if cancelled or currentFarmId ~= farmId then
+					pcall(function() farming.inv(false) end)
 					if s.Parent then s:Destroy() end
-					farming.inv(false)
-
-					if currentFarmId ~= farmId or mod.data.actives["auto_farm"] == false then
-						root.Anchored = false
-						if humanoid and humanoid.Parent then
-							humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
-						end
-						return
-					end
-					
-					root.Anchored = false
-
-					if humanoid and humanoid.Parent then
-						humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
-					end
-
+					mod.data.actives["converting"] = false
 					mod.data.actives["move"] = false
-					mod.data.actives["point"] = false
-					
-					if currentFarmId == farmId and mod.data.actives["auto_farm"] == true then
-						task.spawn(function()
-							if currentFarmId ~= farmId then return end
-							if mod.data.actives["auto_farm"] ~= true then return end
-							if mod.data.actives["converting"] then return end
-							if mod.data.actives["move"] == true then return end
+					return
+				end
 
-							local info = farming.get_pollen_info()
-							local threshold = mod.data.actives["backpack"] or 80
+				j(false)
+				if s.Parent then s:Destroy() end
+				farming.inv(false)
 
-							if info and info.percent >= threshold then
-								local hivePos = farming.getHive()
-								if hivePos then
-									mod.data.actives["move"] = false
-									mod.data.actives["point"] = false
-									local okConv = farming.move(
-										"convert",
-										mod.data.actives["walkspeed"],
-										hivePos
-									)
-									if okConv then
-										mod.data.actives["converting"] = true
-									end
+				if mod.data.actives["auto_farm"] == false then
+					local ch3 = find.player.Character
+					local h3 = ch3 and ch3:FindFirstChildOfClass("Humanoid")
+					if h3 then h3.WalkSpeed = mod.data.actives["walkspeed"] or 16 end
+					mod.data.actives["move"] = false
+					return
+				end
+
+				do
+					local ch3 = find.player.Character
+					local h3 = ch3 and ch3:FindFirstChildOfClass("Humanoid")
+					if h3 then h3.WalkSpeed = mod.data.actives["walkspeed"] or 16 end
+				end
+
+				mod.data.actives["move"] = false
+				mod.data.actives["point"] = false
+
+				if currentFarmId == farmId and mod.data.actives["auto_farm"] == true then
+					task.spawn(function()
+						if currentFarmId ~= farmId then return end
+						if mod.data.actives["auto_farm"] ~= true then return end
+						if mod.data.actives["converting"] then return end
+						if mod.data.actives["move"] == true then return end
+
+						local info = farming.get_pollen_info()
+						local threshold = mod.data.actives["backpack"] or 80
+
+						if info and info.percent >= threshold then
+							local hivePos = farming.getHive()
+							if hivePos then
+								mod.data.actives["move"] = false
+								mod.data.actives["point"] = false
+								local okConv = farming.move(
+									"convert",
+									mod.data.actives["walkspeed"],
+									hivePos
+								)
+								if okConv then
+									mod.data.actives["converting"] = true
 								end
-							else
-								mod.data.actives["last_time_convert"] = tick()
 							end
-						end)
-					end
+						else
+							mod.data.actives["last_time_convert"] = tick()
+						end
+					end)
+				end
 
-					task.wait(.2)
-					farming.autosprinkler(true)
-				end)
+				task.wait(.2)
+				farming.autosprinkler(true)
 
 				task.wait(0.15)
+				return true
+			end
+		end
 
-				return currentTween
+				--humanoid:MoveTo(root.Position)
+				--humanoid:Move(Vector3.zero)
+				--humanoid.WalkSpeed = 0
+				--root.AssemblyLinearVelocity = Vector3.zero
+				--root.AssemblyAngularVelocity = Vector3.zero
+
+				--local d1 = (root.Position - target).Magnitude / math.max(a[2], .001)
+				--root.Anchored = true
+
+				--local currentFarmId = farmId
+				--local t = TweenInfo.new(d1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+				--local currentTween = find.tweenservice:Create(root, t, {CFrame = CFrame.new(target)})
+				--tween = currentTween
+				--mod.data.actives["move"] = true
+
+				--currentTween:Play()
+				--farming.inv(true)
+				--j(true)
+
+				--currentTween.Completed:Once(function(state)
+				--	if tween == currentTween then
+				--		tween = nil
+				--	end
+					
+				--	if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+				--		pcall(function()
+				--			root.Anchored = false
+				--		end)
+
+				--		pcall(function()
+				--			farming.inv(false)
+				--		end)
+
+				--		mod.data.actives["converting"] = false
+				--		mod.data.actives["move"] = false
+				--		return
+				--	end
+
+				--	--if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+				--	--	if s.Parent then
+				--	--		s:Destroy()
+				--	--	end
+
+				--	--	pcall(function()
+				--	--		root.Anchored = false
+				--	--	end)
+
+				--	--	pcall(function()
+				--	--		farming.inv(false)
+				--	--	end)
+
+				--	--	if humanoid and humanoid.Parent then
+				--	--		humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+				--	--	end
+
+				--	--	mod.data.actives["move"] = false
+				--	--	return
+				--	--end
+
+				--	j(false)
+				--	if s.Parent then s:Destroy() end
+				--	farming.inv(false)
+
+				--	if currentFarmId ~= farmId or mod.data.actives["auto_farm"] == false then
+				--		root.Anchored = false
+				--		if humanoid and humanoid.Parent then
+				--			humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+				--		end
+				--		return
+				--	end
+					
+				--	root.Anchored = false
+
+				--	if humanoid and humanoid.Parent then
+				--		humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
+				--	end
+
+				--	mod.data.actives["move"] = false
+				--	mod.data.actives["point"] = false
+					
+				--	if currentFarmId == farmId and mod.data.actives["auto_farm"] == true then
+				--		task.spawn(function()
+				--			if currentFarmId ~= farmId then return end
+				--			if mod.data.actives["auto_farm"] ~= true then return end
+				--			if mod.data.actives["converting"] then return end
+				--			if mod.data.actives["move"] == true then return end
+
+				--			local info = farming.get_pollen_info()
+				--			local threshold = mod.data.actives["backpack"] or 80
+
+				--			if info and info.percent >= threshold then
+				--				local hivePos = farming.getHive()
+				--				if hivePos then
+				--					mod.data.actives["move"] = false
+				--					mod.data.actives["point"] = false
+				--					local okConv = farming.move(
+				--						"convert",
+				--						mod.data.actives["walkspeed"],
+				--						hivePos
+				--					)
+				--					if okConv then
+				--						mod.data.actives["converting"] = true
+				--					end
+				--				end
+				--			else
+				--				mod.data.actives["last_time_convert"] = tick()
+				--			end
+				--		end)
+				--	end
+
+				--	task.wait(.2)
+				--	farming.autosprinkler(true)
+				--end)
+
+				--task.wait(0.15)
+
+				--return currentTween
 
 				--	root.Anchored = false
 					
@@ -2068,8 +2373,6 @@ function farming.move(...)
 				--task.wait(1)
 
 				--return currentTween
-			end
-		end
 	elseif a[1] == "hive" then
 		if mod.data.actives["autohive"] == false then
 			return
@@ -2109,85 +2412,158 @@ function farming.move(...)
 		
 		humanoid:MoveTo(root.Position)
 		humanoid:Move(Vector3.zero, false)
-		
+
 		mod.data.actives["point"] = false
 		mod.data.actives["move"] = true
 		mod.data.actives["converting"] = false
 
 		local currentFarmId = farmId
+		local startPos = root.Position
+		local startRot = root.CFrame.Rotation
+		local distance = (startPos - target).Magnitude
+		local flySpeed = math.max(tonumber(a[2]) or 40, 1)
+		local duration = math.max(distance / flySpeed, 0.05)
+		local flyStart = tick()
 
-		local d1 =
-			(root.Position - target).Magnitude
-			/ math.max(a[2], 0.001)
-
-		root.Anchored = true
-
-		local currentTween = find.tweenservice:Create(
-			root,
-			TweenInfo.new(
-				d1,
-				Enum.EasingStyle.Linear,
-				Enum.EasingDirection.Out
-			),
-			{
-				CFrame = CFrame.new(target)
-			}
-		)
-
-		tween = currentTween
-
-		currentTween:Play()
 		farming.inv(true)
 
-		currentTween.Completed:Once(function(state)
-			if tween == currentTween then
-				tween = nil
+		local cancelled = false
+		while currentFarmId == farmId do
+			local ch2 = find.player.Character
+			local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
+			if not rt2 or not rt2.Parent then
+				cancelled = true
+				break
 			end
 
-			if state == Enum.PlaybackState.Cancelled
-				or currentFarmId ~= farmId
-			then
-				root.Anchored = false
-				mod.data.actives["move"] = false
-				return
-			end
+			local elapsed = tick() - flyStart
+			local alpha = math.clamp(elapsed / duration, 0, 1)
+			local newPos = startPos:Lerp(target, alpha)
 
+			rt2.CFrame = CFrame.new(newPos) * startRot
+			rt2.AssemblyLinearVelocity = Vector3.zero
+			rt2.AssemblyAngularVelocity = Vector3.zero
+
+			if alpha >= 1 then break end
+			task.wait()
+		end
+
+		if cancelled or currentFarmId ~= farmId then
 			farming.inv(false)
+			mod.data.actives["move"] = false
+			return
+		end
 
-			root.Anchored = false
+		farming.inv(false)
 
-			if currentFarmId ~= farmId
-				or mod.data.actives["auto_farm"] ~= true
-			then
+		if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
+			mod.data.actives["move"] = false
+			return
+		end
+
+		if not farming.getHive() then
+			task.wait(0.6)
+
+			for _try = 1, 3 do
+				activateButton()
+				task.wait(0.5)
+				if farming.getHive() then break end
+			end
+
+			if not farming.getHive() then
+				warn("hive not found 3s")
 				mod.data.actives["move"] = false
+				mod.data.actives["converting"] = false
 				return
 			end
+		end
+
+		mod.data.actives["converting"] = true
+		mod.data.actives["move"] = true
+
+		farming.convert()
+		return true
+		
+		--humanoid:MoveTo(root.Position)
+		--humanoid:Move(Vector3.zero, false)
+		
+		--mod.data.actives["point"] = false
+		--mod.data.actives["move"] = true
+		--mod.data.actives["converting"] = false
+
+		--local currentFarmId = farmId
+
+		--local d1 =
+		--	(root.Position - target).Magnitude
+		--	/ math.max(a[2], 0.001)
+
+		--root.Anchored = true
+
+		--local currentTween = find.tweenservice:Create(
+		--	root,
+		--	TweenInfo.new(
+		--		d1,
+		--		Enum.EasingStyle.Linear,
+		--		Enum.EasingDirection.Out
+		--	),
+		--	{
+		--		CFrame = CFrame.new(target)
+		--	}
+		--)
+
+		--tween = currentTween
+
+		--currentTween:Play()
+		--farming.inv(true)
+
+		--currentTween.Completed:Once(function(state)
+		--	if tween == currentTween then
+		--		tween = nil
+		--	end
+
+		--	if state == Enum.PlaybackState.Cancelled
+		--		or currentFarmId ~= farmId
+		--	then
+		--		root.Anchored = false
+		--		mod.data.actives["move"] = false
+		--		return
+		--	end
+
+		--	farming.inv(false)
+
+		--	root.Anchored = false
+
+		--	if currentFarmId ~= farmId
+		--		or mod.data.actives["auto_farm"] ~= true
+		--	then
+		--		mod.data.actives["move"] = false
+		--		return
+		--	end
 			
-			if not farming.getHive() then
-				task.wait(0.6)
+		--	if not farming.getHive() then
+		--		task.wait(0.6)
 
-				local clicked = false
-				for try = 1, 3 do
-					clicked = activateButton()
-					task.wait(0.5)
-					if farming.getHive() then break end
-				end
+		--		local clicked = false
+		--		for try = 1, 3 do
+		--			clicked = activateButton()
+		--			task.wait(0.5)
+		--			if farming.getHive() then break end
+		--		end
 
-				if not farming.getHive() then
-					warn("hive not found 3s")
-					mod.data.actives["move"] = false
-					mod.data.actives["converting"] = false
-					return
-				end
-			end
+		--		if not farming.getHive() then
+		--			warn("hive not found 3s")
+		--			mod.data.actives["move"] = false
+		--			mod.data.actives["converting"] = false
+		--			return
+		--		end
+		--	end
 
-			mod.data.actives["converting"] = true
-			mod.data.actives["move"] = true
+		--	mod.data.actives["converting"] = true
+		--	mod.data.actives["move"] = true
 
-			farming.convert()
-		end)
+		--	farming.convert()
 
-		return currentTween
+		--return currentTween
 	elseif a[1] == "convert" then
 		--mod.data.actives["move"] = true
 		--print(actives["move"])
@@ -2200,52 +2576,101 @@ function farming.move(...)
 
 		local character = find.player.Character
 		if not character then return end
-
+		
 		local root = character:FindFirstChild("HumanoidRootPart")
 		if not root then return end
 		mod.data.actives["move"] = true
 		local currentFarmId = farmId
 
-		local d1 = (root.Position - target).Magnitude
-			/ math.max(a[2], .001)
+		local startPos = root.Position
+		local startRot = root.CFrame.Rotation
+		local distance = (startPos - target).Magnitude
+		local flySpeed = math.max(tonumber(a[2]) or 40, 1)
+		local duration = math.max(distance / flySpeed, 0.05)
+		local flyStart = tick()
 
-		root.Anchored = true
-
-		local t = TweenInfo.new(
-			d1,
-			Enum.EasingStyle.Linear,
-			Enum.EasingDirection.Out
-		)
-
-		local currentTween = find.tweenservice:Create(
-			root,
-			t,
-			{
-				CFrame = CFrame.new(target)
-			}
-		)
-
-		tween = currentTween
-
-		currentTween:Play()
 		farming.inv(true)
 		j(true)
 
-		currentTween.Completed:Once(function(state)
-			if tween == currentTween then tween = nil end
-			if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
-				mod.data.actives["converting"] = false
-				mod.data.actives["move"] = false
-				return
+		local cancelled = false
+		while currentFarmId == farmId do
+			local ch2 = find.player.Character
+			local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
+			if not rt2 or not rt2.Parent then
+				cancelled = true
+				break
 			end
 
-			j(false)
-			farming.inv(false)
-			root.Anchored = false
-			task.wait(1)
-			farming.convert()
-		end)
-		return currentTween
+			local elapsed = tick() - flyStart
+			local alpha = math.clamp(elapsed / duration, 0, 1)
+			local newPos = startPos:Lerp(target, alpha)
+
+			rt2.CFrame = CFrame.new(newPos) * startRot
+			rt2.AssemblyLinearVelocity = Vector3.zero
+			rt2.AssemblyAngularVelocity = Vector3.zero
+
+			if alpha >= 1 then break end
+			task.wait()
+		end
+
+		pcall(function() j(false) end)
+		farming.inv(false)
+
+		if cancelled or currentFarmId ~= farmId then
+			mod.data.actives["converting"] = false
+			mod.data.actives["move"] = false
+			return
+		end
+
+		task.wait(1)
+		farming.convert()
+		return true
+
+		--local root = character:FindFirstChild("HumanoidRootPart")
+		--if not root then return end
+		--mod.data.actives["move"] = true
+		--local currentFarmId = farmId
+
+		--local d1 = (root.Position - target).Magnitude
+		--	/ math.max(a[2], .001)
+
+		--root.Anchored = true
+
+		--local t = TweenInfo.new(
+		--	d1,
+		--	Enum.EasingStyle.Linear,
+		--	Enum.EasingDirection.Out
+		--)
+
+		--local currentTween = find.tweenservice:Create(
+		--	root,
+		--	t,
+		--	{
+		--		CFrame = CFrame.new(target)
+		--	}
+		--)
+
+		--tween = currentTween
+
+		--currentTween:Play()
+		--farming.inv(true)
+		--j(true)
+
+		--currentTween.Completed:Once(function(state)
+		--	if tween == currentTween then tween = nil end
+		--	if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+		--		mod.data.actives["converting"] = false
+		--		mod.data.actives["move"] = false
+		--		return
+		--	end
+
+		--	j(false)
+		--	farming.inv(false)
+		--	root.Anchored = false
+		--	task.wait(1)
+		--	farming.convert()
+		--end)
+		--return currentTween
 	elseif a[1] == "goto" then
 		local target = a[3]
 		if typeof(target) ~= "Vector3" then return end
@@ -2263,41 +2688,100 @@ function farming.move(...)
 		mod.data.actives["move"] = true
 		local currentFarmId = farmId
 
-		local d1 = (root.Position - target).Magnitude / math.max(a[2], .001)
+		local startPos = root.Position
+		local startRot = root.CFrame.Rotation
+		local distance = (startPos - target).Magnitude
+		local flySpeed = math.max(tonumber(a[2]) or 40, 1)
+		local duration = math.max(distance / flySpeed, 0.05)
+		local flyStart = tick()
 
-		root.Anchored = true
-
-		local currentTween = find.tweenservice:Create(
-			root,
-			TweenInfo.new(d1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
-			{CFrame = CFrame.new(target)}
-		)
-
-		tween = currentTween
-		currentTween:Play()
 		farming.inv(true)
 		j(true)
 
-		currentTween.Completed:Once(function(state)
-			if tween == currentTween then tween = nil end
-
-			if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
-				pcall(function() j(false) end)
-				root.Anchored = false
-				mod.data.actives["move"] = false
-				return
+		local cancelled = false
+		while currentFarmId == farmId do
+			local ch2 = find.player.Character
+			local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
+			if not rt2 or not rt2.Parent then
+				cancelled = true
+				break
 			end
 
-			pcall(function() j(false) end)
-			farming.inv(false)
-			root.Anchored = false
-			mod.data.actives["move"] = false
-		end)
+			local elapsed = tick() - flyStart
+			local alpha = math.clamp(elapsed / duration, 0, 1)
+			local newPos = startPos:Lerp(target, alpha)
 
-		return currentTween
+			rt2.CFrame = CFrame.new(newPos) * startRot
+			rt2.AssemblyLinearVelocity = Vector3.zero
+			rt2.AssemblyAngularVelocity = Vector3.zero
+
+			if alpha >= 1 then break end
+			task.wait()
+		end
+
+		pcall(function() j(false) end)
+		farming.inv(false)
+		mod.data.actives["move"] = false
+
+		if cancelled or currentFarmId ~= farmId then
+			return
+		end
+
+		return true
 	end
 	return false
 end
+	--elseif a[1] == "goto" then
+	--	local target = a[3]
+	--	if typeof(target) ~= "Vector3" then return end
+	--	if not workspace:FindFirstChild(find.player.Name) then return end
+
+	--	local character = find.player.Character
+	--	if not character then return end
+
+	--	local root = character:FindFirstChild("HumanoidRootPart")
+	--	if not root then return end
+
+	--	if tween then pcall(function() tween:Cancel() end) tween = nil end
+	--	if atween then pcall(function() atween:Cancel() end) atween = nil end
+
+	--	mod.data.actives["move"] = true
+	--	local currentFarmId = farmId
+
+	--	local d1 = (root.Position - target).Magnitude / math.max(a[2], .001)
+
+	--	root.Anchored = true
+
+	--	local currentTween = find.tweenservice:Create(
+	--		root,
+	--		TweenInfo.new(d1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+	--		{CFrame = CFrame.new(target)}
+	--	)
+
+	--	tween = currentTween
+	--	currentTween:Play()
+	--	farming.inv(true)
+	--	j(true)
+
+	--	currentTween.Completed:Once(function(state)
+	--		if tween == currentTween then tween = nil end
+
+	--		if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
+	--			pcall(function() j(false) end)
+	--			root.Anchored = false
+	--			mod.data.actives["move"] = false
+	--			return
+	--		end
+
+	--		pcall(function() j(false) end)
+	--		farming.inv(false)
+	--		root.Anchored = false
+	--		mod.data.actives["move"] = false
+	--	end)
+
+	--	return currentTween
+	--end
+	--return false
 
 function farming.forceWalkSpeed(speed)
 	if farming.__speedConn then
