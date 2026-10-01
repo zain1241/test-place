@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.222")
+print("loaded 0.2.223")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -2118,35 +2118,33 @@ function farming.move(...)
 			
 			local hiveRes = farming.getHive()
 			if type(hiveRes) ~= "Vector3" then
-				task.wait(1.2)
-				
+				-- DEBUG: покажет, что вообще есть в момент прилёта
+				local sp = find.player:FindFirstChild("SpawnPos")
+				warn("[hive dbg] arrive: SpawnPos=", sp and sp.ClassName or "nil",
+					" getHive=", tostring(hiveRes))
+
+				task.wait(1.5)
+
 				for _try = 1, 5 do
 					local clicked = activateButton()
-					task.wait(0.6)
-					if type(farming.getHive()) == "Vector3" then break end
+					task.wait(0.7)
+
+					local nowHive = farming.getHive()
+					local spNow = find.player:FindFirstChild("SpawnPos")
+					warn("[hive dbg] try=", _try,
+						" clicked=", tostring(clicked),
+						" getHive=", tostring(nowHive),
+						" SpawnPos=", spNow and "yes" or "no")
+
+					if type(nowHive) == "Vector3" then break end
 					if not clicked then
 						pcall(function()
 							find.virtual:SendKeyEvent(true, Enum.KeyCode.E, false, game)
 							task.wait(0.1)
 							find.virtual:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 						end)
-						task.wait(0.4)
+						task.wait(0.5)
 					end
-				end
-
-				if type(farming.getHive()) ~= "Vector3" then
-					warn("hive failed to occupy hive retrying autoHive in 3s")
-					mod.data.actives["move"] = false
-					mod.data.actives["converting"] = false
-					
-					task.delay(3, function()
-						if mod.data.actives["auto_farm"] == true
-							and mod.data.actives["autohive"] ~= false
-						then
-							pcall(farming.autoHive)
-						end
-					end)
-					return
 				end
 			end
 
@@ -2933,10 +2931,23 @@ end
 end
 
 function farming.getHive(...)
-	local spawnPos = find.player:FindFirstChild("SpawnPos")
-	if spawnPos and spawnPos:IsA("CFrameValue") then
-		local p = spawnPos.Value.Position
-		if p and p.Magnitude > 1 then
+	local sp = find.player:FindFirstChild("SpawnPos")
+	if not sp then
+		sp = find.player:FindFirstChild("SpawnPos", true)
+	end
+
+	if sp then
+		local p
+		if sp:IsA("CFrameValue") then
+			p = sp.Value and sp.Value.Position
+		elseif sp:IsA("Vector3Value") then
+			p = sp.Value
+		elseif sp:IsA("BasePart") then
+			p = sp.Position
+		elseif sp:IsA("Attachment") then
+			p = sp.WorldPosition
+		end
+		if p then
 			return p
 		end
 	end
@@ -2947,20 +2958,25 @@ function farming.getHive(...)
 	local myName = string.lower(find.player.Name)
 	local myDisplay = string.lower(find.player.DisplayName or find.player.Name)
 
-	local function nameMatches(text)
+	local function textContainsMe(text)
 		if type(text) ~= "string" then return false end
-		local t = string.lower((string.match(text, "^%s*(.-)%s*$") or ""))
-		if t == "" then return false end
-		return t == myName or t == myDisplay
+		local t = string.lower(text)
+		return string.find(t, myName, 1, true) ~= nil
+			or string.find(t, myDisplay, 1, true) ~= nil
 	end
 
-	local function extractSpawnPos(hive)
-		local sp = hive:FindFirstChild("SpawnPos") or hive:FindFirstChild("SpawnPos", true)
-		if sp then
-			if sp:IsA("BasePart") then return sp.Position end
-			if sp:IsA("CFrameValue") then return sp.Value.Position end
-			if sp:IsA("Attachment") then return sp.WorldPosition end
-			if sp:IsA("Vector3Value") then return sp.Value end
+	local function extractPos(hive)
+		local s = hive:FindFirstChild("SpawnPos") or hive:FindFirstChild("SpawnPos", true)
+		if s then
+			if s:IsA("BasePart") then return s.Position end
+			if s:IsA("CFrameValue") then return s.Value and s.Value.Position end
+			if s:IsA("Attachment") then return s.WorldPosition end
+			if s:IsA("Vector3Value") then return s.Value end
+		end
+		if hive:IsA("Model") then
+			if hive.PrimaryPart then return hive.PrimaryPart.Position end
+			local ok, pivot = pcall(function() return hive:GetPivot() end)
+			if ok and pivot then return pivot.Position end
 		end
 		return nil
 	end
@@ -2969,8 +2985,8 @@ function farming.getHive(...)
 		local display = hive:FindFirstChild("Display")
 		if display then
 			for _, d in ipairs(display:GetDescendants()) do
-				if d.Name == "OwnerName" and d:IsA("TextLabel") and nameMatches(d.Text) then
-					local pos = extractSpawnPos(hive)
+				if d.Name == "OwnerName" and d:IsA("TextLabel") and textContainsMe(d.Text) then
+					local pos = extractPos(hive)
 					if pos then return pos end
 				end
 			end
