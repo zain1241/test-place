@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.31")
+print("loaded 0.2.34")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -771,24 +771,27 @@ function farming.farmMondo(field, id)
 	pcall(function() farming.inv(true) end)
 
 	local cancelled = false
-	while enabled() and mondo.Parent ~= nil do
+	local moveSpeed = math.clamp(speed, 16, 60)
+	local timeout = distance / moveSpeed + 10
+	local t0 = tick()
+
+	while enabled() and (tick() - t0) < timeout do
 		local ch2 = find.player.Character
 		local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
-		if not rt2 or not rt2.Parent then
+		local h2 = ch2 and ch2:FindFirstChildOfClass("Humanoid")
+		if not rt2 or not rt2.Parent or not h2 then
 			cancelled = true
 			break
 		end
+		
+		if mondo.Parent == nil then break end
 
-		local elapsed = tick() - flyStart
-		local alpha = math.clamp(elapsed / duration, 0, 1)
-		local newPos = startPosition:Lerp(target, alpha)
+		local flat = Vector3.new(target.X, rt2.Position.Y, target.Z)
+		if (flat - rt2.Position).Magnitude <= 3 then break end
 
-		rt2.CFrame = CFrame.new(newPos) * startRot
-		rt2.AssemblyLinearVelocity = Vector3.zero
-		rt2.AssemblyAngularVelocity = Vector3.zero
-
-		if alpha >= 1 then break end
-		task.wait()
+		h2.WalkSpeed = moveSpeed
+		h2:MoveTo(flat)
+		task.wait(0.05)
 	end
 
 	safeCleanup(nil)
@@ -1116,24 +1119,26 @@ function farming.farmSprout(field, id)
 	pcall(function() farming.inv(true) end)
 
 	local cancelled = false
-	while enabled() and sprout.Parent ~= nil do
+	local moveSpeed = math.clamp(speed, 16, 60)
+	local timeout = distance / moveSpeed + 10
+	local t0 = tick()
+
+	while enabled() and (tick() - t0) < timeout do
 		local ch2 = find.player.Character
 		local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
-		if not rt2 or not rt2.Parent then
+		local h2 = ch2 and ch2:FindFirstChildOfClass("Humanoid")
+		if not rt2 or not rt2.Parent or not h2 then
 			cancelled = true
 			break
 		end
+		if not sprout.Parent then break end
 
-		local elapsed = tick() - flyStart
-		local alpha = math.clamp(elapsed / duration, 0, 1)
-		local newPos = startPosition:Lerp(target, alpha)
+		local flat = Vector3.new(target.X, rt2.Position.Y, target.Z)
+		if (flat - rt2.Position).Magnitude <= 3 then break end
 
-		rt2.CFrame = CFrame.new(newPos) * startRot
-		rt2.AssemblyLinearVelocity = Vector3.zero
-		rt2.AssemblyAngularVelocity = Vector3.zero
-
-		if alpha >= 1 then break end
-		task.wait()
+		h2.WalkSpeed = moveSpeed
+		h2:MoveTo(flat)
+		task.wait(0.05)
 	end
 
 	safeCleanup(nil, false)
@@ -1469,24 +1474,27 @@ function farming.farmPuffshroom(field, id)
 	pcall(function() farming.inv(true) end)
 
 	local cancelled = false
-	while enabled() and puff.Parent == pf do
+	local moveSpeed = math.clamp(speed, 16, 60)
+	local timeout = distance / moveSpeed + 10
+	local t0 = tick()
+
+	while enabled() and (tick() - t0) < timeout do
 		local ch2 = find.player.Character
 		local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
-		if not rt2 or not rt2.Parent then
+		local h2 = ch2 and ch2:FindFirstChildOfClass("Humanoid")
+		if not rt2 or not rt2.Parent or not h2 then
 			cancelled = true
 			break
 		end
+		
+		if puff.Parent ~= pf then break end
 
-		local elapsed = tick() - flyStart
-		local alpha = math.clamp(elapsed / duration, 0, 1)
-		local newPos = startPosition:Lerp(target, alpha)
+		local flat = Vector3.new(target.X, rt2.Position.Y, target.Z)
+		if (flat - rt2.Position).Magnitude <= 3 then break end
 
-		rt2.CFrame = CFrame.new(newPos) * startRot
-		rt2.AssemblyLinearVelocity = Vector3.zero
-		rt2.AssemblyAngularVelocity = Vector3.zero
-
-		if alpha >= 1 then break end
-		task.wait()
+		h2.WalkSpeed = moveSpeed
+		h2:MoveTo(flat)
+		task.wait(0.05)
 	end
 
 	safeCleanup(nil, false)
@@ -2145,27 +2153,27 @@ function farming.move(...)
 				mod.data.actives["move"] = true
 
 				farming.inv(true)
-				j(true)
 
+				local moveSpeed = math.clamp(flySpeed, 16, 60)
+				humanoid.WalkSpeed = moveSpeed
 				local cancelled = false
-				while currentFarmId == farmId do
+				local timeout = distance / moveSpeed + 15
+
+				while currentFarmId == farmId and (tick() - flyStart) < timeout do
 					local ch2 = find.player.Character
 					local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
-					if not rt2 or not rt2.Parent then
+					local h2 = ch2 and ch2:FindFirstChildOfClass("Humanoid")
+					if not rt2 or not rt2.Parent or not h2 then
 						cancelled = true
 						break
 					end
 
-					local elapsed = tick() - flyStart
-					local alpha = math.clamp(elapsed / duration, 0, 1)
-					local newPos = startPos:Lerp(target, alpha)
+					local flat = Vector3.new(target.X, rt2.Position.Y, target.Z)
+					if (flat - rt2.Position).Magnitude <= 3 then break end
 
-					rt2.CFrame = CFrame.new(newPos) * startRot
-					rt2.AssemblyLinearVelocity = Vector3.zero
-					rt2.AssemblyAngularVelocity = Vector3.zero
-
-					if alpha >= 1 then break end
-					task.wait()
+					h2.WalkSpeed = moveSpeed
+					h2:MoveTo(flat)
+					task.wait(0.05)
 				end
 
 				if cancelled or currentFarmId ~= farmId then
@@ -2427,25 +2435,25 @@ function farming.move(...)
 
 		farming.inv(true)
 
+		local moveSpeed = math.clamp(flySpeed, 16, 60)
 		local cancelled = false
-		while currentFarmId == farmId do
+		local timeout = distance / moveSpeed + 15
+
+		while currentFarmId == farmId and (tick() - flyStart) < timeout do
 			local ch2 = find.player.Character
 			local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
-			if not rt2 or not rt2.Parent then
+			local h2 = ch2 and ch2:FindFirstChildOfClass("Humanoid")
+			if not rt2 or not rt2.Parent or not h2 then
 				cancelled = true
 				break
 			end
 
-			local elapsed = tick() - flyStart
-			local alpha = math.clamp(elapsed / duration, 0, 1)
-			local newPos = startPos:Lerp(target, alpha)
+			local flat = Vector3.new(target.X, rt2.Position.Y, target.Z)
+			if (flat - rt2.Position).Magnitude <= 3 then break end
 
-			rt2.CFrame = CFrame.new(newPos) * startRot
-			rt2.AssemblyLinearVelocity = Vector3.zero
-			rt2.AssemblyAngularVelocity = Vector3.zero
-
-			if alpha >= 1 then break end
-			task.wait()
+			h2.WalkSpeed = moveSpeed
+			h2:MoveTo(flat)
+			task.wait(0.05)
 		end
 
 		if cancelled or currentFarmId ~= farmId then
@@ -2592,25 +2600,25 @@ function farming.move(...)
 		farming.inv(true)
 		j(true)
 
+		local moveSpeed = math.clamp(flySpeed, 16, 60)
 		local cancelled = false
-		while currentFarmId == farmId do
+		local timeout = distance / moveSpeed + 15
+
+		while currentFarmId == farmId and (tick() - flyStart) < timeout do
 			local ch2 = find.player.Character
 			local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
-			if not rt2 or not rt2.Parent then
+			local h2 = ch2 and ch2:FindFirstChildOfClass("Humanoid")
+			if not rt2 or not rt2.Parent or not h2 then
 				cancelled = true
 				break
 			end
 
-			local elapsed = tick() - flyStart
-			local alpha = math.clamp(elapsed / duration, 0, 1)
-			local newPos = startPos:Lerp(target, alpha)
+			local flat = Vector3.new(target.X, rt2.Position.Y, target.Z)
+			if (flat - rt2.Position).Magnitude <= 3 then break end
 
-			rt2.CFrame = CFrame.new(newPos) * startRot
-			rt2.AssemblyLinearVelocity = Vector3.zero
-			rt2.AssemblyAngularVelocity = Vector3.zero
-
-			if alpha >= 1 then break end
-			task.wait()
+			h2.WalkSpeed = moveSpeed
+			h2:MoveTo(flat)
+			task.wait(0.05)
 		end
 
 		pcall(function() j(false) end)
@@ -2698,25 +2706,25 @@ function farming.move(...)
 		farming.inv(true)
 		j(true)
 
+		local moveSpeed = math.clamp(flySpeed, 16, 60)
 		local cancelled = false
-		while currentFarmId == farmId do
+		local timeout = distance / moveSpeed + 15
+
+		while currentFarmId == farmId and (tick() - flyStart) < timeout do
 			local ch2 = find.player.Character
 			local rt2 = ch2 and ch2:FindFirstChild("HumanoidRootPart")
-			if not rt2 or not rt2.Parent then
+			local h2 = ch2 and ch2:FindFirstChildOfClass("Humanoid")
+			if not rt2 or not rt2.Parent or not h2 then
 				cancelled = true
 				break
 			end
 
-			local elapsed = tick() - flyStart
-			local alpha = math.clamp(elapsed / duration, 0, 1)
-			local newPos = startPos:Lerp(target, alpha)
+			local flat = Vector3.new(target.X, rt2.Position.Y, target.Z)
+			if (flat - rt2.Position).Magnitude <= 3 then break end
 
-			rt2.CFrame = CFrame.new(newPos) * startRot
-			rt2.AssemblyLinearVelocity = Vector3.zero
-			rt2.AssemblyAngularVelocity = Vector3.zero
-
-			if alpha >= 1 then break end
-			task.wait()
+			h2.WalkSpeed = moveSpeed
+			h2:MoveTo(flat)
+			task.wait(0.05)
 		end
 
 		pcall(function() j(false) end)
@@ -2805,6 +2813,7 @@ function farming.forceWalkSpeed(speed)
 	local function applySpeed()
 		local targetSpeed = tonumber(mod.data.actives["walkspeed"]) or farming.__forcedSpeed
 		if not targetSpeed or targetSpeed <= 0 then return end
+		targetSpeed = math.clamp(targetSpeed, 16, 60)
 		
 		if mod.data.actives["move_speed"] ~= targetSpeed then
 			mod.data.actives["move_speed"] = targetSpeed
@@ -3428,17 +3437,17 @@ end
 		end)
 	end
 	
-	if hookfunction then
-		pcall(function()
-			local oldKick = LP.Kick
-			hookfunction(LP.Kick, function(self, ...)
-				if self == LP and mod.data.actives["auto_rejoin"] == true then
-					doRejoin()
-				end
-				return oldKick(self, ...)
-			end)
-		end)
-	end
+	--if hookfunction then
+	--	pcall(function()
+	--		local oldKick = LP.Kick
+	--		hookfunction(LP.Kick, function(self, ...)
+	--			if self == LP and mod.data.actives["auto_rejoin"] == true then
+	--				doRejoin()
+	--			end
+	--			return oldKick(self, ...)
+	--		end)
+	--	end)
+	--end
 	
 	LP.AncestryChanged:Connect(function(_, parent)
 		if not parent and mod.data.actives["auto_rejoin"] == true then
@@ -3732,7 +3741,7 @@ function farming.autoDig(enabled)
 	end
 
 	adig = farming.conAF(
-		find.prerender, 2,
+		find.prerender, 1,
 		function(delta)
 			if mod.data.actives["auto_dig"] == true and autoDigId == id then
 				collect:FireServer()
