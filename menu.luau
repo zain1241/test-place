@@ -2358,6 +2358,12 @@ function menu.dop_create()
 					items = {
 						{ type = "button", text = "Wealth Clock", key = "weatlh_clock", callback = farming.wealthClock},
 						{ type = "button", text = "Save Mode", key = "save_mode"},
+						{
+							type = "button",
+							text = "Collect Honey Tokens",
+							key = "honey_collect",
+							value = true,
+						},
 					},
 				},
 			},
