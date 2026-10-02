@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.55")
+print("loaded 0.2.56")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -1146,7 +1146,7 @@ function farming.farmSprout(field, id)
 	end
 
 	safeCancelTween()
-	
+
 	local startRoot = hrp
 	local startPosition = startRoot.Position
 	local startRot = startRoot.CFrame.Rotation
@@ -1201,83 +1201,6 @@ function farming.farmSprout(field, id)
 
 	task.wait(0.05)
 
-	--local startRoot = hrp
-	--local startPosition = startRoot.Position
-	--local target = sprout.Position + Vector3.new(find.random:NextNumber(-3, 3), 2, find.random:NextNumber(-3, 3))
-
-	--local distance = (startRoot.Position - target).Magnitude
-	--local speed = tonumber(mod.data.actives["walkspeed"]) or 40
-	--local duration = distance / math.max(speed, 1)
-
-	--local anchorOk = pcall(function() startRoot.Anchored = true end)
-	--if not anchorOk then
-	--	safeCleanup(startRoot)
-	--	return false
-	--end
-
-	--pcall(function() farming.inv(true) end)
-	
-	--local flyTween
-	--local tweenOk = pcall(function()
-	--	flyTween = find.tweenservice:Create(
-	--		startRoot,
-	--		TweenInfo.new(
-	--			math.max(duration, 0.05),
-	--			Enum.EasingStyle.Linear,
-	--			Enum.EasingDirection.Out
-	--		),
-	--		{ CFrame = CFrame.new(target) }
-	--	)
-	--	tween = flyTween
-	--	flyTween:Play()
-	--end)
-
-	--if not tweenOk or not flyTween then
-	--	safeCancelTween()
-	--	safeCleanup(startRoot)
-	--	return false
-	--end
-
-	--local finished = false
-	--flyTween.Completed:Once(function()
-	--	finished = true
-	--	if tween == flyTween then tween = nil end
-	--end)
-
-	--local flyStart = tick()
-	--local flyTimeout = duration + 3
-
-	--while enabled()
-	--	and sprout.Parent ~= nil
-	--	and not finished
-	--	and (tick() - flyStart) < flyTimeout
-	--do
-	--	task.wait()
-	--end
-
-	--if not finished then
-	--	pcall(function() flyTween:Cancel() end)
-	--end
-	--if tween == flyTween then tween = nil end
-
-	--if not finished and startRoot and startRoot.Parent then
-	--	pcall(function()
-	--		startRoot.CFrame = CFrame.new(startPosition)
-	--	end)
-	--end
-
-	--pcall(function()
-	--	startRoot.Anchored = false
-	--end)
-	--safeCleanup(startRoot, false)
-	--mod.data.actives["move"] = true
-
-	--if not enabled() then
-	--	return false
-	--end
-
-	--task.wait(0.05)
-
 	character = find.player.Character
 	humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -1289,7 +1212,35 @@ function farming.farmSprout(field, id)
 		safeCleanup(nil)
 		return false
 	end
-	
+
+	-- ===== NEW: проверка pollen через 2 сек после прилёта =====
+	task.wait(2)
+	if not enabled() then return false end
+	do
+		local _info = farming.get_pollen_info()
+		local _thr  = mod.data.actives["backpack"] or 80
+		if _info and _info.percent >= _thr then
+			local _hive = farming.getHive()
+			if _hive then
+				mod.data.actives["__pending_resume"] = {
+					kind = "sprout",
+					instance = sprout,
+				}
+				farming.cancelMove()
+				task.wait(0.2)
+				local _ok = farming.move("convert", mod.data.actives["walkspeed"], _hive)
+				if _ok then
+					mod.data.actives["converting"] = true
+				else
+					mod.data.actives["__pending_resume"] = nil
+					mod.data.actives["move"] = false
+				end
+				return false
+			end
+		end
+	end
+	-- ===== END NEW =====
+
 	local circleRadius = 7
 	local circleMinRadius = 3
 	local circleStart = tick()
@@ -1349,12 +1300,6 @@ function farming.farmSprout(field, id)
 		end
 	end)
 
-	--pcall(function()
-	--	if humanoid then
-	--		humanoid:Move(Vector3.zero, false)
-	--	end
-	--end)
-
 	character = find.player.Character
 	humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
@@ -1363,12 +1308,10 @@ function farming.farmSprout(field, id)
 
 	safeCleanup(nil)
 	mod.data.actives["move"] = true
-	
+
 	local collectStart = tick()
 	local collectTimeout = 15
 	local handled = {}
-	
-	--farming.autosprinkler(true)
 
 	while enabled() and (tick() - collectStart) < collectTimeout do
 		character = find.player.Character
@@ -1379,7 +1322,7 @@ function farming.farmSprout(field, id)
 			task.wait(0.01)
 			continue
 		end
-		
+
 		for obj in pairs(handled) do
 			if not obj.Parent then handled[obj] = nil end
 		end
@@ -1473,7 +1416,6 @@ function farming.farmPuffshroom(field, id)
 			and not mod.data.actives["converting"]
 			and mod.data.actives["planter_busy"] ~= true
 	end
-
 	local function safeCleanup(rootPart)
 		if rootPart then
 			pcall(function()
@@ -1565,6 +1507,7 @@ function farming.farmPuffshroom(field, id)
 
 	safeCleanup(nil, false)
 
+	safeCleanup(nil, false)
 	mod.data.actives["move"] = true
 
 	if cancelled or not enabled() then
@@ -1586,6 +1529,34 @@ function farming.farmPuffshroom(field, id)
 		safeCleanup(nil)
 		return false
 	end
+
+	-- ===== NEW: проверка pollen через 2 сек после прилёта =====
+	task.wait(2)
+	if not enabled() then return false end
+	do
+		local _info = farming.get_pollen_info()
+		local _thr  = mod.data.actives["backpack"] or 80
+		if _info and _info.percent >= _thr then
+			local _hive = farming.getHive()
+			if _hive then
+				mod.data.actives["__pending_resume"] = {
+					kind = "puff",
+					instance = puff,
+				}
+				farming.cancelMove()
+				task.wait(0.2)
+				local _ok = farming.move("convert", mod.data.actives["walkspeed"], _hive)
+				if _ok then
+					mod.data.actives["converting"] = true
+				else
+					mod.data.actives["__pending_resume"] = nil
+					mod.data.actives["move"] = false
+				end
+				return false
+			end
+		end
+	end
+	-- ===== END NEW =====
 
 	local circleRadius = 5
 	local circleMinRadius = 2
@@ -3653,23 +3624,41 @@ function farming.farm(...)
 		return
 	end
 	
-	local ok = farming.move(
-		"flowerzones",
-		mod.data.actives["walkspeed"],
-		selected
-	)
+	-- ===== ИЗМЕНЕНИЕ: сначала проверяем pending_resume =====
+	local ok
+	do
+		local pending = mod.data.actives["__pending_resume"]
+		mod.data.actives["__pending_resume"] = nil
+		if pending and pending.instance and pending.instance.Parent then
+			local pp = pending.instance
+			if pp:IsA("Model") then
+				pp = pp.PrimaryPart or pp:FindFirstChildWhichIsA("BasePart", true)
+			end
+			if pp and pp:IsA("BasePart") then
+				farming.cancelMove()
+				task.wait(0.15)
+				ok = farming.move("goto", mod.data.actives["walkspeed"], pp.Position)
+			end
+		end
+	end
+	if not ok then
+		ok = farming.move(
+			"flowerzones",
+			mod.data.actives["walkspeed"],
+			selected
+		)
+	end
+	-- ===== КОНЕЦ ИЗМЕНЕНИЯ =====
 
 	if not ok then
 		farming.__farmFlyRetry = (farming.__farmFlyRetry or 0) + 1
 		if farming.__farmFlyRetry >= 5 then
-			--warn("farm initial fly failed 5x — disabling auto_farm to avoid kick")
 			farming.__farmFlyRetry = 0
 			mod.data.actives["auto_farm"] = false
 			resetFarmMovement(false)
 			return
 		end
 		local delay = math.min(2 ^ (farming.__farmFlyRetry - 1), 15)
-		--warn("initial fly failed, retry " .. farming.__farmFlyRetry .. "/5 in " .. delay .. "s")
 		task.delay(delay, function()
 			if mod.data.actives["auto_farm"] == true then
 				farming.__retrying = true
@@ -3682,7 +3671,7 @@ function farming.farm(...)
 		end)
 		return
 	end
-	
+
 	farming.__farmFlyRetry = 0
 	farming.__retrying = nil
 	local function j(a)
@@ -5319,21 +5308,59 @@ local function planterLoopImpl(id)
 		task.wait(0.5)
 	end
 
-	-- стартовая зачистка чужих плантеров
+	-- стартовая синхронизация существующих плантеров
 	if mod.data.actives["planter_collect_existing"] ~= false then
 		local existing = farming.getPlayerPlacedPlanters()
+
+		local enabledCfgs = getEnabledPlanterConfigs()
+
+		local function matchSlotByInstance(inst)
+			local name = tostring(inst.Name)
+			for _, cfg in ipairs(enabledCfgs) do
+				if name:find(cfg.key, 1, true) or name:find(cfg.display, 1, true) then
+					return cfg
+				end
+			end
+			return nil
+		end
+
 		for _, p in ipairs(existing) do
 			if not planterEnabled(id) then return end
+
 			local ours = false
 			for _, s in pairs(farming.__planterState) do
 				if s.instance == p.instance then ours = true break end
 			end
-			if not ours and p.position then
+			if ours then continue end
+			if not p.position then continue end
+
+			local growth = farming.getPlanterGrowth(p.instance)
+			local matchedCfg = matchSlotByInstance(p.instance)
+			local isReady = (growth and growth >= 99)
+
+			if isReady then
+				-- готов — реально летим и собираем
 				mod.data.actives["planter_busy"] = true
 				pcall(farming.collectPlanterAt, p.position)
 				pcall(farming.collectNearbyTokens, 35, 10)
 				mod.data.actives["planter_busy"] = false
 				task.wait(0.5)
+
+				if matchedCfg then
+					farming.__planterState[matchedCfg.slot] = nil
+				end
+			else
+				-- НЕ готов — НЕ летим. Регистрируем, чтобы главный цикл
+				-- сам собрал его когда созреет.
+				if matchedCfg then
+					farming.__planterState[matchedCfg.slot] = {
+						key = matchedCfg.key,
+						placedAt = tick(),
+						time = matchedCfg.time,
+						field = matchedCfg.field,
+						instance = p.instance,
+					}
+				end
 			end
 		end
 	end
