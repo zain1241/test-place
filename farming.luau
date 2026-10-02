@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.42")
+print("loaded 0.2.5")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -46,6 +46,7 @@ local farmId = 0
 
 local __noclipConn = nil; local PUFF_MAX_DISTANCE = nil; local bubblesReady = false; local lastSproutTime = 0; local MONDO_COLLECT_TIME = 40
 local bubbles = {}; local staticBubbles = {}; local __bboxCache = {}; local __bboxCacheTime = {};local __fleeTarget = nil; local __fleeUntil = 0
+local __decoCache = setmetatable({}, { __mode = "k" }); local __decoConns = {}
 
 local PUFF_RARITY = {["Common"] = true, ["Rare"] = true, ["Epic"] = true, ["Legendary"] = true, ["Mythic"] = true}
 local PUFF_PRIORITY = {["Mythic"] = 5, ["Legendary"] = 4, ["Epic"] = 3, ["Rare"] = 2, ["Common"] = 1,}
@@ -67,6 +68,25 @@ local PETAL_COLORS = {
 	Merigold = Color3.fromRGB(218, 168, 28),
 	Periwinkle = Color3.fromRGB(150, 156, 236),
 }
+
+local HONEY_TOKEN_TEXTURE = "rbxassetid://1472135114"
+
+local function isHoneyToken(v)
+	if not v or not v:IsA("BasePart") then return false end
+	for _, child in ipairs(v:GetChildren()) do
+		if child:IsA("Decal") and child.Texture == HONEY_TOKEN_TEXTURE then
+			return true
+		end
+	end
+	return false
+end
+
+local function tokenAllowed(v)
+	if mod.data.actives["honey_collect"] == false then
+		return not isHoneyToken(v)
+	end
+	return true
+end
 
 local function getPetalColorName(petal)
 	if not petal or not petal:IsA("BasePart") then return nil end
@@ -1017,7 +1037,7 @@ function farming.farmMondo(field, id)
 
 		if collectibles then
 			for _, v in ipairs(collectibles:GetChildren()) do
-				if v:IsA("BasePart") and v.Parent and not handled[v] and v.Transparency <= 0 then
+				if v:IsA("BasePart") and v.Parent and not handled[v] and v.Transparency <= 0 and tokenAllowed(v) then
 					local d = (v.Position - hrp.Position).Magnitude
 					if d <= 120 and (not targetDist2 or d < targetDist2) then
 						target2 = v
@@ -1361,6 +1381,7 @@ function farming.farmSprout(field, id)
 					and v.Parent
 					and not handled[v]
 					and v.Transparency <= 0
+					and tokenAllowed(v)
 				then
 					local d = (v.Position - hrp.Position).Magnitude
 					if d <= 100 and (not targetDist or d < targetDist) then
@@ -1407,6 +1428,7 @@ local function isPuffLoot(v)
 	if not v or not v:IsA("BasePart") then return false end
 	if v.Name == "PuffballStem" or v.Name == "Puffball" then return false end
 	if v.Transparency > 0 then return false end
+	if not tokenAllowed(v) then return false end
 
 	return v.Parent == workspace:FindFirstChild("Collectibles") and v:FindFirstChildWhichIsA("Decal") ~= nil
 end
@@ -1768,6 +1790,72 @@ local function returnToField(field, id)
 	return true
 end
 
+local function applyDeco(obj, enabled)
+	if not obj:IsA("BasePart") then return end
+
+	if enabled then
+		if __decoCache[obj] == nil then
+			__decoCache[obj] = {
+				Transparency = obj.Transparency,
+				CanCollide = obj.CanCollide,
+			}
+		end
+		obj.Transparency = 0.4
+		obj.CanCollide = false
+	else
+		local saved = __decoCache[obj]
+		if saved then
+			pcall(function()
+				obj.Transparency = saved.Transparency
+				obj.CanCollide = saved.CanCollide
+			end)
+			__decoCache[obj] = nil
+		end
+	end
+end
+
+local function getDecoContainers()
+	local list = {}
+
+	local fd = workspace:FindFirstChild("FieldDecos")
+	if fd then table.insert(list, fd) end
+
+	local deco = workspace:FindFirstChild("Decorations")
+	if deco then
+		table.insert(list, deco)
+		local misc = deco:FindFirstChild("Misc")
+		if misc then table.insert(list, misc) end
+	end
+
+	return list
+end
+
+function farming.hideDecorations(enabled)
+	enabled = enabled == true
+	for _, c in ipairs(__decoConns) do
+		pcall(function() c:Disconnect() end)
+	end
+	table.clear(__decoConns)
+
+	local containers = getDecoContainers()
+
+	for _, container in ipairs(containers) do
+		for _, obj in ipairs(container:GetDescendants()) do
+			applyDeco(obj, enabled)
+		end
+	end
+
+	if enabled then
+		for _, container in ipairs(containers) do
+			table.insert(__decoConns, container.DescendantAdded:Connect(function(obj)
+				if mod.data.actives["hide_decorations"] == true then
+					applyDeco(obj, true)
+				end
+			end))
+		end
+	end
+end
+
 local function clearFarmLines()
 	local lines = workspace:FindFirstChild("Lines_Cub")
 	if lines then lines:ClearAllChildren() end
@@ -2099,13 +2187,16 @@ function farming.move(...)
 					return
 				end
 
-				local s = Instance.new("SelectionBox")
-				s.Parent = v
-				s.Adornee = v
-				s.Color3 = Color3.new(255, 255, 255)
-				s.SurfaceColor3 = Color3.new(255, 255, 255)
-				s.LineThickness = .04
-				s.SurfaceTransparency = .9
+				local s
+				if mod.data.actives["lines"] == true then
+					s = Instance.new("SelectionBox")
+					s.Parent = v
+					s.Adornee = v
+					s.Color3 = Color3.new(255, 255, 255)
+					s.SurfaceColor3 = Color3.new(255, 255, 255)
+					s.LineThickness = .04
+					s.SurfaceTransparency = .9
+				end
 
 				if tween then pcall(function() tween:Cancel() end) tween = nil end
 				if atween then pcall(function() atween:Cancel() end) atween = nil end
@@ -2114,7 +2205,7 @@ function farming.move(...)
 				local root = char and char:FindFirstChild("HumanoidRootPart")
 				local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 				if not root or not humanoid then
-					if s.Parent then s:Destroy() end
+					if s and s.Parent then s:Destroy() end
 					return
 				end
 
@@ -2172,14 +2263,14 @@ function farming.move(...)
 
 				if cancelled or currentFarmId ~= farmId then
 					pcall(function() farming.inv(false) end)
-					if s.Parent then s:Destroy() end
+					if s and s.Parent then s:Destroy() end
 					mod.data.actives["converting"] = false
 					mod.data.actives["move"] = false
 					return
 				end
 
 				pcall(function() j(false) end)
-				if s.Parent then s:Destroy() end
+				if s and s.Parent then s:Destroy() end
 				farming.inv(false)
 
 				if mod.data.actives["auto_farm"] == false then
@@ -2561,7 +2652,7 @@ function farming.forceWalkSpeed(speed)
 	local function applySpeed()
 		local targetSpeed = tonumber(mod.data.actives["walkspeed"]) or farming.__forcedSpeed
 		if not targetSpeed or targetSpeed <= 0 then return end
-		targetSpeed = math.clamp(targetSpeed, 16, 60)
+		--targetSpeed = math.clamp(targetSpeed, 16, 60)
 		
 		if mod.data.actives["move_speed"] ~= targetSpeed then
 			mod.data.actives["move_speed"] = targetSpeed
@@ -3586,14 +3677,14 @@ function farming.farm(...)
 	if not ok then
 		farming.__farmFlyRetry = (farming.__farmFlyRetry or 0) + 1
 		if farming.__farmFlyRetry >= 5 then
-			warn("farm initial fly failed 5x — disabling auto_farm to avoid kick")
+			--warn("farm initial fly failed 5x — disabling auto_farm to avoid kick")
 			farming.__farmFlyRetry = 0
 			mod.data.actives["auto_farm"] = false
 			resetFarmMovement(false)
 			return
 		end
 		local delay = math.min(2 ^ (farming.__farmFlyRetry - 1), 15)
-		warn("initial fly failed, retry " .. farming.__farmFlyRetry .. "/5 in " .. delay .. "s")
+		--warn("initial fly failed, retry " .. farming.__farmFlyRetry .. "/5 in " .. delay .. "s")
 		task.delay(delay, function()
 			if mod.data.actives["auto_farm"] == true then
 				farming.__retrying = true
@@ -3727,34 +3818,70 @@ function farming.farm(...)
 		local function b(...)
 			local a = {...}
 
-			local l = workspace:FindFirstChild("Lines_Cub")
+			-- destroy
+			if a[1] == false then
+				local rt = a[2]
+				if rt then
+					pcall(function() if rt.Attachment then rt.Attachment:Destroy() end end)
+					pcall(function() if rt.Beam then rt.Beam:Destroy() end end)
+				end
+				local l = workspace:FindFirstChild("Lines_Cub")
+				if l then
+					for _, v in pairs(l:GetChildren()) do
+						v:Destroy()
+					end
+				end
+				return
+			end
 
+			-- create
+			local l = workspace:FindFirstChild("Lines_Cub")
 			if not l then
 				l = Instance.new("Folder")
 				l.Name = "Lines_Cub"
 				l.Parent = workspace
 			end
-			local p = Instance.new("Part"); p.Name = "Attach_"..find.httpservice:GenerateGUID(false); p.Position = a[3]; p.Size = Vector3.new(1, 1, 1); p.CanCollide = false; p.Anchored = true; p.Transparency = 1; p.Parent = l
-			local m1 = Instance.new("Attachment"); m1.Name = "Attachment"; m1.Parent = p;
 
-			local s = Instance.new("SelectionBox")
-			s.Parent = p; s.Adornee = p; s.Color3 = Color3.new(255, 255, 255); s.SurfaceColor3 = Color3.new(255, 255, 255); s.LineThickness = .04; s.SurfaceTransparency = .9
+			local targetPos = a[3]
+			if not targetPos then return end
 
-			local function d(...)
-				if p then
-					for _, v in pairs(l:GetChildren()) do
-						v:Destroy()
-					end
-				end
+			local p = Instance.new("Part")
+			p.Name = "Attach_" .. find.httpservice:GenerateGUID(false)
+			p.Position = targetPos
+			p.Size = Vector3.new(1, 1, 1)
+			p.CanCollide = false
+			p.Anchored = true
+			p.Transparency = 1
+			p.Parent = l
+
+			local m1 = Instance.new("Attachment")
+			m1.Name = "Attachment"
+			m1.Parent = p
+
+			local rt = a[2]
+			if not rt or not rt.Parent then
+				p:Destroy()
+				return
 			end
+			
+			pcall(function() if rt.Attachment then rt.Attachment:Destroy() end end)
+			pcall(function() if rt.Beam then rt.Beam:Destroy() end end)
 
-			if a[1] == true then
-				local m = Instance.new("Attachment"); m.Name = "Attachment"; m.Parent = a[2];
-				local b = Instance.new("Beam"); b.Parent = a[2]; b.Width0 = .2; b.Width1 = .2; b.Attachment0 = m; b.Attachment1 = m1; b.FaceCamera = true; b.TextureLength = 1; b.LightEmission = 1; b.Transparency = NumberSequence.new(0, 0)
-			elseif a[1] == false then
-				a[2].Attachment:Destroy(); a[2].Beam:Destroy();
-				d(...)
-			end
+			local m = Instance.new("Attachment")
+			m.Name = "Attachment"
+			m.Parent = rt
+
+			local beam = Instance.new("Beam")
+			beam.Name = "Beam"
+			beam.Parent = rt
+			beam.Width0 = .2
+			beam.Width1 = .2
+			beam.Attachment0 = m
+			beam.Attachment1 = m1
+			beam.FaceCamera = true
+			beam.TextureLength = 1
+			beam.LightEmission = 1
+			beam.Transparency = NumberSequence.new(0, 0)
 		end
 
 		local function m(...)
@@ -3903,6 +4030,7 @@ function farming.farm(...)
 							and v.Transparency <= 0
 							and i(v, field)
 							and (rt.Position - v.Position).Magnitude > 4
+							and tokenAllowed(v)
 						then
 							table.insert(queue["tokens"], v)
 						end
@@ -3946,7 +4074,7 @@ function farming.farm(...)
 				local function getNextToken()
 					while #queue["tokens"] > 0 do
 						local t = queue["tokens"][1]
-						if t and t.Parent and t.Transparency <= 0 then return t end
+						if t and t.Parent and t.Transparency <= 0 and tokenAllowed(t) then return t end
 						table.remove(queue["tokens"], 1)
 					end
 					return nil
@@ -3997,6 +4125,11 @@ function farming.farm(...)
 						{CFrame = cf}
 					)
 					atween = currentTween
+
+					if mod.data.actives["lines"] == true then
+						b(true, rt, p)
+					end
+
 					currentTween:Play()
 					
 					local targetFlat = Vector3.new(p.X, 0, p.Z)
@@ -4010,6 +4143,10 @@ function farming.farm(...)
 							if atween == currentTween then atween = nil end
 							if track and track.IsPlaying then track:Stop(.1) end
 							mod.data.actives["point"] = false
+							
+							if mod.data.actives["lines"] == true then
+								b(false, rt)
+							end
 							return
 						end
 
@@ -4019,6 +4156,7 @@ function farming.farm(...)
 						local flee3 = getFleeTarget(rt2)
 						if flee3 then
 							pcall(function() currentTween:Cancel() end)
+							b(false, rt)
 							local c2 = find.player.Character
 							local h2 = c2 and c2:FindFirstChildOfClass("Humanoid")
 							if h2 then
@@ -4037,6 +4175,8 @@ function farming.farm(...)
 
 						task.wait()
 					end
+					
+					b(false, rt)
 
 					if atween == currentTween then atween = nil end
 					if id ~= farmId then break end
@@ -4254,6 +4394,7 @@ function farming.farm(...)
 							and v.Transparency <= 0
 							and isTokenInField(v, field)
 							and (rt.Position - v.Position).Magnitude > 2
+							and tokenAllowed(v)
 						then
 							table.insert(queue["tokens"], v)
 						end
@@ -4301,7 +4442,7 @@ function farming.farm(...)
 				while id == farmId and mod.data.actives["auto_farm"] == true and #queue["tokens"] > 0 and not mod.data.actives["converting"] do
 					while #queue["tokens"] > 0 do
 						local first = queue["tokens"][1]
-						if first and first.Parent and first.Transparency <= 0 then break end
+						if first and first.Parent and first.Transparency <= 0 and tokenAllowed(first) then break end
 						table.remove(queue["tokens"], 1)
 					end
 					if #queue["tokens"] == 0 then break end
@@ -4355,7 +4496,7 @@ function farming.farm(...)
 							local hasToken = false
 							if c and field then
 								for _, v in ipairs(c:GetChildren()) do
-									if v:IsA("BasePart") and isTokenInField(v, field) then
+									if v:IsA("BasePart") and isTokenInField(v, field) and tokenAllowed(v) then
 										hasToken = true
 										break
 									end
@@ -4524,7 +4665,7 @@ function farming.farm(...)
 							and find.player.Character:FindFirstChild("HumanoidRootPart")
 						if rt then
 							for _, v in ipairs(collectibles:GetChildren()) do
-								if v:IsA("BasePart") and v.Transparency <= 0 then
+								if v:IsA("BasePart") and v.Transparency <= 0 and tokenAllowed(v) then
 									local p = checkField.CFrame:PointToObjectSpace(v.Position)
 									local s = checkField.Size / 2
 									if math.abs(p.X) <= s.X
@@ -4618,6 +4759,458 @@ function farming.farm(...)
 	end
 end
 
+local PLANTER_KEYS = {
+	{ key = "PaperPlanter",       display = "Paper Planter",         growth = 1  },
+	{ key = "TicketPlanter",      display = "Ticket Planter",        growth = 2  },
+	{ key = "StickerPlanter",     display = "Sticker Planter",       growth = 3  },
+	{ key = "FestivePlanter",     display = "Festive Planter",       growth = 4  },
+	{ key = "PlasticPlanter",     display = "Plastic Planter",       growth = 2  },
+	{ key = "CandyPlanter",       display = "Candy Planter",         growth = 4  },
+	{ key = "RedClayPlanter",     display = "Red Clay Planter",      growth = 6  },
+	{ key = "BlueClayPlanter",    display = "Blue Clay Planter",     growth = 6  },
+	{ key = "TackyPlanter",       display = "Tacky Planter",         growth = 8  },
+	{ key = "PesticidePlanter",   display = "Pesticide Planter",     growth = 10 },
+	{ key = "HeatTreatedPlanter", display = "Heat-Treated Planter",  growth = 12 },
+	{ key = "HydroponicPlanter",  display = "Hydroponic Planter",    growth = 12 },
+	{ key = "PetalPlanter",       display = "Petal Planter",         growth = 14 },
+	{ key = "PlentyPlanter",      display = "The Planter Of Plenty", growth = 16 },
+}
+
+local PLANTER_PAC_NAMES = {
+	PaperPlanter       = "Paper Planter",
+	TicketPlanter      = "Ticket Planter",
+	StickerPlanter     = "Sticker Planter",
+	FestivePlanter     = "Festive Planter",
+	PlasticPlanter     = "Plastic Planter",
+	CandyPlanter       = "Candy Planter",
+	RedClayPlanter     = "Red Clay Planter",
+	BlueClayPlanter    = "Blue Clay Planter",
+	TackyPlanter       = "Tacky Planter",
+	PesticidePlanter   = "Pesticide Planter",
+	HeatTreatedPlanter = "Heat-Treated Planter",
+	HydroponicPlanter  = "Hydroponic Planter",
+	PetalPlanter       = "Petal Planter",
+	PlentyPlanter      = "The Planter Of Plenty",
+}
+
+local function getPAC()
+	local Events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
+	return Events and Events:FindFirstChild("PlayerActivesCommand")
+end
+
+local function findPlantersFolder()
+	for _, name in ipairs({ "Planters", "PlayerPlanters", "PlacedPlanters" }) do
+		local f = workspace:FindFirstChild(name)
+		if f then return f end
+	end
+	return nil
+end
+
+local function getFieldCenter(fieldName)
+	local zones = workspace:FindFirstChild("FlowerZones")
+	if not zones then return nil end
+	local field = zones:FindFirstChild(fieldName)
+	if not field then return nil end
+	if field:IsA("BasePart") then
+		return field.Position + Vector3.new(0, field.Size.Y / 2 + 3, 0)
+	elseif field:IsA("Model") then
+		local ok, cf, size = pcall(function() return field:GetBoundingBox() end)
+		if ok then return cf.Position + Vector3.new(0, size.Y / 2 + 3, 0) end
+	end
+	return nil
+end
+
+local function getModelPos(m)
+	if not m then return nil end
+	if m:IsA("Model") then
+		if m.PrimaryPart then return m.PrimaryPart.Position end
+		local p = m:FindFirstChildWhichIsA("BasePart", true)
+		return p and p.Position
+	elseif m:IsA("BasePart") then
+		return m.Position
+	end
+end
+
+local function waitMoveFree(timeout)
+	local start = tick()
+	while mod.data.actives["move"] == true and (tick() - start) < (timeout or 12) do
+		task.wait(0.1)
+	end
+end
+
+function farming.getOwnedPlanters()
+	local stats = getStats()
+	if not stats then return {} end
+	local eggs = stats.Eggs
+	if type(eggs) ~= "table" then return {} end
+	local out = {}
+	for k, v in pairs(eggs) do
+		if type(k) == "string" and k:sub(-7) == "Planter" then
+			local n = tonumber(v) or 0
+			if n > 0 then out[k] = n end
+		end
+	end
+	return out
+end
+
+function farming.getPlayerPlacedPlanters()
+	local folder = findPlantersFolder()
+	if not folder then return {} end
+	local myName = string.lower(find.player.Name)
+	local out = {}
+	for _, v in ipairs(folder:GetChildren()) do
+		if v:IsA("Model") then
+			local owner
+			local attr = v:GetAttribute("Owner") or v:GetAttribute("owner")
+			if type(attr) == "string" then owner = attr end
+			if not owner then
+				local ov = v:FindFirstChild("Owner", true)
+				if ov and ov:IsA("ObjectValue") and ov.Value then
+					owner = ov.Value.Name
+				elseif ov and ov:IsA("StringValue") then
+					owner = ov.Value
+				end
+			end
+
+			if not owner or string.lower(owner) == myName then
+				table.insert(out, {
+					instance = v,
+					position = getModelPos(v),
+					type = v.Name,
+				})
+			end
+		end
+	end
+	return out
+end
+
+function farming.findPlacedPlanter(key, fieldName)
+	local list = farming.getPlayerPlacedPlanters()
+	local displayName
+	for _, info in ipairs(PLANTER_KEYS) do
+		if info.key == key then displayName = info.display break end
+	end
+	if not displayName then return nil end
+
+	local center = getFieldCenter(fieldName)
+	for _, p in ipairs(list) do
+		local name = tostring(p.instance.Name)
+		local matched = name:find(key, 1, true) ~= nil
+			or name:find(displayName, 1, true) ~= nil
+		if matched then
+			if not center or not p.position then return p.instance end
+			if (p.position - center).Magnitude <= 60 then return p.instance end
+		end
+	end
+	return nil
+end
+
+function farming.getPlanterGrowth(instance)
+	if not instance then return nil end
+	local g = instance:GetAttribute("Growth") or instance:GetAttribute("growth")
+	if type(g) == "number" then
+		return g <= 1 and g * 100 or g
+	end
+	for _, v in ipairs(instance:GetDescendants()) do
+		if v:IsA("TextLabel") then
+			local n = string.match(v.Text, "(%d+)%%")
+			if n then return tonumber(n) end
+		elseif v:IsA("NumberValue") and (v.Name == "Growth" or v.Name == "GrowthPercent") then
+			return v.Value <= 1 and v.Value * 100 or v.Value
+		end
+	end
+	return nil
+end
+
+function farming.placePlanter(key, fieldName)
+	local center = getFieldCenter(fieldName)
+	if not center then
+		warn("planter: field center not found for " .. tostring(fieldName))
+		return false
+	end
+
+	waitMoveFree(15)
+	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
+	farming.move("goto", speed, center)
+	task.wait(0.4)
+
+	local pac = getPAC()
+	if not pac then
+		warn("planter: PlayerActivesCommand not found")
+		return false
+	end
+
+	local pacName = PLANTER_PAC_NAMES[key] or key
+	pcall(function()
+		pac:FireServer({ Name = pacName })
+	end)
+
+	task.wait(0.6)
+	return true
+end
+
+function farming.collectPlanterAt(instanceOrPos)
+	local pos
+	if typeof(instanceOrPos) == "Vector3" then
+		pos = instanceOrPos
+	elseif instanceOrPos then
+		pos = getModelPos(instanceOrPos)
+	end
+	if not pos then return false end
+
+	waitMoveFree(15)
+	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
+	farming.move("goto", speed, pos)
+	task.wait(0.25)
+
+	activateButton()
+	task.wait(0.5)
+	return true
+end
+
+function farming.collectNearbyTokens(radius, duration)
+	radius = radius or 30
+	local stop = tick() + (duration or 4)
+	local handled = {}
+	while tick() < stop do
+		local ch = find.player.Character
+		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+		local rt = ch and ch:FindFirstChild("HumanoidRootPart")
+		if not hum or not rt then break end
+
+		for obj in pairs(handled) do
+			if not obj.Parent then handled[obj] = nil end
+		end
+
+		local c = workspace:FindFirstChild("Collectibles")
+		local target, best
+		if c then
+			for _, v in ipairs(c:GetChildren()) do
+				if v:IsA("BasePart") and v.Parent and not handled[v] and v.Transparency <= 0 and tokenAllowed(v) then
+					local d = (v.Position - rt.Position).Magnitude
+					if d <= radius and (not best or d < best) then
+						target = v
+						best = d
+					end
+				end
+			end
+		end
+
+		if not target then
+			task.wait(0.05)
+			if tick() > stop - 0.3 then break end
+			continue
+		end
+
+		local tp = Vector3.new(target.Position.X, rt.Position.Y, target.Position.Z)
+		if (tp - rt.Position).Magnitude <= 3.5 then
+			handled[target] = true
+			task.wait(0.02)
+		else
+			hum.WalkSpeed = tonumber(mod.data.actives["walkspeed"]) or 40
+			hum:MoveTo(tp)
+			task.wait(0.02)
+		end
+	end
+end
+
+local planterLoopId = 0
+farming.__planterState = farming.__planterState or {}
+
+local function planterEnabled(id)
+	return id == planterLoopId
+		and mod.data.actives["auto_farm"] == true
+		and mod.data.actives["planter_enabled"] == true
+		and not mod.data.actives["converting"]
+end
+
+local function slotDisplayToKey(display)
+	for _, info in ipairs(PLANTER_KEYS) do
+		if info.display == display then return info.key end
+	end
+	return nil
+end
+
+local function getEnabledPlanterConfigs()
+	local out = {}
+	if mod.data.actives["planter_enabled"] ~= true then return out end
+
+	for i = 1, 5 do
+		if mod.data.actives["planter_slot" .. i .. "_enabled"] == true then
+			local t = mod.data.actives["planter_slot" .. i .. "_type"]
+			local f = mod.data.actives["planter_slot" .. i .. "_field"]
+			local h = tonumber(mod.data.actives["planter_slot" .. i .. "_time"]) or 1
+
+			if type(t) == "string" and t ~= ""
+				and type(f) == "string" and f ~= ""
+			then
+				local key = slotDisplayToKey(t)
+				if key then
+					table.insert(out, {
+						slot = i,
+						key = key,
+						display = t,
+						field = f,
+						time = math.max(h, 0.05) * 3600,
+					})
+				end
+			end
+		end
+	end
+
+	-- BSS: max 3 активных
+	while #out > 3 do
+		table.remove(out)
+	end
+
+	return out
+end
+
+local function planterLoopImpl(id)
+	if not planterEnabled(id) then return end
+
+	local configs = getEnabledPlanterConfigs()
+	if #configs == 0 then return end
+
+	local state = farming.__planterState
+
+	-- 1) Собрать плантеры, поставленные игроком (не скриптом)
+	if mod.data.actives["planter_collect_existing"] ~= false then
+		local existing = farming.getPlayerPlacedPlanters()
+		for _, p in ipairs(existing) do
+			if not planterEnabled(id) then return end
+			local ours = false
+			for _, s in pairs(state) do
+				if s.instance == p.instance then ours = true break end
+			end
+			if not ours and p.position then
+				farming.collectPlanterAt(p.position)
+				task.wait(0.8)
+			end
+		end
+	end
+
+	-- 2) Первичная расстановка
+	for _, cfg in ipairs(configs) do
+		if not planterEnabled(id) then return end
+		local s = state[cfg.slot]
+		if s and s.instance and s.instance.Parent then
+			-- уже стоит
+		else
+			local ok = farming.placePlanter(cfg.key, cfg.field)
+			if ok then
+				task.wait(0.6)
+				state[cfg.slot] = {
+					placedAt = tick(),
+					time = cfg.time,
+					field = cfg.field,
+					instance = farming.findPlacedPlanter(cfg.key, cfg.field),
+				}
+			end
+			task.wait(0.6)
+		end
+	end
+
+	-- 3) Основной цикл
+	while planterEnabled(id) do
+		task.wait(2)
+
+		local currentConfigs = getEnabledPlanterConfigs()
+		local cfgBySlot = {}
+		for _, c in ipairs(currentConfigs) do
+			cfgBySlot[c.slot] = c
+		end
+
+		-- собрать слоты, которые стали неактивны
+		for slot, s in pairs(state) do
+			if not planterEnabled(id) then return end
+			if not cfgBySlot[slot] then
+				if s.instance and s.instance.Parent then
+					farming.collectPlanterAt(s.instance)
+					task.wait(1)
+					if mod.data.actives["planter_collect_drop"] ~= false then
+						farming.collectNearbyTokens(35, 5)
+					end
+				end
+				state[slot] = nil
+			end
+		end
+
+		-- обновить активные слоты
+		for slot, cfg in pairs(cfgBySlot) do
+			if not planterEnabled(id) then return end
+			local s = state[slot]
+
+			if not s or not s.instance or not s.instance.Parent then
+				if s then state[slot] = nil end
+				local ok = farming.placePlanter(cfg.key, cfg.field)
+				if ok then
+					task.wait(0.6)
+					state[slot] = {
+						placedAt = tick(),
+						time = cfg.time,
+						field = cfg.field,
+						instance = farming.findPlacedPlanter(cfg.key, cfg.field),
+					}
+				end
+				task.wait(0.6)
+				continue
+			end
+
+			local elapsed = tick() - s.placedAt
+			local growth = farming.getPlanterGrowth(s.instance)
+			local needCollect = false
+
+			if growth and growth >= 99 then
+				needCollect = true
+			elseif elapsed >= cfg.time then
+				needCollect = true
+			end
+
+			if needCollect then
+				farming.collectPlanterAt(s.instance)
+				task.wait(1)
+
+				if mod.data.actives["planter_collect_drop"] ~= false then
+					farming.collectNearbyTokens(35, 5)
+					task.wait(0.5)
+				end
+
+				state[slot] = nil
+
+				if planterEnabled(id) then
+					local ok = farming.placePlanter(cfg.key, cfg.field)
+					if ok then
+						task.wait(0.6)
+						state[slot] = {
+							placedAt = tick(),
+							time = cfg.time,
+							field = cfg.field,
+							instance = farming.findPlacedPlanter(cfg.key, cfg.field),
+						}
+					end
+					task.wait(0.6)
+				end
+			end
+		end
+	end
+end
+
+function farming.startPlanterLoop()
+	planterLoopId += 1
+	local id = planterLoopId
+	task.spawn(function()
+		local ok, err = pcall(planterLoopImpl, id)
+		if not ok then
+			warn("planterLoop error: " .. tostring(err))
+		end
+	end)
+end
+
+function farming.stopPlanterLoop()
+	planterLoopId += 1
+end
+
 task.spawn(function()
 	task.wait(2)
 
@@ -4625,9 +5218,17 @@ task.spawn(function()
 		farming.autoDig(true)
 	end
 	
+	if mod.data.actives["hide_decorations"] == true then
+		farming.hideDecorations(true)
+	end
+	
 	farming.forceWalkSpeed(mod.data.actives["walkspeed"] or 16)
 	farming.wealthClock()
 	farming.installAutoRejoin()
+	
+	if mod.data.actives["planter_auto"] == true then
+		farming.startPlanterLoop()
+	end
 	
 	if mod.data.actives["auto_farm"] == true then
 		farming.farm()
