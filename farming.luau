@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.344")
+print("loaded 0.2.4")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -789,12 +789,12 @@ function farming.farmMondo(field, id)
 		local dist = dir.Magnitude
 		if dist <= 3 then break end
 
-		local step = math.min(moveSpeed * 0.05, dist)
+		local dt = find.renderstepped:Wait()
+		local step = math.min(moveSpeed * dt, dist)
 		local newPos = rt2.Position + dir.Unit * step
 		rt2.CFrame = CFrame.new(newPos) * startRot
 		rt2.AssemblyLinearVelocity = Vector3.zero
 		rt2.AssemblyAngularVelocity = Vector3.zero
-		task.wait(0.05)
 	end
 
 	safeCleanup(nil)
@@ -1140,12 +1140,12 @@ function farming.farmSprout(field, id)
 		local dist = dir.Magnitude
 		if dist <= 3 then break end
 
-		local step = math.min(moveSpeed * 0.05, dist)
+		local dt = find.renderstepped:Wait()
+		local step = math.min(moveSpeed * dt, dist)
 		local newPos = rt2.Position + dir.Unit * step
 		rt2.CFrame = CFrame.new(newPos) * startRot
 		rt2.AssemblyLinearVelocity = Vector3.zero
 		rt2.AssemblyAngularVelocity = Vector3.zero
-		task.wait(0.05)
 	end
 
 	safeCleanup(nil, false)
@@ -1499,12 +1499,12 @@ function farming.farmPuffshroom(field, id)
 		local dist = dir.Magnitude
 		if dist <= 3 then break end
 
-		local step = math.min(moveSpeed * 0.05, dist)
+		local dt = find.renderstepped:Wait()
+		local step = math.min(moveSpeed * dt, dist)
 		local newPos = rt2.Position + dir.Unit * step
 		rt2.CFrame = CFrame.new(newPos) * startRot
 		rt2.AssemblyLinearVelocity = Vector3.zero
 		rt2.AssemblyAngularVelocity = Vector3.zero
-		task.wait(0.05)
 	end
 
 	safeCleanup(nil, false)
@@ -1911,22 +1911,19 @@ function farming.inv(...)
 
 	if a[1] == true then
 		if invc then
-			return
+			pcall(function() invc:Disconnect() end)
+			invc = nil
 		end
 
 		invc = farming.conAF(
 			find.prerender, 4,
 			function(delta)
-				--print(delta)
-				for _, v in ipairs(b:GetChildren()) do
-					if v:IsA("MeshPart") then
-						if v.Name ~= "HumanoidRootPart"then
-							v.Transparency = 0.6
-						end
-						--print(v.Name)
+				local cur = workspace:FindFirstChild(find.player.Name)
+				if not cur then return end
+				for _, v in ipairs(cur:GetChildren()) do
+					if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
+						v.Transparency = 1
 						v.CanCollide = false
-						v.CanTouch = false
-						v.CanQuery = false
 					end
 				end
 			end
@@ -1938,13 +1935,13 @@ function farming.inv(...)
 		end
 
 		for _, v in ipairs(b:GetChildren()) do
-			if v:IsA("MeshPart") then
-				if v.Name ~= "HumanoidRootPart" then
-					v.Transparency = 0
+			if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
+				v.Transparency = 0
+				if not __noclipConn then
+					v.CanCollide = true
+				else
+					v.CanCollide = false
 				end
-				v.CanCollide = false
-				v.CanTouch = true
-				v.CanQuery = true
 			end
 		end
 	end
@@ -1960,10 +1957,8 @@ function farming.hardUninv()
 	if not b then return end
 
 	for _, v in ipairs(b:GetChildren()) do
-		if v:IsA("MeshPart") and v.Name ~= "HumanoidRootPart" then
+		if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
 			v.Transparency = 0
-			v.CanTouch = true
-			v.CanQuery = true
 			if not __noclipConn then
 				v.CanCollide = true
 			else
@@ -2165,7 +2160,7 @@ function farming.move(...)
 				farming.inv(true)
 				pcall(function() j(true) end)
 
-				local moveSpeed = math.clamp(flySpeed, 16, 70)
+				local moveSpeed = math.clamp(flySpeed, 16, 100)
 				humanoid.WalkSpeed = moveSpeed
 				local cancelled = false
 				local timeout = distance / moveSpeed + 15
@@ -2182,12 +2177,12 @@ function farming.move(...)
 					local dist = dir.Magnitude
 					if dist <= 3 then break end
 
-					local step = math.min(moveSpeed * 0.05, dist)
+					local dt = find.renderstepped:Wait()
+					local step = math.min(moveSpeed * dt, dist)
 					local newPos = rt2.Position + dir.Unit * step
 					rt2.CFrame = CFrame.new(newPos) * startRot
 					rt2.AssemblyLinearVelocity = Vector3.zero
 					rt2.AssemblyAngularVelocity = Vector3.zero
-					task.wait(0.05)
 				end
 
 				if cancelled or currentFarmId ~= farmId then
@@ -2449,7 +2444,7 @@ function farming.move(...)
 
 		farming.inv(true)
 
-		local moveSpeed = math.clamp(flySpeed, 16, 70)
+		local moveSpeed = math.clamp(flySpeed, 16, 100)
 		local cancelled = false
 		local timeout = distance / moveSpeed + 15
 
@@ -2465,12 +2460,12 @@ function farming.move(...)
 			local dist = dir.Magnitude
 			if dist <= 3 then break end
 
-			local step = math.min(moveSpeed * 0.05, dist)
+			local dt = find.renderstepped:Wait()
+			local step = math.min(moveSpeed * dt, dist)
 			local newPos = rt2.Position + dir.Unit * step
 			rt2.CFrame = CFrame.new(newPos) * startRot
 			rt2.AssemblyLinearVelocity = Vector3.zero
 			rt2.AssemblyAngularVelocity = Vector3.zero
-			task.wait(0.05)
 		end
 
 		if cancelled or currentFarmId ~= farmId then
@@ -2617,7 +2612,7 @@ function farming.move(...)
 		farming.inv(true)
 		pcall(function() j(true) end)
 
-		local moveSpeed = math.clamp(flySpeed, 16, 70)
+		local moveSpeed = math.clamp(flySpeed, 16, 100)
 		local cancelled = false
 		local timeout = distance / moveSpeed + 15
 
@@ -2633,12 +2628,12 @@ function farming.move(...)
 			local dist = dir.Magnitude
 			if dist <= 3 then break end
 
-			local step = math.min(moveSpeed * 0.05, dist)
+			local dt = find.renderstepped:Wait()
+			local step = math.min(moveSpeed * dt, dist)
 			local newPos = rt2.Position + dir.Unit * step
 			rt2.CFrame = CFrame.new(newPos) * startRot
 			rt2.AssemblyLinearVelocity = Vector3.zero
 			rt2.AssemblyAngularVelocity = Vector3.zero
-			task.wait(0.05)
 		end
 
 		pcall(function() j(false) end)
@@ -2726,7 +2721,7 @@ function farming.move(...)
 		farming.inv(true)
 		pcall(function() j(true) end)
 
-		local moveSpeed = math.clamp(flySpeed, 16, 70)
+		local moveSpeed = math.clamp(flySpeed, 16, 100)
 		local cancelled = false
 		local timeout = distance / moveSpeed + 15
 
@@ -2742,12 +2737,12 @@ function farming.move(...)
 			local dist = dir.Magnitude
 			if dist <= 3 then break end
 
-			local step = math.min(moveSpeed * 0.05, dist)
+			local dt = find.renderstepped:Wait()
+			local step = math.min(moveSpeed * dt, dist)
 			local newPos = rt2.Position + dir.Unit * step
 			rt2.CFrame = CFrame.new(newPos) * startRot
 			rt2.AssemblyLinearVelocity = Vector3.zero
 			rt2.AssemblyAngularVelocity = Vector3.zero
-			task.wait(0.05)
 		end
 
 		pcall(function() j(false) end)
