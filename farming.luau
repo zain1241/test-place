@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.5")
+print("loaded 0.2.51")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -4581,6 +4581,9 @@ function farming.farm(...)
 				end
 				if mod.data.actives["auto_farm"] == true then
 					if mod.data.actives["converting"] then return end
+					if mod.data.actives["planter_busy"] == true then
+						return
+					end
 					local info = farming.get_pollen_info()
 					local threshold = mod.data.actives["backpack"] or 80
 					
@@ -4949,6 +4952,41 @@ function farming.placePlanter(key, fieldName)
 	return true
 end
 
+local function confirmYesButton()
+	local pg = find.player:FindFirstChild("PlayerGui")
+	if not pg then return false end
+
+	local waitStart = tick()
+	while tick() - waitStart < 4 do
+		local screen = pg:FindFirstChild("ScreenGui")
+		local qb = screen and screen:FindFirstChild("QuestionBox")
+		local box = qb and qb:FindFirstChild("Box")
+		local yes = box and box:FindFirstChild("YesButton")
+
+		if yes and yes:IsA("GuiButton") and yes.Visible and yes.AbsoluteSize.X > 0 then
+			local cx = yes.AbsolutePosition.X + yes.AbsoluteSize.X / 2
+			local cy = yes.AbsolutePosition.Y + yes.AbsoluteSize.Y / 2
+			local inset = find.guiservice:GetGuiInset()
+			cy = cy + inset.Y
+
+			local VU = game:GetService("VirtualUser")
+			pcall(function() VU:CaptureController() end)
+			pcall(function() VU:ClickButton1(Vector2.new(cx, cy)) end)
+			pcall(function() VU:ReleaseController(Vector2.new(cx, cy)) end)
+			pcall(function()
+				find.virtual:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+				task.wait(0.02)
+				find.virtual:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+			end)
+
+			task.wait(0.2)
+			return true
+		end
+		task.wait(0.05)
+	end
+	return false
+end
+
 function farming.collectPlanterAt(instanceOrPos)
 	local pos
 	if typeof(instanceOrPos) == "Vector3" then
@@ -4958,13 +4996,32 @@ function farming.collectPlanterAt(instanceOrPos)
 	end
 	if not pos then return false end
 
-	waitMoveFree(15)
+	waitMoveFree(20)
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
-	farming.move("goto", speed, pos)
-	task.wait(0.25)
 
+	-- 1) подлёт к плантеру
+	farming.move("goto", speed, pos)
+
+	-- ждём пока move снимется (move() делает это сам после прилёта)
+	local arriveStart = tick()
+	while mod.data.actives["move"] == true and tick() - arriveStart < 25 do
+		task.wait(0.05)
+	end
+
+	-- 2) отпустить игрока + ждать 2 сек
+	local ch = find.player.Character
+	local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+	if hum then pcall(function() hum:Move(Vector3.zero, false) end) end
+	task.wait(2)
+
+	-- 3) нажать кнопку активации
 	activateButton()
-	task.wait(0.5)
+	task.wait(0.6)
+
+	-- 4) нажать YesButton когда QuestionBox появится
+	confirmYesButton()
+	task.wait(0.6)
+
 	return true
 end
 
@@ -5066,15 +5123,91 @@ local function getEnabledPlanterConfigs()
 	return out
 end
 
-local function planterLoopImpl(id)
-	if not planterEnabled(id) then return end
+function farming.getReadyPlanter()
+	if mod.data.actives["planter_enabled"] ~= true then return nil end
+	local state = farming.__planterState
+	if not state then return nil end
 
-	local configs = getEnabledPlanterConfigs()
-	if #configs == 0 then return end
+	for slot, s in pairs(state) do
+		if s.instance and s.instance.Parent then
+			local growth = farming.getPlanterGrowth(s.instance)
+			local elapsed = tick() - (s.placedAt or 0)
+			local timeout = s.time or 3600
+
+			if (growth and growth >= 99) or elapsed >= timeout then
+				return {
+					cfg = {
+						slot = slot,
+						key = s.key,
+						field = s.field,
+						time = s.time,
+					},
+					s = s,
+				}
+			end
+		end
+	end
+	return nil
+end
+
+function farming.processReadyPlanter(entry)
+	if not entry or not entry.cfg or not entry.s then return end
+
+	local cfg = entry.cfg
+	local s = entry.s
+	local fieldName = s.field or cfg.field
+	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
+
+	-- 1) подлёт + активация + YesButton + 2 сек пауза (всё внутри collectPlanterAt)
+	farming.collectPlanterAt(s.instance)
+
+	-- 2) собрать токены 10 секунд пешком
+	if mod.data.actives["planter_collect_drop"] ~= false then
+		farming.collectNearbyTokens(35, 10)
+	end
+
+	-- 3) сброс state — плантера больше нет
+	farming.__planterState[cfg.slot] = nil
+
+	-- 4) поставить новый плантер в то же поле, если автофарм ещё активен
+	if mod.data.actives["auto_farm"] == true
+		and mod.data.actives["planter_enabled"] == true
+	then
+		farming.placePlanter(cfg.key, fieldName)
+		task.wait(0.6)
+
+		local newInst = farming.findPlacedPlanter(cfg.key, fieldName)
+		farming.__planterState[cfg.slot] = {
+			key = cfg.key,
+			placedAt = tick(),
+			time = cfg.time or 3600,
+			field = fieldName,
+			instance = newInst,
+		}
+	end
+
+	-- 5) возврат на поле ПОЛЁТОМ (как после sprout)
+	local zones = workspace:FindFirstChild("FlowerZones")
+	local selected = mod.data.actives["selected_field"]
+	local field = zones and selected and zones:FindFirstChild(selected)
+
+	if field and field.Parent and mod.data.actives["auto_farm"] == true then
+		waitMoveFree(10)
+		farming.move("flowerzones", speed, field.Name)
+		local retStart = tick()
+		while mod.data.actives["move"] == true and tick() - retStart < 30 do
+			task.wait(0.05)
+		end
+	end
+end
+
+local function planterLoopImpl(id)
+	if mod.data.actives["auto_farm"] ~= true then return end
+	if mod.data.actives["planter_enabled"] ~= true then return end
 
 	local state = farming.__planterState
 
-	-- 1) Собрать плантеры, поставленные игроком (не скриптом)
+	-- 1) собрать существующие плантеры, если они не наши
 	if mod.data.actives["planter_collect_existing"] ~= false then
 		local existing = farming.getPlayerPlacedPlanters()
 		for _, p in ipairs(existing) do
@@ -5084,112 +5217,50 @@ local function planterLoopImpl(id)
 				if s.instance == p.instance then ours = true break end
 			end
 			if not ours and p.position then
-				farming.collectPlanterAt(p.position)
-				task.wait(0.8)
+				mod.data.actives["planter_busy"] = true
+				pcall(farming.collectPlanterAt, p.position)
+				mod.data.actives["planter_busy"] = false
+				task.wait(0.5)
 			end
 		end
 	end
 
-	-- 2) Первичная расстановка
+	-- 2) первичная расстановка
+	local configs = getEnabledPlanterConfigs()
 	for _, cfg in ipairs(configs) do
 		if not planterEnabled(id) then return end
 		local s = state[cfg.slot]
-		if s and s.instance and s.instance.Parent then
-			-- уже стоит
-		else
-			local ok = farming.placePlanter(cfg.key, cfg.field)
-			if ok then
-				task.wait(0.6)
-				state[cfg.slot] = {
-					placedAt = tick(),
-					time = cfg.time,
-					field = cfg.field,
-					instance = farming.findPlacedPlanter(cfg.key, cfg.field),
-				}
-			end
+		if not (s and s.instance and s.instance.Parent) then
+			mod.data.actives["planter_busy"] = true
+			farming.placePlanter(cfg.key, cfg.field)
+			mod.data.actives["planter_busy"] = false
 			task.wait(0.6)
+			state[cfg.slot] = {
+				key = cfg.key,
+				placedAt = tick(),
+				time = cfg.time,
+				field = cfg.field,
+				instance = farming.findPlacedPlanter(cfg.key, cfg.field),
+			}
 		end
+		task.wait(0.3)
 	end
 
-	-- 3) Основной цикл
+	-- 3) основной цикл — проверка раз в 2 сек
 	while planterEnabled(id) do
 		task.wait(2)
+		if not planterEnabled(id) then return end
 
-		local currentConfigs = getEnabledPlanterConfigs()
-		local cfgBySlot = {}
-		for _, c in ipairs(currentConfigs) do
-			cfgBySlot[c.slot] = c
-		end
-
-		-- собрать слоты, которые стали неактивны
-		for slot, s in pairs(state) do
-			if not planterEnabled(id) then return end
-			if not cfgBySlot[slot] then
-				if s.instance and s.instance.Parent then
-					farming.collectPlanterAt(s.instance)
-					task.wait(1)
-					if mod.data.actives["planter_collect_drop"] ~= false then
-						farming.collectNearbyTokens(35, 5)
-					end
-				end
-				state[slot] = nil
-			end
-		end
-
-		-- обновить активные слоты
-		for slot, cfg in pairs(cfgBySlot) do
-			if not planterEnabled(id) then return end
-			local s = state[slot]
-
-			if not s or not s.instance or not s.instance.Parent then
-				if s then state[slot] = nil end
-				local ok = farming.placePlanter(cfg.key, cfg.field)
-				if ok then
-					task.wait(0.6)
-					state[slot] = {
-						placedAt = tick(),
-						time = cfg.time,
-						field = cfg.field,
-						instance = farming.findPlacedPlanter(cfg.key, cfg.field),
-					}
-				end
-				task.wait(0.6)
-				continue
-			end
-
-			local elapsed = tick() - s.placedAt
-			local growth = farming.getPlanterGrowth(s.instance)
-			local needCollect = false
-
-			if growth and growth >= 99 then
-				needCollect = true
-			elseif elapsed >= cfg.time then
-				needCollect = true
-			end
-
-			if needCollect then
-				farming.collectPlanterAt(s.instance)
-				task.wait(1)
-
-				if mod.data.actives["planter_collect_drop"] ~= false then
-					farming.collectNearbyTokens(35, 5)
-					task.wait(0.5)
-				end
-
-				state[slot] = nil
-
-				if planterEnabled(id) then
-					local ok = farming.placePlanter(cfg.key, cfg.field)
-					if ok then
-						task.wait(0.6)
-						state[slot] = {
-							placedAt = tick(),
-							time = cfg.time,
-							field = cfg.field,
-							instance = farming.findPlacedPlanter(cfg.key, cfg.field),
-						}
-					end
-					task.wait(0.6)
+		if mod.data.actives["planter_busy"] == true then
+			-- кто-то уже обрабатывает — пропускаем
+		else
+			local ready = farming.getReadyPlanter()
+			if ready then
+				mod.data.actives["planter_busy"] = true
+				local ok, err = pcall(farming.processReadyPlanter, ready)
+				mod.data.actives["planter_busy"] = false
+				if not ok then
+					warn("processReadyPlanter error: " .. tostring(err))
 				end
 			end
 		end
@@ -5213,6 +5284,10 @@ end
 
 task.spawn(function()
 	task.wait(2)
+	
+	if mod.data.actives["planter_busy"] == nil then
+		mod.data.actives["planter_busy"] = false
+	end
 
 	if mod.data.actives["auto_dig"] == true then
 		farming.autoDig(true)
