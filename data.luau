@@ -113,8 +113,8 @@ data.tokens = {
 data.token_resources = {
 	-- drops
 	{name = "Honey Drop", image = "rbxassetid://1472108387"},
-	{name = "Royal Jelly", image = "rbxassetid://1471854106"},
-	{name = "Ticket", image = "rbxassetid://1674686518"},
+	{name = "Royal Jelly", image = "rbxassetid://1471882621"},
+	{name = "Ticket", image = "rbxassetid://1674871631"},
 	{name = "Gumdrops", image = "rbxassetid://1838129169"},
 	{name = "Pineapple", image = "rbxassetid://1952796032"},
 	{name = "Strawberry", image = "rbxassetid://1952740625"},
@@ -168,7 +168,7 @@ data.actives = {
 	auto_sprinkler = false,
 	auto_dig = false,
 	point = false,
-	lines = true,
+	lines = false,
 	auto_farm_speed = 80,
 	style_auto_farm = "Walk",
 	position_field = "center",
