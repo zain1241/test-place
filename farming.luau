@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.564")
+print("loaded 0.2.5644")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -2026,11 +2026,11 @@ end
 function farming.move(...)
 	local a = {...}
 	if mod.data.actives["move"] == true then
-		return
+		return true -- занято — это не провал
 	end
 
 	if not workspace:FindFirstChild(find.player.Name) then
-		return
+		return true -- нет персонажа — тоже не провал
 	end
 
 	local function j(a)
@@ -2063,12 +2063,11 @@ function farming.move(...)
 		end
 	end
 
-	-- универсальный подлёт (используется и в flowerzones, и в hive/convert/goto)
 	local function doFly(target, flySpeed, currentFarmId)
 		local char = find.player.Character
 		local root = char and char:FindFirstChild("HumanoidRootPart")
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-		if not root or not humanoid then return false end
+		if not root or not humanoid then return false, false end
 
 		local startRot = root.CFrame.Rotation
 		local distance = (root.Position - target).Magnitude
@@ -2123,14 +2122,15 @@ function farming.move(...)
 		pcall(function() farming.inv(false) end)
 
 		if cancelled or currentFarmId ~= farmId then
-			return false, true -- (fail, cancelled)
+			return false, true
 		end
 
+		-- Прилёт: только по горизонтали (Y игнорируем)
 		local okArrive = true
 		if rtEnd and target then
-			local remain = (rtEnd.Position - target).Magnitude
-			-- мягкий порог прилёта, чтобы не было ложных промахов
-			if remain > 15 then
+			local diff = rtEnd.Position - target
+			diff = Vector3.new(diff.X, 0, diff.Z)
+			if diff.Magnitude > 12 then
 				okArrive = false
 			end
 		end
@@ -2142,16 +2142,11 @@ function farming.move(...)
 		local a = {...}
 		local part = a[1]
 		if part == nil then return end
-
 		if typeof(part) == "string" then
 			local f = workspace:FindFirstChild("FlowerZones")
 			part = f and f:FindFirstChild(part)
 		end
-
-		if not part then
-			warn("field not found")
-			return
-		end
+		if not part then warn("field not found") return end
 
 		local cf, size
 		if part:IsA("BasePart") then
@@ -2171,11 +2166,8 @@ function farming.move(...)
 
 		local position = string.lower(mod.data.actives["position_field"] or "center")
 		local spotX = 0
-		if position == "left" then
-			spotX = -x * 0.6
-		elseif position == "right" then
-			spotX = x * 0.6
-		end
+		if position == "left" then spotX = -x * 0.6
+		elseif position == "right" then spotX = x * 0.6 end
 
 		local l = Vector3.new(spotX, size.Y / 2 + h, 0)
 		return cf:PointToWorldSpace(l)
@@ -2187,7 +2179,7 @@ function farming.move(...)
 
 		for _, v in ipairs(zones:GetChildren()) do
 			if v.Name == a[3] then
-				if mod.data.actives["auto_farm"] == false then return end
+				if mod.data.actives["auto_farm"] == false then return true end
 
 				local s
 				if mod.data.actives["lines"] == true then
@@ -2208,13 +2200,13 @@ function farming.move(...)
 				local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 				if not root or not humanoid then
 					if s and s.Parent then s:Destroy() end
-					return
+					return false
 				end
 
 				local target = r(v)
 				if not target then
 					if s and s.Parent then s:Destroy() end
-					return
+					return false
 				end
 
 				pcall(function()
@@ -2226,7 +2218,6 @@ function farming.move(...)
 				root.AssemblyAngularVelocity = Vector3.zero
 
 				local currentFarmId = farmId
-
 				tween = nil
 				mod.data.actives["move"] = true
 
@@ -2239,21 +2230,18 @@ function farming.move(...)
 
 				if s and s.Parent then s:Destroy() end
 
-				-- Сброс состояния до конца, чтобы никто параллельно не полетел
 				mod.data.actives["move"] = false
 				mod.data.actives["point"] = false
 
 				if cancelled then
 					mod.data.actives["converting"] = false
-					return false
+					return true -- отменено — не ошибка подлёта
 				end
 
 				if not okArrive then
-					warn("flowerzones fly: not arrived, will retry")
-					return false
+					return false -- реально не долетел
 				end
 
-				-- Проверка на конверт после прилёта
 				if currentFarmId == farmId and mod.data.actives["auto_farm"] == true then
 					task.spawn(function()
 						if currentFarmId ~= farmId then return end
@@ -2289,20 +2277,20 @@ function farming.move(...)
 		return false
 
 	elseif a[1] == "hive" then
-		if mod.data.actives["autohive"] == false then return end
+		if mod.data.actives["autohive"] == false then return true end
 		local target = a[3]
-		if typeof(target) ~= "Vector3" then return end
-		if not workspace:FindFirstChild(find.player.Name) then return end
+		if typeof(target) ~= "Vector3" then return true end
+		if not workspace:FindFirstChild(find.player.Name) then return true end
 
 		if tween then tween:Cancel() tween = nil end
 		if atween then atween:Cancel() atween = nil end
 
 		local character = find.player.Character
-		if not character then return end
+		if not character then return false end
 
 		local root = character:FindFirstChild("HumanoidRootPart")
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		if not root or not humanoid then return end
+		if not root or not humanoid then return false end
 
 		humanoid:MoveTo(root.Position)
 		humanoid:Move(Vector3.zero, false)
@@ -2318,7 +2306,7 @@ function farming.move(...)
 
 		if cancelled then
 			mod.data.actives["move"] = false
-			return
+			return true
 		end
 
 		if not okArrive then
@@ -2329,7 +2317,7 @@ function farming.move(...)
 
 		if currentFarmId ~= farmId or mod.data.actives["auto_farm"] ~= true then
 			mod.data.actives["move"] = false
-			return
+			return true
 		end
 
 		if not farming.getHive() then
@@ -2343,7 +2331,7 @@ function farming.move(...)
 				warn("hive not found 3s")
 				mod.data.actives["move"] = false
 				mod.data.actives["converting"] = false
-				return
+				return false
 			end
 		end
 
@@ -2355,14 +2343,14 @@ function farming.move(...)
 
 	elseif a[1] == "convert" then
 		local target = a[3]
-		if typeof(target) ~= "Vector3" then return end
+		if typeof(target) ~= "Vector3" then return true end
 		if tween then pcall(function() tween:Cancel() end) tween = nil end
-		if not workspace:FindFirstChild(find.player.Name) then return end
+		if not workspace:FindFirstChild(find.player.Name) then return true end
 
 		local character = find.player.Character
-		if not character then return end
+		if not character then return false end
 		local root = character:FindFirstChild("HumanoidRootPart")
-		if not root then return end
+		if not root then return false end
 
 		mod.data.actives["move"] = true
 		local currentFarmId = farmId
@@ -2375,7 +2363,7 @@ function farming.move(...)
 		if cancelled or currentFarmId ~= farmId then
 			mod.data.actives["converting"] = false
 			mod.data.actives["move"] = false
-			return
+			return true
 		end
 
 		if not okArrive then
@@ -2391,13 +2379,13 @@ function farming.move(...)
 
 	elseif a[1] == "goto" then
 		local target = a[3]
-		if typeof(target) ~= "Vector3" then return end
-		if not workspace:FindFirstChild(find.player.Name) then return end
+		if typeof(target) ~= "Vector3" then return true end
+		if not workspace:FindFirstChild(find.player.Name) then return true end
 
 		local character = find.player.Character
-		if not character then return end
+		if not character then return false end
 		local root = character:FindFirstChild("HumanoidRootPart")
-		if not root then return end
+		if not root then return false end
 
 		if tween then pcall(function() tween:Cancel() end) tween = nil end
 		if atween then pcall(function() atween:Cancel() end) atween = nil end
@@ -2413,7 +2401,7 @@ function farming.move(...)
 		mod.data.actives["move"] = false
 
 		if cancelled or currentFarmId ~= farmId then
-			return false
+			return true
 		end
 		if not okArrive then
 			return false
@@ -2844,7 +2832,7 @@ function farming.convert(...)
 
 					if balloon then
 						local popStart = tick()
-						local POP_TIMEOUT = 600  -- было 600
+						local POP_TIMEOUT = 600
 						while balloon.Parent
 							and mod.data.actives["auto_farm"]
 							and (tick() - popStart) < POP_TIMEOUT
@@ -3454,13 +3442,11 @@ function farming.farm(...)
 	local enabled = mod.data.actives["auto_farm"] == true
 	lastSproutTime = 0
 
-	if not farming.__retrying then
-		resetFarmMovement(enabled)
-	else
-		mod.data.actives["move"] = false
-		mod.data.actives["point"] = false
-		pcall(function() farming.inv(false) end)
-	end
+	-- Отменяем ЛЮБОЙ предыдущий отложенный ретрай
+	farming.__farmRetryToken = nil
+
+	-- ВСЕГДА чистим состояние (убирает висящие afarm)
+	resetFarmMovement(enabled)
 
 	if not enabled then
 		farming.noclip(false)
@@ -3493,16 +3479,14 @@ function farming.farm(...)
 	local fields = workspace:FindFirstChild("FlowerZones")
 	local field = fields and selected and fields:FindFirstChild(selected)
 
-	if not field then
-		warn("not field:", "field: ", selected, "zone: ", fields)
-		mod.data.actives.auto_farm = false
-		resetFarmMovement(false)
-		return
-	end
-
-	if mod.data.actives["selected_field"] == "" then
-		mod.data.actives["auto_farm"] = false
-		resetFarmMovement(false)
+	-- НЕ выключаем автофарм, просто retry
+	if not field or selected == "" then
+		warn("farm: field not found yet, retry in 3s")
+		task.delay(3, function()
+			if mod.data.actives["auto_farm"] == true then
+				pcall(farming.farm)
+			end
+		end)
 		return
 	end
 
@@ -3516,7 +3500,14 @@ function farming.farm(...)
 		return
 	end
 
-	-- pending_resume
+	-- Ждём, если что-то летит прямо сейчас
+	if mod.data.actives["move"] == true then
+		local waitStart = tick()
+		while mod.data.actives["move"] == true and tick() - waitStart < 30 do
+			task.wait(0.1)
+		end
+	end
+
 	local ok
 	do
 		local pending = mod.data.actives["__pending_resume"]
@@ -3533,43 +3524,41 @@ function farming.farm(...)
 			end
 		end
 	end
-	if not ok then
+	if ok ~= true then
 		ok = farming.move("flowerzones", mod.data.actives["walkspeed"], selected)
 	end
 
-	-- ===== ИСПРАВЛЕНО: НЕ выключаем автофарм, просто откладываем retry =====
-	if not ok then
+	-- ====== НОВЫЙ РЕТРАЙ С ТОКЕНОМ ======
+	if ok ~= true then
 		farming.__farmFlyRetry = (farming.__farmFlyRetry or 0) + 1
+		local attempt = farming.__farmFlyRetry
 
-		if farming.__farmFlyRetry >= 5 then
+		if attempt >= 4 then
 			farming.__farmFlyRetry = 0
-			warn("farm fly: too many retries, cooldown 10s")
+			warn("farm fly: retries exhausted, wait 10s")
+			local token = {}
+			farming.__farmRetryToken = token
 			task.delay(10, function()
-				if mod.data.actives["auto_farm"] == true then
-					farming.__retrying = true
-					pcall(farming.farm)
-					farming.__retrying = nil
-				end
+				if farming.__farmRetryToken ~= token then return end
+				if mod.data.actives["auto_farm"] ~= true then return end
+				pcall(farming.farm)
 			end)
 			return
 		end
 
-		local delay = math.min(2 ^ (farming.__farmFlyRetry - 1), 8)
+		local delay = math.min(2 ^ (attempt - 1), 8)
+		local token = {}
+		farming.__farmRetryToken = token
 		task.delay(delay, function()
-			if mod.data.actives["auto_farm"] == true then
-				farming.__retrying = true
-				local okRetry, errRetry = pcall(farming.farm)
-				farming.__retrying = nil
-				if not okRetry then
-					warn("farm retry error: " .. tostring(errRetry))
-				end
-			end
+			if farming.__farmRetryToken ~= token then return end
+			if mod.data.actives["auto_farm"] ~= true then return end
+			pcall(farming.farm)
 		end)
 		return
 	end
 
 	farming.__farmFlyRetry = 0
-	farming.__retrying = nil
+	farming.__farmRetryToken = nil
 
 	-- ===== дальше всё как было: q, q1, m, m1, afarm =====
 	local function j(a)
