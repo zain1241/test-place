@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.41")
+print("loaded 0.2.42")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -771,9 +771,11 @@ function farming.farmMondo(field, id)
 	pcall(function() farming.inv(true) end)
 
 	local cancelled = false
-	local moveSpeed = math.clamp(speed, 16, 300)
+	local moveSpeed = math.clamp(speed, 16, 100)
 	local timeout = distance / moveSpeed + 10
 	local t0 = tick()
+
+	if hrp then hrp.CanCollide = false end
 
 	while enabled() and (tick() - t0) < timeout do
 		local ch2 = find.player.Character
@@ -796,6 +798,10 @@ function farming.farmMondo(field, id)
 		rt2.AssemblyLinearVelocity = Vector3.zero
 		rt2.AssemblyAngularVelocity = Vector3.zero
 	end
+
+	local chEnd = find.player.Character
+	local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
+	if rtEnd then rtEnd.CanCollide = true end
 
 	safeCleanup(nil)
 	mod.data.actives["move"] = true
@@ -1122,9 +1128,11 @@ function farming.farmSprout(field, id)
 	pcall(function() farming.inv(true) end)
 
 	local cancelled = false
-	local moveSpeed = math.clamp(speed, 16, 300)
+	local moveSpeed = math.clamp(speed, 16, 100)
 	local timeout = distance / moveSpeed + 10
 	local t0 = tick()
+
+	if hrp then hrp.CanCollide = false end
 
 	while enabled() and (tick() - t0) < timeout do
 		local ch2 = find.player.Character
@@ -1147,6 +1155,10 @@ function farming.farmSprout(field, id)
 		rt2.AssemblyLinearVelocity = Vector3.zero
 		rt2.AssemblyAngularVelocity = Vector3.zero
 	end
+
+	local chEnd = find.player.Character
+	local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
+	if rtEnd then rtEnd.CanCollide = true end
 
 	safeCleanup(nil, false)
 	mod.data.actives["move"] = true
@@ -1481,9 +1493,11 @@ function farming.farmPuffshroom(field, id)
 	pcall(function() farming.inv(true) end)
 
 	local cancelled = false
-	local moveSpeed = math.clamp(speed, 16, 300)
+	local moveSpeed = math.clamp(speed, 16, 100)
 	local timeout = distance / moveSpeed + 10
 	local t0 = tick()
+
+	if hrp then hrp.CanCollide = false end
 
 	while enabled() and (tick() - t0) < timeout do
 		local ch2 = find.player.Character
@@ -1506,6 +1520,12 @@ function farming.farmPuffshroom(field, id)
 		rt2.AssemblyLinearVelocity = Vector3.zero
 		rt2.AssemblyAngularVelocity = Vector3.zero
 	end
+
+	local chEnd = find.player.Character
+	local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
+	if rtEnd then rtEnd.CanCollide = true end
+
+	safeCleanup(nil, false)
 
 	safeCleanup(nil, false)
 	mod.data.actives["move"] = true
@@ -1977,7 +1997,7 @@ function farming.noclip(on)
 				local c = find.player.Character
 				if not c then return end
 				for _, v in ipairs(c:GetChildren()) do
-					if v:IsA("BasePart") then   -- убрали "and v.Name ~= HumanoidRootPart"
+					if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
 						v.CanCollide = false
 					end
 				end
@@ -2009,8 +2029,6 @@ function farming.move(...)
 	if not workspace:FindFirstChild(find.player.Name) then
 		return
 	end
-	
-	farming.noclip(true)
 
 	local function j(a)
 		if a then
@@ -2055,9 +2073,9 @@ function farming.move(...)
 		local marginZ = math.min(6, size.Z * .15)
 		local x = size.X / 2 - marginX
 		local z = size.Z / 2 - marginZ
-		
+
 		local position = string.lower(mod.data.actives["position_field"] or "center")
-		
+
 		local spotX = 0
 		if position == "left" then
 			spotX = -x * 0.6
@@ -2072,44 +2090,7 @@ function farming.move(...)
 		)
 
 		return cf:PointToWorldSpace(l)
-
-		--local position = string.lower(mod.data.actives["position_field"] or "center")
-		--local ix, ax
-
-		--if position == "left" then
-		--	ix = -x; ax = 0
-		--elseif position == "right" then
-		--	ix = 0; ax = x
-		--else
-		--	ix = -x / 3; ax = x / 3
-		--end
-
-		--local l = Vector3.new(
-		--	find.random:NextNumber(ix, ax),
-		--	size.Y / 2 + h,
-		--	find.random:NextNumber(-z, z)
-		--)
-
-		--return cf:PointToWorldSpace(l)
 	end
-	local function b(...)
-		local a = {...}
-		--print(a[1],a[2],a[3])
-
-		local p = r(a[3])
-		--print(p)
-
-		if a[1] == true then
-			local m = Instance.new("Attachment"); m.Name = "Attachment"; m.Parent = a[2];
-			local m1 = Instance.new("Attachment"); m1.Name = "Attachment"; m1.Parent = a[3]; m1.Position = a[3].CFrame:PointToObjectSpace(p + Vector3.new(0, 4, 0))
-
-			local b = Instance.new("Beam"); b.Parent = a[2]; b.Width0 = .2; b.Width1 = .2; b.Attachment0 = m; b.Attachment1 = m1; b.FaceCamera = true; b.TextureLength = 1; b.LightEmission = 1; b.Transparency = NumberSequence.new(0, 0)
-		elseif a[1] == false then
-			a[2].Attachment:Destroy(); a[3].Attachment:Destroy(); a[2].Beam:Destroy()
-		end
-	end
-
-	--print(a[1])
 
 	if a[1] == "flowerzones" then
 		for _, v in ipairs(workspace:FindFirstChild("FlowerZones"):GetChildren()) do
@@ -2125,10 +2106,10 @@ function farming.move(...)
 				s.SurfaceColor3 = Color3.new(255, 255, 255)
 				s.LineThickness = .04
 				s.SurfaceTransparency = .9
-				
+
 				if tween then pcall(function() tween:Cancel() end) tween = nil end
 				if atween then pcall(function() atween:Cancel() end) atween = nil end
-				
+
 				local char = find.player.Character
 				local root = char and char:FindFirstChild("HumanoidRootPart")
 				local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -2139,7 +2120,7 @@ function farming.move(...)
 
 				local target = r(v)
 				if not target then return end
-				
+
 				humanoid:MoveTo(root.Position)
 				humanoid:Move(Vector3.zero)
 				humanoid.WalkSpeed = 0
@@ -2147,11 +2128,9 @@ function farming.move(...)
 				root.AssemblyAngularVelocity = Vector3.zero
 
 				local currentFarmId = farmId
-				local startPos = root.Position
 				local startRot = root.CFrame.Rotation
-				local distance = (startPos - target).Magnitude
+				local distance = (root.Position - target).Magnitude
 				local flySpeed = math.max(tonumber(a[2]) or 40, 1)
-				local duration = math.max(distance / flySpeed, 0.05)
 				local flyStart = tick()
 
 				tween = nil
@@ -2159,6 +2138,8 @@ function farming.move(...)
 
 				farming.inv(true)
 				pcall(function() j(true) end)
+
+				root.CanCollide = false
 
 				local moveSpeed = math.clamp(flySpeed, 16, 100)
 				humanoid.WalkSpeed = moveSpeed
@@ -2184,6 +2165,10 @@ function farming.move(...)
 					rt2.AssemblyLinearVelocity = Vector3.zero
 					rt2.AssemblyAngularVelocity = Vector3.zero
 				end
+
+				local chEnd = find.player.Character
+				local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
+				if rtEnd then rtEnd.CanCollide = true end
 
 				if cancelled or currentFarmId ~= farmId then
 					pcall(function() farming.inv(false) end)
@@ -2252,144 +2237,6 @@ function farming.move(...)
 			end
 		end
 
-				--humanoid:MoveTo(root.Position)
-				--humanoid:Move(Vector3.zero)
-				--humanoid.WalkSpeed = 0
-				--root.AssemblyLinearVelocity = Vector3.zero
-				--root.AssemblyAngularVelocity = Vector3.zero
-
-				--local d1 = (root.Position - target).Magnitude / math.max(a[2], .001)
-				--root.Anchored = true
-
-				--local currentFarmId = farmId
-				--local t = TweenInfo.new(d1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-				--local currentTween = find.tweenservice:Create(root, t, {CFrame = CFrame.new(target)})
-				--tween = currentTween
-				--mod.data.actives["move"] = true
-
-				--currentTween:Play()
-				--farming.inv(true)
-				--j(true)
-
-				--currentTween.Completed:Once(function(state)
-				--	if tween == currentTween then
-				--		tween = nil
-				--	end
-					
-				--	if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
-				--		pcall(function()
-				--			root.Anchored = false
-				--		end)
-
-				--		pcall(function()
-				--			farming.inv(false)
-				--		end)
-
-				--		mod.data.actives["converting"] = false
-				--		mod.data.actives["move"] = false
-				--		return
-				--	end
-
-				--	--if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
-				--	--	if s.Parent then
-				--	--		s:Destroy()
-				--	--	end
-
-				--	--	pcall(function()
-				--	--		root.Anchored = false
-				--	--	end)
-
-				--	--	pcall(function()
-				--	--		farming.inv(false)
-				--	--	end)
-
-				--	--	if humanoid and humanoid.Parent then
-				--	--		humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
-				--	--	end
-
-				--	--	mod.data.actives["move"] = false
-				--	--	return
-				--	--end
-
-				--	j(false)
-				--	if s.Parent then s:Destroy() end
-				--	farming.inv(false)
-
-				--	if currentFarmId ~= farmId or mod.data.actives["auto_farm"] == false then
-				--		root.Anchored = false
-				--		if humanoid and humanoid.Parent then
-				--			humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
-				--		end
-				--		return
-				--	end
-					
-				--	root.Anchored = false
-
-				--	if humanoid and humanoid.Parent then
-				--		humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
-				--	end
-
-				--	mod.data.actives["move"] = false
-				--	mod.data.actives["point"] = false
-					
-				--	if currentFarmId == farmId and mod.data.actives["auto_farm"] == true then
-				--		task.spawn(function()
-				--			if currentFarmId ~= farmId then return end
-				--			if mod.data.actives["auto_farm"] ~= true then return end
-				--			if mod.data.actives["converting"] then return end
-				--			if mod.data.actives["move"] == true then return end
-
-				--			local info = farming.get_pollen_info()
-				--			local threshold = mod.data.actives["backpack"] or 80
-
-				--			if info and info.percent >= threshold then
-				--				local hivePos = farming.getHive()
-				--				if hivePos then
-				--					mod.data.actives["move"] = false
-				--					mod.data.actives["point"] = false
-				--					local okConv = farming.move(
-				--						"convert",
-				--						mod.data.actives["walkspeed"],
-				--						hivePos
-				--					)
-				--					if okConv then
-				--						mod.data.actives["converting"] = true
-				--					end
-				--				end
-				--			else
-				--				mod.data.actives["last_time_convert"] = tick()
-				--			end
-				--		end)
-				--	end
-
-				--	task.wait(.2)
-				--	farming.autosprinkler(true)
-				--end)
-
-				--task.wait(0.15)
-
-				--return currentTween
-
-				--	root.Anchored = false
-					
-				--	if humanoid and humanoid.Parent then
-				--		humanoid.WalkSpeed = mod.data.actives["walkspeed"] or 16
-				--	end
-
-				--	mod.data.actives["move"] = false
-				--	mod.data.actives["point"] = false
-					
-				--	--farming.autosprinkler()
-				--	task.wait(.2)
-				--	farming.autosprinkler(true)
-					
-				--	--task.wait(1)
-				--	--farming.autosprinkler()
-				--end)
-				
-				--task.wait(1)
-
-				--return currentTween
 	elseif a[1] == "hive" then
 		if mod.data.actives["autohive"] == false then
 			return
@@ -2426,7 +2273,7 @@ function farming.move(...)
 		if not root or not humanoid then
 			return
 		end
-		
+
 		humanoid:MoveTo(root.Position)
 		humanoid:Move(Vector3.zero, false)
 
@@ -2435,14 +2282,14 @@ function farming.move(...)
 		mod.data.actives["converting"] = false
 
 		local currentFarmId = farmId
-		local startPos = root.Position
 		local startRot = root.CFrame.Rotation
-		local distance = (startPos - target).Magnitude
+		local distance = (root.Position - target).Magnitude
 		local flySpeed = math.max(tonumber(a[2]) or 40, 1)
-		local duration = math.max(distance / flySpeed, 0.05)
 		local flyStart = tick()
 
 		farming.inv(true)
+
+		root.CanCollide = false
 
 		local moveSpeed = math.clamp(flySpeed, 16, 100)
 		local cancelled = false
@@ -2467,6 +2314,10 @@ function farming.move(...)
 			rt2.AssemblyLinearVelocity = Vector3.zero
 			rt2.AssemblyAngularVelocity = Vector3.zero
 		end
+
+		local chEnd = find.player.Character
+		local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
+		if rtEnd then rtEnd.CanCollide = true end
 
 		if cancelled or currentFarmId ~= farmId then
 			farming.inv(false)
@@ -2503,114 +2354,30 @@ function farming.move(...)
 
 		farming.convert()
 		return true
-		
-		--humanoid:MoveTo(root.Position)
-		--humanoid:Move(Vector3.zero, false)
-		
-		--mod.data.actives["point"] = false
-		--mod.data.actives["move"] = true
-		--mod.data.actives["converting"] = false
 
-		--local currentFarmId = farmId
-
-		--local d1 =
-		--	(root.Position - target).Magnitude
-		--	/ math.max(a[2], 0.001)
-
-		--root.Anchored = true
-
-		--local currentTween = find.tweenservice:Create(
-		--	root,
-		--	TweenInfo.new(
-		--		d1,
-		--		Enum.EasingStyle.Linear,
-		--		Enum.EasingDirection.Out
-		--	),
-		--	{
-		--		CFrame = CFrame.new(target)
-		--	}
-		--)
-
-		--tween = currentTween
-
-		--currentTween:Play()
-		--farming.inv(true)
-
-		--currentTween.Completed:Once(function(state)
-		--	if tween == currentTween then
-		--		tween = nil
-		--	end
-
-		--	if state == Enum.PlaybackState.Cancelled
-		--		or currentFarmId ~= farmId
-		--	then
-		--		root.Anchored = false
-		--		mod.data.actives["move"] = false
-		--		return
-		--	end
-
-		--	farming.inv(false)
-
-		--	root.Anchored = false
-
-		--	if currentFarmId ~= farmId
-		--		or mod.data.actives["auto_farm"] ~= true
-		--	then
-		--		mod.data.actives["move"] = false
-		--		return
-		--	end
-			
-		--	if not farming.getHive() then
-		--		task.wait(0.6)
-
-		--		local clicked = false
-		--		for try = 1, 3 do
-		--			clicked = activateButton()
-		--			task.wait(0.5)
-		--			if farming.getHive() then break end
-		--		end
-
-		--		if not farming.getHive() then
-		--			warn("hive not found 3s")
-		--			mod.data.actives["move"] = false
-		--			mod.data.actives["converting"] = false
-		--			return
-		--		end
-		--	end
-
-		--	mod.data.actives["converting"] = true
-		--	mod.data.actives["move"] = true
-
-		--	farming.convert()
-
-		--return currentTween
 	elseif a[1] == "convert" then
-		--mod.data.actives["move"] = true
-		--print(actives["move"])
-
 		local target = a[3]
-		--print(target)
 		if typeof(target) ~= "Vector3" then return end
 		if tween then pcall(function() tween:Cancel() end) tween = nil end
 		if not workspace:FindFirstChild(find.player.Name) then return end
 
 		local character = find.player.Character
 		if not character then return end
-		
+
 		local root = character:FindFirstChild("HumanoidRootPart")
 		if not root then return end
 		mod.data.actives["move"] = true
 		local currentFarmId = farmId
 
-		local startPos = root.Position
 		local startRot = root.CFrame.Rotation
-		local distance = (startPos - target).Magnitude
+		local distance = (root.Position - target).Magnitude
 		local flySpeed = math.max(tonumber(a[2]) or 40, 1)
-		local duration = math.max(distance / flySpeed, 0.05)
 		local flyStart = tick()
 
 		farming.inv(true)
 		pcall(function() j(true) end)
+
+		root.CanCollide = false
 
 		local moveSpeed = math.clamp(flySpeed, 16, 100)
 		local cancelled = false
@@ -2636,6 +2403,10 @@ function farming.move(...)
 			rt2.AssemblyAngularVelocity = Vector3.zero
 		end
 
+		local chEnd = find.player.Character
+		local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
+		if rtEnd then rtEnd.CanCollide = true end
+
 		pcall(function() j(false) end)
 		farming.inv(false)
 
@@ -2649,51 +2420,6 @@ function farming.move(...)
 		farming.convert()
 		return true
 
-		--local root = character:FindFirstChild("HumanoidRootPart")
-		--if not root then return end
-		--mod.data.actives["move"] = true
-		--local currentFarmId = farmId
-
-		--local d1 = (root.Position - target).Magnitude
-		--	/ math.max(a[2], .001)
-
-		--root.Anchored = true
-
-		--local t = TweenInfo.new(
-		--	d1,
-		--	Enum.EasingStyle.Linear,
-		--	Enum.EasingDirection.Out
-		--)
-
-		--local currentTween = find.tweenservice:Create(
-		--	root,
-		--	t,
-		--	{
-		--		CFrame = CFrame.new(target)
-		--	}
-		--)
-
-		--tween = currentTween
-
-		--currentTween:Play()
-		--farming.inv(true)
-		--j(true)
-
-		--currentTween.Completed:Once(function(state)
-		--	if tween == currentTween then tween = nil end
-		--	if state == Enum.PlaybackState.Cancelled or currentFarmId ~= farmId then
-		--		mod.data.actives["converting"] = false
-		--		mod.data.actives["move"] = false
-		--		return
-		--	end
-
-		--	j(false)
-		--	farming.inv(false)
-		--	root.Anchored = false
-		--	task.wait(1)
-		--	farming.convert()
-		--end)
-		--return currentTween
 	elseif a[1] == "goto" then
 		local target = a[3]
 		if typeof(target) ~= "Vector3" then return end
@@ -2711,15 +2437,15 @@ function farming.move(...)
 		mod.data.actives["move"] = true
 		local currentFarmId = farmId
 
-		local startPos = root.Position
 		local startRot = root.CFrame.Rotation
-		local distance = (startPos - target).Magnitude
+		local distance = (root.Position - target).Magnitude
 		local flySpeed = math.max(tonumber(a[2]) or 40, 1)
-		local duration = math.max(distance / flySpeed, 0.05)
 		local flyStart = tick()
 
 		farming.inv(true)
 		pcall(function() j(true) end)
+
+		root.CanCollide = false
 
 		local moveSpeed = math.clamp(flySpeed, 16, 100)
 		local cancelled = false
@@ -2744,6 +2470,10 @@ function farming.move(...)
 			rt2.AssemblyLinearVelocity = Vector3.zero
 			rt2.AssemblyAngularVelocity = Vector3.zero
 		end
+
+		local chEnd = find.player.Character
+		local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
+		if rtEnd then rtEnd.CanCollide = true end
 
 		pcall(function() j(false) end)
 		farming.inv(false)
@@ -3693,6 +3423,9 @@ local function stopTweenWalkAnimation()
 end
 
 local function resetFarmMovement(enabled)
+	local hrp = find.player.Character and find.player.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then hrp.CanCollide = true end
+
 	if afarm then
 		afarm:Disconnect()
 		afarm = nil
@@ -3707,9 +3440,9 @@ local function resetFarmMovement(enabled)
 		atween:Cancel()
 		atween = nil
 	end
-	
+
 	stopTweenWalkAnimation()
-	
+
 	if aconvert then
 		aconvert:Disconnect()
 		aconvert = nil
@@ -3728,6 +3461,7 @@ local function resetFarmMovement(enabled)
 		humanoid:MoveTo(root.Position)
 		humanoid:Move(Vector3.zero)
 		root.Anchored = false
+		root.CanCollide = true
 	end
 
 	mod.data.actives["point"] = false
@@ -3737,7 +3471,6 @@ local function resetFarmMovement(enabled)
 	lastSproutTime = 0
 
 	farming.cornl(enabled)
-	--farming.inv(enabled)
 	farming.noclip(false)
 end
 
