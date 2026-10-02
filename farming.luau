@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.51")
+print("loaded 0.2.54")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -4910,18 +4910,36 @@ end
 
 function farming.getPlanterGrowth(instance)
 	if not instance then return nil end
-	local g = instance:GetAttribute("Growth") or instance:GetAttribute("growth")
+
+	-- 1) прямой доступ к свойству GrowthPercent (как в макросах BSS)
+	local ok, gp = pcall(function() return instance.GrowthPercent end)
+	if ok and type(gp) == "number" then
+		return gp <= 1 and gp * 100 or gp
+	end
+
+	-- 2) атрибут GrowthPercent / Growth
+	local g = instance:GetAttribute("GrowthPercent") or instance:GetAttribute("Growth")
 	if type(g) == "number" then
 		return g <= 1 and g * 100 or g
 	end
+
+	-- 3) NumberValue внутри модели (GrowthPercent / Growth)
+	for _, v in ipairs(instance:GetDescendants()) do
+		if v:IsA("NumberValue") then
+			if v.Name == "GrowthPercent" or v.Name == "Growth" then
+				return v.Value <= 1 and v.Value * 100 or v.Value
+			end
+		end
+	end
+
+	-- 4) fallback: парсим текст из TextLabel (старый способ)
 	for _, v in ipairs(instance:GetDescendants()) do
 		if v:IsA("TextLabel") then
 			local n = string.match(v.Text, "(%d+)%%")
 			if n then return tonumber(n) end
-		elseif v:IsA("NumberValue") and (v.Name == "Growth" or v.Name == "GrowthPercent") then
-			return v.Value <= 1 and v.Value * 100 or v.Value
 		end
 	end
+
 	return nil
 end
 
