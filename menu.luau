@@ -872,8 +872,8 @@ function menu.dop_create()
 		r.MouseButton1Click:Connect(function()
 			if toggle == true then
 				value = not value
-				update()
 				save(d, value, b, r)
+				update()
 
 				--print(d.key, "=", mod.data.actives[d.key])
 			else
