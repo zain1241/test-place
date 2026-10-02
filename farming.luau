@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.4")
+print("loaded 0.2.41")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -1977,10 +1977,8 @@ function farming.noclip(on)
 				local c = find.player.Character
 				if not c then return end
 				for _, v in ipairs(c:GetChildren()) do
-					if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
+					if v:IsA("BasePart") then   -- убрали "and v.Name ~= HumanoidRootPart"
 						v.CanCollide = false
-						v.CanTouch = true
-						v.CanQuery = true
 					end
 				end
 			end
@@ -1994,7 +1992,7 @@ function farming.noclip(on)
 		local c = find.player.Character
 		if c then
 			for _, v in ipairs(c:GetChildren()) do
-				if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
+				if v:IsA("BasePart") then
 					v.CanCollide = true
 				end
 			end
@@ -2011,6 +2009,8 @@ function farming.move(...)
 	if not workspace:FindFirstChild(find.player.Name) then
 		return
 	end
+	
+	farming.noclip(true)
 
 	local function j(a)
 		if a then
