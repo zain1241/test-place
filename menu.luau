@@ -2565,6 +2565,18 @@ function menu.dop_create()
 			},
 		})
 	end
+	
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			for i = 1, 5 do
+				local ref = slotRefs[i]
+				if ref and ref.refresh then
+					pcall(ref.refresh)
+				end
+			end
+		end
+	end)
 
 	table.insert(setting, {
 		name = "Planters",
