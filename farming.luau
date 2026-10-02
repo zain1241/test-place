@@ -15,7 +15,7 @@ local mod = {
 	data = data,
 }
 
-print("loaded 0.2.5444")
+print("loaded 0.2.55")
 
 if mod.data.actives["hive_choice"] == nil then
 	mod.data.actives["hive_choice"] = "Random"
@@ -511,11 +511,11 @@ function farming.farmPetalBloom(field, id)
 	local character = find.player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
-	
+
 	if not humanoid or not hrp then return false end
-	
+
 	local bloom = getNearestBloom(field, hrp)
-	
+
 	if not bloom then return false end
 	if not isInField(hrp.Position, field) then return false end
 
@@ -531,9 +531,13 @@ function farming.farmPetalBloom(field, id)
 	end
 
 	local speed = tonumber(mod.data.actives["walkspeed"]) or 40
-	
+
 	local function phaseEnabled()
-		return id == farmId and mod.data.actives["auto_farm"] == true and mod.data.actives["petals"] == true and not mod.data.actives["converting"]
+		return id == farmId
+			and mod.data.actives["auto_farm"] == true
+			and mod.data.actives["petals"] == true
+			and not mod.data.actives["converting"]
+			and mod.data.actives["planter_busy"] ~= true
 	end
 	
 	local function bloomAlive()
@@ -719,7 +723,11 @@ end
 
 function farming.farmMondo(field, id)
 	local function enabled()
-		return id == farmId and mod.data.actives["auto_farm"] == true and mod.data.actives["mondo"] == true and not mod.data.actives["converting"]
+		return id == farmId
+			and mod.data.actives["auto_farm"] == true
+			and mod.data.actives["mondo"] == true
+			and not mod.data.actives["converting"]
+			and mod.data.actives["planter_busy"] ~= true
 	end
 
 	local character = find.player.Character
@@ -1104,7 +1112,11 @@ end
 
 function farming.farmSprout(field, id)
 	local function enabled()
-		return id == farmId and mod.data.actives["auto_farm"] == true and mod.data.actives["sprouts"] == true and not mod.data.actives["converting"]
+		return id == farmId
+			and mod.data.actives["auto_farm"] == true
+			and mod.data.actives["sprouts"] == true
+			and not mod.data.actives["converting"]
+			and mod.data.actives["planter_busy"] ~= true
 	end
 
 	local function safeCancelTween()
@@ -1455,9 +1467,13 @@ end
 
 function farming.farmPuffshroom(field, id)
 	local function enabled()
-		return id == farmId and mod.data.actives["auto_farm"] == true and mod.data.actives["pushrooms_enabled"] == true and not mod.data.actives["converting"]
+		return id == farmId
+			and mod.data.actives["auto_farm"] == true
+			and mod.data.actives["pushrooms_enabled"] == true
+			and not mod.data.actives["converting"]
+			and mod.data.actives["planter_busy"] ~= true
 	end
-	
+
 	local function safeCleanup(rootPart)
 		if rootPart then
 			pcall(function()
@@ -1467,7 +1483,7 @@ function farming.farmPuffshroom(field, id)
 		pcall(function() farming.inv(false) end)
 		mod.data.actives["move"] = false
 	end
-	
+
 	local function safeCancelTween()
 		if tween then
 			pcall(function() tween:Cancel() end)
@@ -1501,7 +1517,7 @@ function farming.farmPuffshroom(field, id)
 	end
 
 	safeCancelTween()
-	
+
 	local startRoot = hrp
 	local startPosition = startRoot.Position
 	local startRot = startRoot.CFrame.Rotation
@@ -1549,7 +1565,6 @@ function farming.farmPuffshroom(field, id)
 
 	safeCleanup(nil, false)
 
-	safeCleanup(nil, false)
 	mod.data.actives["move"] = true
 
 	if cancelled or not enabled() then
@@ -1558,82 +1573,11 @@ function farming.farmPuffshroom(field, id)
 
 	task.wait(0.05)
 
-	--local startRoot = hrp
-	--local startPosition = startRoot.Position
-	--local target = rootPart.Position + Vector3.new(find.random:NextNumber(-3, 3), 2, find.random:NextNumber(-3, 3))
-
-	--local distance = (startRoot.Position - target).Magnitude
-	--local speed = tonumber(mod.data.actives["walkspeed"]) or 40
-	--local duration = distance / math.max(speed, 1)
-	--local anchorOk = pcall(function() startRoot.Anchored = true end)
-	--if not anchorOk then
-	--	safeCleanup(startRoot)
-	--	return false
-	--end
-
-	--pcall(function() farming.inv(true) end)
-	
-	--local flyTween
-	--local tweenOk = pcall(function()
-	--	flyTween = find.tweenservice:Create(
-	--		startRoot,
-	--		TweenInfo.new(
-	--			math.max(duration, 0.05),
-	--			Enum.EasingStyle.Linear,
-	--			Enum.EasingDirection.Out
-	--		),
-	--		{ CFrame = CFrame.new(target) }
-	--	)
-	--	tween = flyTween
-	--	flyTween:Play()
-	--end)
-
-	--if not tweenOk or not flyTween then
-	--	safeCancelTween()
-	--	safeCleanup(startRoot)
-	--	return false
-	--end
-
-	--local finished = false
-	--flyTween.Completed:Once(function()
-	--	finished = true
-	--	if tween == flyTween then tween = nil end
-	--end)
-	
-	--local flyStart = tick(); local flyTimeout = duration + 3
-
-	--while enabled() and puff.Parent == pf and not finished and (tick() - flyStart) < flyTimeout do
-	--	task.wait()
-	--end
-	
-	--if not finished then
-	--	pcall(function() flyTween:Cancel() end)
-	--end
-	--if tween == flyTween then tween = nil end
-	
-	--if not finished and startRoot and startRoot.Parent then
-	--	pcall(function()
-	--		startRoot.CFrame = CFrame.new(startPosition)
-	--	end)
-	--end
-	
-	--pcall(function()
-	--	startRoot.Anchored = false
-	--end)
-	--safeCleanup(startRoot, false)
-	--mod.data.actives["move"] = true
-
-	--if not enabled() then
-	--	return false
-	--end
-
-	--task.wait(0.05)
-
 	character = find.player.Character
 	humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	hrp = character and character:FindFirstChild("HumanoidRootPart")
 	if not humanoid or not hrp then return false end
-	
+
 	local p = hrp.Position
 	if p.X ~= p.X or p.Y ~= p.Y or p.Z ~= p.Z or math.abs(p.X) == math.huge or math.abs(p.Y) == math.huge or math.abs(p.Z) == math.huge then
 		pcall(function()
@@ -1642,7 +1586,7 @@ function farming.farmPuffshroom(field, id)
 		safeCleanup(nil)
 		return false
 	end
-	
+
 	local circleRadius = 5
 	local circleMinRadius = 2
 	local breakStart = tick()
@@ -1707,7 +1651,7 @@ function farming.farmPuffshroom(field, id)
 		safeCleanup(nil)
 		return false
 	end
-	
+
 	local lootTimeout = tick() + 7; local lastLootTime = tick(); local handledLoot = {}
 
 	while enabled() and tick() < lootTimeout do
@@ -1737,7 +1681,7 @@ function farming.farmPuffshroom(field, id)
 
 		local targetPos = Vector3.new(loot.Position.X, hrp.Position.Y, loot.Position.Z)
 		local d = (targetPos - hrp.Position).Magnitude
-		
+
 		if d <= 3.5 then
 			handledLoot[loot] = true
 			task.wait(0.01)
@@ -1750,7 +1694,7 @@ function farming.farmPuffshroom(field, id)
 		end)
 		task.wait(0.01)
 	end
-	
+
 	character = find.player.Character
 	humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
@@ -2130,6 +2074,14 @@ function farming.move(...)
 		end
 	end
 
+	local function resetHumanoid()
+		local ch = find.player.Character
+		local h = ch and ch:FindFirstChildOfClass("Humanoid")
+		if h then
+			pcall(function() h:Move(Vector3.zero, false) end)
+		end
+	end
+
 	local function r(...)
 		local a = {...}
 		local part = a[1]
@@ -2210,10 +2162,16 @@ function farming.move(...)
 				end
 
 				local target = r(v)
-				if not target then return end
+				if not target then
+					if s and s.Parent then s:Destroy() end
+					return
+				end
 
-				humanoid:MoveTo(root.Position)
-				humanoid:Move(Vector3.zero)
+				-- Сбрасываем любые цели хуманоида, чтобы он не пытался идти пешком
+				pcall(function()
+					humanoid:MoveTo(root.Position)
+					humanoid:Move(Vector3.zero, false)
+				end)
 				humanoid.WalkSpeed = 0
 				root.AssemblyLinearVelocity = Vector3.zero
 				root.AssemblyAngularVelocity = Vector3.zero
@@ -2261,6 +2219,9 @@ function farming.move(...)
 				local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
 				if rtEnd then rtEnd.CanCollide = true end
 
+				-- ВАЖНО: сбрасываем цель хуманоида, чтобы он НЕ пошёл пешком
+				resetHumanoid()
+
 				if cancelled or currentFarmId ~= farmId then
 					pcall(function() farming.inv(false) end)
 					if s and s.Parent then s:Destroy() end
@@ -2278,7 +2239,7 @@ function farming.move(...)
 					local h3 = ch3 and ch3:FindFirstChildOfClass("Humanoid")
 					if h3 then h3.WalkSpeed = mod.data.actives["walkspeed"] or 16 end
 					mod.data.actives["move"] = false
-					return
+					return false
 				end
 
 				do
@@ -2289,6 +2250,12 @@ function farming.move(...)
 
 				mod.data.actives["move"] = false
 				mod.data.actives["point"] = false
+
+				-- ВАЖНО: если реально не долетели — говорим "не долетел", а не "готово"
+				if rtEnd and target and (rtEnd.Position - target).Magnitude > 6 then
+					warn("flowerzones fly: not arrived, will retry")
+					return false
+				end
 
 				if currentFarmId == farmId and mod.data.actives["auto_farm"] == true then
 					task.spawn(function()
@@ -2410,6 +2377,8 @@ function farming.move(...)
 		local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
 		if rtEnd then rtEnd.CanCollide = true end
 
+		resetHumanoid()
+
 		if cancelled or currentFarmId ~= farmId then
 			farming.inv(false)
 			mod.data.actives["move"] = false
@@ -2498,6 +2467,8 @@ function farming.move(...)
 		local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
 		if rtEnd then rtEnd.CanCollide = true end
 
+		resetHumanoid()
+
 		pcall(function() j(false) end)
 		farming.inv(false)
 
@@ -2566,12 +2537,18 @@ function farming.move(...)
 		local rtEnd = chEnd and chEnd:FindFirstChild("HumanoidRootPart")
 		if rtEnd then rtEnd.CanCollide = true end
 
+		resetHumanoid()
+
 		pcall(function() j(false) end)
 		farming.inv(false)
 		mod.data.actives["move"] = false
 
 		if cancelled or currentFarmId ~= farmId then
-			return
+			return false
+		end
+
+		if rtEnd and (rtEnd.Position - target).Magnitude > 5 then
+			return false
 		end
 
 		return true
