@@ -521,6 +521,13 @@ function menu.main_nav()
 		if mod.farming and mod.farming.farm then
 			mod.farming.farm()
 		end
+		if mod.farming and mod.farming.startPlanterLoop then
+			if mod.data.actives["auto_farm"] == true and mod.data.actives["planter_auto"] == true then
+				mod.farming.startPlanterLoop()
+			else
+				mod.farming.stopPlanterLoop()
+			end
+		end
 	end)
 	
 	task.spawn(function()
@@ -622,10 +629,11 @@ function menu.main_nav()
 	end
 
 	--addNavigation("Home", "rbxassetid://13060262529", 1)
-	addNavigation("Farming", "rbxassetid://15332137726", 2)
+	addNavigation("Farming", "rbxassetid://15332137726", 1)
+	addNavigation("Planters", "rbxassetid://13060262529", 2)
 	addNavigation("Toys", "rbxassetid://102597526078163", 3)
 	--addNavigation("Combat", "rbxassetid://4391741881", 4)
-	addNavigation("Config", "rbxassetid://4857706689", 5)
+	addNavigation("Config", "rbxassetid://4857706689", 4)
 
 	showsel("Farming")
 end
@@ -832,6 +840,10 @@ function menu.dop_create()
 				return
 			end
 
+			if d.key ~= nil then
+				value = mod.data.actives[d.key] == true
+			end
+
 			c.Visible = value == true
 		end
 
@@ -876,6 +888,15 @@ function menu.dop_create()
 		end)
 
 		update()
+		
+		if toggle == true and d.key ~= nil then
+			task.spawn(function()
+				while r.Parent do
+					update()
+					task.wait(0.15)
+				end
+			end)
+		end
 
 		if d.id ~= nil then
 			menu.dop_objects[d.id] = o
@@ -1366,7 +1387,7 @@ function menu.dop_create()
 				end
 				label = tostring(d.text or "Field") .. ": " .. count .. "/" .. total
 			else
-				label = tostring(d.text or "Field") .. ": " .. tostring(selected or "NONE")
+				label = tostring(d.text or "Field") .. ": " .. tostring(selected or "Not Selected")
 			end
 
 			h.TextXAlignment = Enum.TextXAlignment.Left
@@ -1379,6 +1400,7 @@ function menu.dop_create()
 			end
 
 			if not useHeaderIcon or not headerIcon then return end
+
 			local selectedImage = ""
 			if selected ~= nil then
 				for _, v in ipairs(list) do
@@ -1391,19 +1413,21 @@ function menu.dop_create()
 				end
 			end
 
-			local hasIcon = selectedImage ~= ""
+			local hasRealImage = selectedImage ~= ""
 				and selectedImage ~= "rbxassetid://0"
 
-			headerIcon.Image = hasIcon and selectedImage or ""
-			headerIcon.Visible = hasIcon
+			headerIcon.Image = hasRealImage
+				and selectedImage
+				or "rbxassetid://1554410815"
 
-			if hasIcon then
-				h.TextXAlignment = Enum.TextXAlignment.Left
-				h.Size = UDim2.new(0.962, 0,0, 32)
-			else
-				h.TextXAlignment = Enum.TextXAlignment.Left
-				h.Size = UDim2.new(0.962, 0,0, 32)
-			end
+			headerIcon.ImageColor3 = hasRealImage
+				and Color3.fromRGB(255, 255, 255)
+				or Color3.fromRGB(120, 120, 125)
+
+			headerIcon.Visible = true
+
+			h.TextXAlignment = Enum.TextXAlignment.Left
+			h.Size = UDim2.new(0.962, 0,0, 32)
 		end
 
 		local function updateOpened()
@@ -1471,6 +1495,9 @@ function menu.dop_create()
 
 			corner(b, UDim.new(0, 7))
 
+			local hasRealFieldImage = field.image ~= ""
+				and field.image ~= "rbxassetid://0"
+
 			local icon = Instance.new("ImageLabel")
 			icon.Name = "Icon"
 			icon.AnchorPoint = Vector2.new(0, 0.5)
@@ -1479,10 +1506,14 @@ function menu.dop_create()
 			icon.Position = UDim2.new(0, 6, 0.5, 0)
 			icon.Size = UDim2.fromOffset(21, 21)
 			icon.ZIndex = 1006
-			icon.Image = field.image
+			icon.Image = hasRealFieldImage
+				and field.image
+				or "rbxassetid://1554410815"
+			icon.ImageColor3 = hasRealFieldImage
+				and Color3.fromRGB(255, 255, 255)
+				or Color3.fromRGB(120, 120, 125)
 			icon.ScaleType = Enum.ScaleType.Fit
-			icon.Visible = field.image ~= ""
-				and field.image ~= "rbxassetid://0"
+			icon.Visible = true
 			icon.Parent = b
 
 			local t = Instance.new("TextLabel")
@@ -1673,6 +1704,11 @@ function menu.dop_create()
 		rp.Parent = r1
 
 		h.MouseButton1Click:Connect(function()
+			r1.Visible = not r1.Visible
+			h2.Text = r1.Visible and "<" or ">"
+		end)
+
+		h2.MouseButton1Click:Connect(function()
 			r1.Visible = not r1.Visible
 			h2.Text = r1.Visible and "<" or ">"
 		end)
@@ -1892,6 +1928,77 @@ function menu.dop_create()
 		local c1 = Instance.new("UICorner")
 		c1.CornerRadius = d.radius or UDim.new(0.4, 0)
 		c1.Parent = h2
+		
+		-- Dynamic header (icons + text)
+		if d.header_dynamic then
+			h.Text = ""
+
+			local dynHolder = Instance.new("Frame")
+			dynHolder.Name = "DynHolder"
+			dynHolder.BackgroundTransparency = 1
+			dynHolder.Position = UDim2.new(0, 8, 0, 0)
+			dynHolder.Size = UDim2.new(0.9, -8, 1, 0)
+			dynHolder.ZIndex = 1005
+			dynHolder.ClipsDescendants = true
+			dynHolder.Parent = h
+
+			local dhl = Instance.new("UIListLayout")
+			dhl.SortOrder = Enum.SortOrder.LayoutOrder
+			dhl.Padding = UDim.new(0, 6)
+			dhl.FillDirection = Enum.FillDirection.Horizontal
+			dhl.VerticalAlignment = Enum.VerticalAlignment.Center
+			dhl.HorizontalAlignment = Enum.HorizontalAlignment.Left
+			dhl.Parent = dynHolder
+
+			local function refreshHeader()
+				for _, c in ipairs(dynHolder:GetChildren()) do
+					if c:IsA("ImageLabel") or c:IsA("TextLabel") then
+						c:Destroy()
+					end
+				end
+
+				local info = d.header_dynamic()
+				if type(info) ~= "table" or type(info.elements) ~= "table" then return end
+
+				for idx, el in ipairs(info.elements) do
+					if el.type == "text" and el.value and tostring(el.value) ~= "" then
+						local t = Instance.new("TextLabel")
+						t.BackgroundTransparency = 1
+						t.AutomaticSize = Enum.AutomaticSize.X
+						t.Size = UDim2.new(0, 0, 1, 0)
+						t.Font = Enum.Font.BuilderSansBold
+						t.Text = tostring(el.value)
+						t.TextColor3 = el.color or Color3.fromRGB(255, 255, 255)
+						t.TextSize = 16
+						t.TextXAlignment = Enum.TextXAlignment.Left
+						t.ZIndex = 1005
+						t.LayoutOrder = idx
+						t.Parent = dynHolder
+					elseif el.type == "icon" then
+						local img = el.value
+						local isReal = img and img ~= "" and img ~= "rbxassetid://0"
+
+						local i = Instance.new("ImageLabel")
+						i.BackgroundTransparency = 1
+						i.Size = UDim2.fromOffset(21, 21)
+						i.Image = isReal and img or "rbxassetid://1554410815"
+						i.ImageColor3 = isReal
+							and Color3.fromRGB(255, 255, 255)
+							or Color3.fromRGB(120, 120, 125)
+						i.ScaleType = Enum.ScaleType.Fit
+						i.ZIndex = 1006
+						i.LayoutOrder = idx
+						i.Parent = dynHolder
+					end
+				end
+			end
+
+			refreshHeader()
+
+			if d._ref then
+				d._ref.refresh = refreshHeader
+			end
+		end
 
 		local r = Instance.new("Frame")
 		r.Name = "Rows"
@@ -1923,6 +2030,11 @@ function menu.dop_create()
 			h2.Text = opened == true and "<" or ">"
 			r.Visible = opened
 		end
+
+		h.MouseButton1Click:Connect(function()
+			opened = not opened
+			update()
+		end)
 
 		h2.MouseButton1Click:Connect(function()
 			opened = not opened
@@ -2067,8 +2179,17 @@ function menu.dop_create()
 					opened = true,
 					items = {
 						{ type = "button", text = "Collect Bubbles", key = "collect_bubbles"},
+						{ type = "button", text = "Hide Decorations", key = "hide_decorations", callback = farming.hideDecorations },
+						{ type = "button", text = "Lines", key = "lines" },
 					},
 				},
+				--{
+				--	name = "Planters",
+				--	opened = true,
+				--	items = {
+						
+				--	},
+				--},
 				{
 					name = "More AUTO",
 					opened = true,
@@ -2254,6 +2375,195 @@ function menu.dop_create()
 		--	},
 		--},
 	}
+	
+	-- Плантеры
+	local planterOptions = {
+		{ name = "Paper Planter",         image = "rbxassetid://8310368347" },
+		{ name = "Ticket Planter",        image = "rbxassetid://8346910600" },
+		{ name = "Sticker Planter",       image = "rbxassetid://15742519363" },
+		{ name = "Festive Planter",       image = "rbxassetid://8310370747" },
+		{ name = "Plastic Planter",       image = "rbxassetid://8284592873" },
+		{ name = "Candy Planter",         image = "rbxassetid://8284643507" },
+		{ name = "Red Clay Planter",      image = "rbxassetid://8284644329" },
+		{ name = "Blue Clay Planter",     image = "rbxassetid://8284645953" },
+		{ name = "Tacky Planter",         image = "rbxassetid://8284648621" },
+		{ name = "Pesticide Planter",     image = "rbxassetid://8284650236" },
+		{ name = "Heat-Treated Planter",  image = "rbxassetid://8284652694" },
+		{ name = "Hydroponic Planter",    image = "rbxassetid://8284655951" },
+		{ name = "Petal Planter",         image = "rbxassetid://8284657454" },
+		{ name = "The Planter Of Plenty", image = "rbxassetid://8310373847" },
+	}
+
+	local planterTimeMap = {
+		["Paper Planter"]         = 1,
+		["Ticket Planter"]        = 2,
+		["Sticker Planter"]       = 3,
+		["Festive Planter"]       = 4,
+		["Plastic Planter"]       = 2,
+		["Candy Planter"]         = 4,
+		["Red Clay Planter"]      = 6,
+		["Blue Clay Planter"]     = 6,
+		["Tacky Planter"]         = 8,
+		["Pesticide Planter"]     = 10,
+		["Heat-Treated Planter"]  = 12,
+		["Hydroponic Planter"]    = 12,
+		["Petal Planter"]         = 14,
+		["The Planter Of Plenty"] = 16,
+	}
+
+	local planterFieldList = mod.data.planter_fields or mod.data.zones
+	local slotRefs = {}
+
+	local function findPlanterImageByName(name)
+		for _, p in ipairs(planterOptions) do
+			if p.name == name then return p.image end
+		end
+		return ""
+	end
+
+	local function findFieldImageByName(name)
+		for _, p in ipairs(planterFieldList) do
+			local pn = type(p) == "table" and p.name or p
+			if pn == name then
+				return type(p) == "table" and (p.image or "") or ""
+			end
+		end
+		return ""
+	end
+
+	local planterLists = {
+		{
+			name = "Planter Settings",
+			opened = true,
+			items = {
+				{
+					type = "button",
+					text = "Enabled",
+					key = "planter_enabled",
+					callback = function(v)
+						if v == true
+							and mod.data.actives["auto_farm"] == true
+							and mod.farming.startPlanterLoop
+						then
+							mod.farming.startPlanterLoop()
+						elseif mod.farming.stopPlanterLoop then
+							mod.farming.stopPlanterLoop()
+						end
+					end,
+				},
+				{
+					type = "button",
+					text = "Collect Drop",
+					key = "planter_collect_drop",
+					value = true,
+				},
+			},
+		},
+	}
+
+	for i = 1, 5 do
+		slotRefs[i] = {}
+
+		table.insert(planterLists, {
+			name = "Slot " .. i,
+			opened = false,
+			_ref = slotRefs[i],
+			header_dynamic = function()
+				local t = mod.data.actives["planter_slot" .. i .. "_type"]
+				local f = mod.data.actives["planter_slot" .. i .. "_field"]
+
+				local hasPlanter = type(t) == "string" and t ~= ""
+				local hasField = hasPlanter and type(f) == "string" and f ~= ""
+				local dim = Color3.fromRGB(120, 120, 125)
+				local muted = Color3.fromRGB(160, 160, 165)
+
+				local els = {}
+				els[#els + 1] = { type = "text", value = "Slot " .. i }
+				els[#els + 1] = { type = "text", value = "-", color = dim }
+
+				if not hasPlanter then
+					els[#els + 1] = { type = "text", value = "Not Planter", color = muted }
+				else
+					local pImg = findPlanterImageByName(t)
+					if pImg ~= "" and pImg ~= "rbxassetid://0" then
+						els[#els + 1] = { type = "icon", value = pImg }
+					end
+					els[#els + 1] = { type = "text", value = t }
+
+					els[#els + 1] = { type = "text", value = "-", color = dim }
+
+					if not hasField then
+						els[#els + 1] = { type = "text", value = "Not field", color = muted }
+					else
+						local fImg = findFieldImageByName(f)
+						if fImg ~= "" and fImg ~= "rbxassetid://0" then
+							els[#els + 1] = { type = "icon", value = fImg }
+						end
+						els[#els + 1] = { type = "text", value = f }
+					end
+				end
+
+				return { elements = els }
+			end,
+			items = {
+				{
+					type = "button",
+					text = "Enabled",
+					key = "planter_slot" .. i .. "_enabled",
+				},
+				{
+					type = "addlistchose",
+					text = "Planter",
+					key = "planter_slot" .. i .. "_type",
+					allow_none = true,
+					header_icon = true,
+					list = planterOptions,
+					changed = function(selected)
+						if selected then
+							local hrs = planterTimeMap[selected]
+							if hrs then
+								local timeObj = menu.dop_objects["planter_slot" .. i .. "_time_slider"]
+								if timeObj and timeObj.set then
+									timeObj.set(hrs, false)
+								end
+							end
+						end
+						if slotRefs[i] and slotRefs[i].refresh then
+							slotRefs[i].refresh()
+						end
+					end,
+				},
+				{
+					type = "addlistchose",
+					text = "Field",
+					key = "planter_slot" .. i .. "_field",
+					allow_none = true,
+					header_icon = true,
+					list = planterFieldList,
+					changed = function()
+						if slotRefs[i] and slotRefs[i].refresh then
+							slotRefs[i].refresh()
+						end
+					end,
+				},
+				{
+					type = "slider",
+					text = "Time (h)",
+					key = "planter_slot" .. i .. "_time",
+					id = "planter_slot" .. i .. "_time_slider",
+					min = 1,
+					max = 24,
+					step = 1,
+					value = 1,
+				},
+			},
+		})
+	end
+
+	table.insert(setting, {
+		name = "Planters",
+		lists = planterLists,
+	})
 
 	local b1 = Instance.new("TextButton")
 	b1.Name = "button_search"
